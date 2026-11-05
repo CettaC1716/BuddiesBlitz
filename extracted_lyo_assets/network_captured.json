@@ -1,0 +1,4509 @@
+{
+  "urls": [
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/",
+      "resourceType": "document"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/",
+      "status": 200,
+      "ct": "text/html; charset=utf-8"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/title-intro.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/fonts/Crocante-Medium.woff2",
+      "resourceType": "font"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/vYUQZzfX.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/C0xwqhbh.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/DrDnj3Lb.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/BW6YWG0R.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/Co_82n2H.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/t1WzwXnd.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/D9JAKPuk.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/CozVMRND.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/DADMk73e.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/BcJjgNcx.css",
+      "resourceType": "stylesheet"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/secondary-settings.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap",
+      "resourceType": "stylesheet"
+    },
+    {
+      "type": "req",
+      "url": "https://static.cloudflareinsights.com/beacon.min.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/progress-bar.svg",
+      "resourceType": "other"
+    },
+    {
+      "type": "res",
+      "url": "https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap",
+      "status": 200,
+      "ct": "text/css; charset=utf-8"
+    },
+    {
+      "type": "res",
+      "url": "https://static.cloudflareinsights.com/beacon.min.js",
+      "status": 200,
+      "ct": "text/javascript;charset=UTF-8"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/C0xwqhbh.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/Co_82n2H.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/D9JAKPuk.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/DrDnj3Lb.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/BcJjgNcx.css",
+      "status": 200,
+      "ct": "text/css; charset=utf-8"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/DADMk73e.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/fonts/Crocante-Medium.woff2",
+      "status": 200,
+      "ct": "font/woff2"
+    },
+    {
+      "type": "req",
+      "url": "https://fonts.gstatic.com/s/barlow/v13/7cHpv4kjgoGqM7E_DMs5.woff2",
+      "resourceType": "font"
+    },
+    {
+      "type": "req",
+      "url": "https://fonts.gstatic.com/s/barlow/v13/7cHqv4kjgoGqM7E3t-4s51os.woff2",
+      "resourceType": "font"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/title-intro.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/progress-bar.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/secondary-settings.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/BW6YWG0R.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/CozVMRND.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/t1WzwXnd.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/vYUQZzfX.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://fonts.gstatic.com/s/barlow/v13/7cHpv4kjgoGqM7E_DMs5.woff2",
+      "status": 200,
+      "ct": "font/woff2"
+    },
+    {
+      "type": "res",
+      "url": "https://fonts.gstatic.com/s/barlow/v13/7cHqv4kjgoGqM7E3t-4s51os.woff2",
+      "status": 200,
+      "ct": "font/woff2"
+    },
+    {
+      "type": "req",
+      "url": "https://cloudflareinsights.com/cdn-cgi/rum",
+      "resourceType": "xhr"
+    },
+    {
+      "type": "res",
+      "url": "https://cloudflareinsights.com/cdn-cgi/rum",
+      "status": 204,
+      "ct": "text/plain"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/BlAypStk.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/C2vT0KxV.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/DPqB0RfP.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/BN-EMi2W.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/2ZE6MGkB.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/ypjPflCr.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/ypjPflCr.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/BN-EMi2W.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/BlAypStk.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/DPqB0RfP.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/2ZE6MGkB.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/C2vT0KxV.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/CJn-Xu8f.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/DjQoCJ1T.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/PsyGwH6i.css",
+      "resourceType": "stylesheet"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/CJn-Xu8f.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/PsyGwH6i.css",
+      "status": 200,
+      "ct": "text/css; charset=utf-8"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/DjQoCJ1T.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/zone/floor.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/zone/zone.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/tree-1a.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/tree-1b.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/turbine.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/terrain/grass-mask.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/terrain/soil-mask.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/terrain/tile-mask.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/terrain/soil.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/terrain/tile.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/terrain/tree-foliage.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/art/other/map-light.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/game-texture.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/work/thumbnail/locked-thumb.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/terrain/soil-mask.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/zone/zone.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/basis/basis_transcoder.js",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/basis/basis_transcoder.wasm",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/work/thumbnail/locked-thumb.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/tree-1a.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/terrain/tile.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/draco/draco_wasm_wrapper.js",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/draco/draco_decoder.wasm",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/game-texture.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/game-texture.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/terrain/tile-mask.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/zone/floor.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/terrain/tree-foliage.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/terrain/soil.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/terrain/grass-mask.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/art/other/map-light.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/tree-1b.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/basis/basis_transcoder.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/draco/draco_decoder.wasm",
+      "status": 200,
+      "ct": "application/wasm"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/turbine.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/draco/draco_wasm_wrapper.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/game-texture.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "req",
+      "url": "blob:https://longhoang-lyo.com/7e18a123-9f26-41bf-9499-3bf9c01b7143",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "blob:https://longhoang-lyo.com/7e18a123-9f26-41bf-9499-3bf9c01b7143",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "blob:https://longhoang-lyo.com/7e18a123-9f26-41bf-9499-3bf9c01b7143",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "blob:https://longhoang-lyo.com/7e18a123-9f26-41bf-9499-3bf9c01b7143",
+      "resourceType": "script"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/basis/basis_transcoder.wasm",
+      "status": 200,
+      "ct": "application/wasm"
+    },
+    {
+      "type": "res",
+      "url": "blob:https://longhoang-lyo.com/7e18a123-9f26-41bf-9499-3bf9c01b7143",
+      "status": 200,
+      "ct": ""
+    },
+    {
+      "type": "res",
+      "url": "blob:https://longhoang-lyo.com/7e18a123-9f26-41bf-9499-3bf9c01b7143",
+      "status": 200,
+      "ct": ""
+    },
+    {
+      "type": "res",
+      "url": "blob:https://longhoang-lyo.com/7e18a123-9f26-41bf-9499-3bf9c01b7143",
+      "status": 200,
+      "ct": ""
+    },
+    {
+      "type": "res",
+      "url": "blob:https://longhoang-lyo.com/7e18a123-9f26-41bf-9499-3bf9c01b7143",
+      "status": 200,
+      "ct": ""
+    },
+    {
+      "type": "req",
+      "url": "blob:https://longhoang-lyo.com/e12d7b7e-d4a7-453d-881c-921ab8d34f13",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "blob:https://longhoang-lyo.com/e12d7b7e-d4a7-453d-881c-921ab8d34f13",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "blob:https://longhoang-lyo.com/e12d7b7e-d4a7-453d-881c-921ab8d34f13",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "blob:https://longhoang-lyo.com/e12d7b7e-d4a7-453d-881c-921ab8d34f13",
+      "resourceType": "script"
+    },
+    {
+      "type": "res",
+      "url": "blob:https://longhoang-lyo.com/e12d7b7e-d4a7-453d-881c-921ab8d34f13",
+      "status": 200,
+      "ct": ""
+    },
+    {
+      "type": "res",
+      "url": "blob:https://longhoang-lyo.com/e12d7b7e-d4a7-453d-881c-921ab8d34f13",
+      "status": 200,
+      "ct": ""
+    },
+    {
+      "type": "res",
+      "url": "blob:https://longhoang-lyo.com/e12d7b7e-d4a7-453d-881c-921ab8d34f13",
+      "status": 200,
+      "ct": ""
+    },
+    {
+      "type": "res",
+      "url": "blob:https://longhoang-lyo.com/e12d7b7e-d4a7-453d-881c-921ab8d34f13",
+      "status": 200,
+      "ct": ""
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/robot/player.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/robot/boss.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/robot/fodder.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/robot/bullet.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/vfx/track-mark.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/vfx/debris.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/vfx/decal-01.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/vfx/decal-02.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/vfx/flash.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/vfx/ring.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/vfx/smoke.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/vfx/sphere.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/vfx/star-burst.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/vfx/star-01.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/vfx/star-02.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/vfx/stunned-effect.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/vfx/star-burst.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/vfx/decal-02.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/robot/bullet.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/vfx/track-mark.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/game-texture.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/robot/boss.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/vfx/stunned-effect.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/vfx/star-02.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/vfx/decal-01.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/vfx/sphere.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/robot/player.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/robot/fodder.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/vfx/debris.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/vfx/flash.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/vfx/star-01.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/vfx/smoke.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/vfx/ring.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/game-texture.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/bts.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/bridge.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/chimney.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/concrete-pipe.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/power-core.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/barricade-1a.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/contact.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/crane.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/debris.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/dump-truck.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/giant-pipe-1a.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/giant-pipe-1b.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/giant-tank.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/hydrant.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/lamppost-1a.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/lamppost-1b.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/pipe-cluster-1a.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/tank-1a.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/tank-1b.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/chimney.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/concrete-pipe.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/barricade-1a.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/dump-truck.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/pipe-cluster-1a.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/lamppost-1a.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/lamppost-1b.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/giant-tank.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/giant-pipe-1a.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/contact.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/crane.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/tank-1a.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/bts.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/hydrant.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/power-core.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/tank-1b.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/giant-pipe-1b.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/bridge.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/debris.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/collectible/circuit.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/collectible/fuel.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/collectible/gear.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/collectible/tools.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/collectible/fuel.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/game-texture.ktx2",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/collectible/tools.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/collectible/gear.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/collectible/circuit.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/game-texture.ktx2",
+      "status": 200,
+      "ct": "image/ktx2"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/barrel-1c.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/brick.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/concrete-fence-1a.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/concrete-fence-1b.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/explosive-barrel.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/forklift.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/h-beam.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/metal-box-1a.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/metal-box-1b.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/pallet-1a.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/pipe-cluster-1b.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/recycle-bin.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/traffic-cone.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/wheelbarrow.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/wooden-box.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/object/bench.glb",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/wheelbarrow.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/h-beam.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/recycle-bin.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/explosive-barrel.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/concrete-fence-1a.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/pipe-cluster-1b.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/pallet-1a.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/bench.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/concrete-fence-1b.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/brick.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/metal-box-1b.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/barrel-1c.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/traffic-cone.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/forklift.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/metal-box-1a.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/object/wooden-box.glb",
+      "status": 200,
+      "ct": "model/gltf-binary"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/CQl67Veh.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/CQl67Veh.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/B1Nq4Kq6.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/ZmZwzdCV.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/C47JuxvO.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/BG4xpC7h.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/DzAfcUb9.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/C6MU3C_D.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/CZejaJVW.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/C4YGIT9J.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/BAJRzIjM.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/CGiTGUQE.css",
+      "resourceType": "stylesheet"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/DG7JKPvs.css",
+      "resourceType": "stylesheet"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/CIsbTXqr.css",
+      "resourceType": "stylesheet"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/BVMEKJZI.css",
+      "resourceType": "stylesheet"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/D315273G.css",
+      "resourceType": "stylesheet"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/Co0bDM87.css",
+      "resourceType": "stylesheet"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/CGiTGUQE.css",
+      "status": 200,
+      "ct": "text/css; charset=utf-8"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/CIsbTXqr.css",
+      "status": 200,
+      "ct": "text/css; charset=utf-8"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/Co0bDM87.css",
+      "status": 200,
+      "ct": "text/css; charset=utf-8"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/ZmZwzdCV.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/DG7JKPvs.css",
+      "status": 200,
+      "ct": "text/css; charset=utf-8"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/C47JuxvO.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/D315273G.css",
+      "status": 200,
+      "ct": "text/css; charset=utf-8"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/BVMEKJZI.css",
+      "status": 200,
+      "ct": "text/css; charset=utf-8"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/CZejaJVW.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/C6MU3C_D.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/aim-cursor/aim.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/aim-cursor/grab.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/BAJRzIjM.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/C4YGIT9J.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/BG4xpC7h.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/DzAfcUb9.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/B1Nq4Kq6.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/robot/player-track.json",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/action-point/ap-collapse.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/action-point/ap-expanded.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/action-point/ap-mobile-collapse.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/action-point/mobile/ap-collapse.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/action-point/mobile/ap-expanded.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/app-icon.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/button/button.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/button/close-2-button.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/button/close-button.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/button/elevated.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/button/nav-next-button.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/button/nav-prev-button.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/button/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/button/secondary-button.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/button/settings-button.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/button/surface-error.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/button/surface-locked.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/button/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/boss-bar.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/fodder-bar.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/health.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/player-bar.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/stunned.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/bottom-cover.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/esc-key.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/fast-travel.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/items.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/key.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/philosophy-icon-1.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/philosophy-icon-2.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/philosophy-icon-3.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/philosophy-icon-4.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/player.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/progress-bar.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/skill-banner-bg.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/skip-gameplay-surface.svg?v=89b6cbcf",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/skills-bg.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/space-key.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/target.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/title-2-about.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/title-3-about.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/title-about-mobile.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/title-about.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/title-bts.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/toggle-circle-off.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/toggle-circle.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/toggle-rec-off.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/toggle-rec.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/toggle.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/top-cover.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/you-died.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/add.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/app-store.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-2.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-3-down.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-3-left.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-3-right.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-3-up.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-4.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-down.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-left.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-right.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-square.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-up.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/behance.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/ch-play.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/checked-2.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/checked.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/close.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/copy.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/drag.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/enemy-arrow.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/facebook.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/health.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/heart.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/instagram.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/linkedin.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/loading.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/mouse-2-left.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/mouse-left.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/mouse-right.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/open-arrow.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/primary-settings.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/rotate-arrow.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/rotate-phone.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/selected.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/send.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/unlock.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/volume-off.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/volume-on.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/warning.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/website.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/x.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/joystick/move-track.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/joystick/move.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/joystick/shoot-track.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/joystick/shoot.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/page/case-study-toc-bg.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/page/case-study-toc-overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/page/case-study-toc-surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/page/death-title-bg.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/aesthetic-accent.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/aesthetic-base.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/aesthetic.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/color-rule-accent.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/color-rule-base.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/color-rule.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/gestalt-accent.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/gestalt-base.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/gestalt.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/heuristics-accent.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/heuristics-base.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/heuristics.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/budget.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/email.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/form-card.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/message.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/budget.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/email.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/message.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/name.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/vector.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/visual-card.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/name.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/visual-card.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/intro/intro-mask.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/intro/volume-button.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/bar-overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/bar.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/circuit.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/close.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/fuel.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/locked.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/mobile/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/mobile/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/setting.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/tools.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/app-store.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/ch-play.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/mobile/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/mobile/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/sticky-bar.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/website.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/controls.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/experience.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/full-screen.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/game-mode-active.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/game-mode.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/high-quality.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/experience.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/game-mode-active.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/game-mode.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/social-card-1.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/social-card-2.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/social-card-3.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/social-card-4.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/sounds.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/view-mode-active.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/view-mode.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/view-mode/experience.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/view-mode/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/view-mode/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/social-card-1.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/social-card-2.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/social-card-3.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/social-card-4.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/sounds.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/view-mode-active.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/view-mode.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/view-mode/experience.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/view-mode/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/view-mode/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/control-container.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/control-overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/control-surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/control.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/map.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/mission-noti.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/release-overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/rotate-overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/up-down-overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/circuit.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/drag.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/expand-overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/expand-surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/fuel.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/gear.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/tools.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/boost.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/boost/avatar.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/boost/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/boost/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/grab-mode.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/grab-mode/avatar.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/grab-mode/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/grab-mode/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/loading.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/locked.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/mail.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/move.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/move/avatar.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/move/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/move/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/shoot.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/shoot/avatar.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/shoot/overlay.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/shoot/surface.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/vfx/health-cross.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/vfx/heart.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/vfx/reveal-mask.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/work/thumbs/hanzii.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/work/thumbs/mazii.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/work/thumbs/niubii.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/work/thumbs/todaii.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/work/thumbs/todaii-j.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/items.svg",
+      "resourceType": "other"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/close.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-4.svg",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://fonts.gstatic.com/s/barlow/v13/7cHqv4kjgoGqM7E30-8s51os.woff2",
+      "resourceType": "font"
+    },
+    {
+      "type": "req",
+      "url": "https://fonts.gstatic.com/s/barlow/v13/7cHqv4kjgoGqM7E3_-gs51os.woff2",
+      "resourceType": "font"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/stunned.svg",
+      "resourceType": "other"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/player-bar.svg",
+      "resourceType": "other"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/health.svg",
+      "resourceType": "other"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/art/characters/art-mail-desktop.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/art/characters/art-mail-mobile.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/work/hanzii/00-thumbnail.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/work/hanzii/01-overview.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/art/characters/fodder-right-active.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/art/characters/player-right-inactive.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/art/items/toolbox.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/art/items/gear.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/art/items/tools.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/art/items/circuit.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/art/items/fuel.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/art/characters/player-left-active.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/art/other/map-light.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/art/items/map.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/aim-cursor/grab.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/aim-cursor/aim.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/progress-bar.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/philosophy-icon-1.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/action-point/ap-collapse.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/action-point/ap-expanded.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/button/elevated.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/key.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/health.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/philosophy-icon-2.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/esc-key.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/bottom-cover.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/skill-banner-bg.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/fast-travel.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/boss-bar.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/button/secondary-button.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/checked-2.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/action-point/ap-mobile-collapse.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/philosophy-icon-3.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/button/surface-error.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/title-2-about.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/button/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/button/close-2-button.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/title-3-about.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/action-point/mobile/ap-expanded.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/app-icon.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/title-about.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/button/nav-prev-button.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/app-store.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/target.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/fodder-bar.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/toggle.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/items.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/behance.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/drag.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/button/button.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-left.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/philosophy-icon-4.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-3-right.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-3-down.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/add.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-down.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-2.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/unlock.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/player.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/mouse-left.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-up.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/player-bar.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/toggle-rec-off.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/button/close-button.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/mouse-right.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-3-left.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/top-cover.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/open-arrow.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/aesthetic.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/rotate-arrow.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/close.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-4.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/title-bts.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/joystick/shoot-track.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-right.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/facebook.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/page/case-study-toc-surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/copy.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-square.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/skip-gameplay-surface.svg?v=89b6cbcf",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/primary-settings.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/send.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/stunned.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/loading.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/warning.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/you-died.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/linkedin.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/button/surface-locked.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/heart.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-3-up.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/button/settings-button.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/gestalt-base.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/skills-bg.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/color-rule-base.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/joystick/move-track.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/title-about-mobile.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/action-point/mobile/ap-collapse.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/mouse-2-left.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/aesthetic-base.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/volume-off.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/toggle-rec.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/checked.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/website.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/x.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/toggle-circle-off.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/page/case-study-toc-overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/joystick/shoot.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/button/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/button/nav-next-button.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/color-rule-accent.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/color-rule.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/page/death-title-bg.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/ch-play.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/health.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/page/case-study-toc-bg.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/toggle-circle.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/aesthetic-accent.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/gestalt-accent.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/rotate-phone.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/heuristics-accent.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/enemy-arrow.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/volume-on.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/joystick/move.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/space-key.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/heuristics.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/gestalt.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/philosophy/heuristics-base.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/instagram.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/name.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/budget.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/visual-card.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/app-store.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/tools.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/form-card.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/sounds.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/email.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/message.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/high-quality.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/mobile/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/close.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/circuit.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/social-card-4.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/mobile/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/name.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/experience.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/intro/intro-mask.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/visual-card.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/expand-overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/intro/volume-button.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/locked.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/boost/avatar.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/mobile/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/game-mode.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/social-card-3.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/controls.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/full-screen.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/ch-play.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/budget.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/social-card-1.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/control-overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/experience.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/rotate-overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/email.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/social-card-3.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/fuel.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/view-mode/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/gear.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/bar-overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/view-mode/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/tools.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/social-card-1.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/expand-surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/mobile/vector.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/sticky-bar.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/view-mode/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/mobile/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/sounds.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/bar.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/control-surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/move/avatar.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/boost.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/view-mode/experience.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/vfx/health-cross.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/setting.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/social-card-2.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/drag.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/fuel.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/website.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/project/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/locked.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/mission-noti.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/view-mode-active.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/contact/message.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/view-mode-active.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/game-mode-active.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/move.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/up-down-overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/social-card-4.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/mail.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/grab-mode/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/view-mode.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/boost/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/selected.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/submit-item/circuit.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/items-expand/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/view-mode/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/grab-mode/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/shoot/avatar.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/shoot/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/social-card-2.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/grab-mode.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/control-container.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/control.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/game-mode.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/release-overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/grab-mode/avatar.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/standalone/map.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/view-mode/experience.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/boost/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/move/surface.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/move/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/work/thumbs/hanzii.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/shoot.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/loading.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/hud/items.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/close.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/icons/arrow-4.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/stunned.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/player-bar.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/health.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/view-mode.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/work/hanzii/02-the-bottleneck.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/work/hanzii/03-strategic-impact.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/work/hanzii/04-design-process.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/work/hanzii/05-phase-1-discover.webp",
+      "resourceType": "image"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/tutorial/shoot/overlay.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/vfx/heart.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/work/thumbs/mazii.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/popup/settings/mobile/game-mode-active.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/work/thumbs/todaii-j.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/vfx/reveal-mask.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/work/thumbs/todaii.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/work/thumbs/niubii.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/art/characters/fodder-right-active.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/art/items/tools.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/art/items/gear.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/art/characters/player-left-active.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/work/hanzii/00-thumbnail.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/art/other/map-light.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/art/characters/art-mail-desktop.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/art/characters/player-right-inactive.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/art/items/toolbox.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/art/items/fuel.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/art/items/map.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/art/characters/art-mail-mobile.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/art/items/circuit.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/work/hanzii/01-overview.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://fonts.gstatic.com/s/barlow/v13/7cHqv4kjgoGqM7E30-8s51os.woff2",
+      "status": 200,
+      "ct": "font/woff2"
+    },
+    {
+      "type": "res",
+      "url": "https://fonts.gstatic.com/s/barlow/v13/7cHqv4kjgoGqM7E3_-gs51os.woff2",
+      "status": 200,
+      "ct": "font/woff2"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/work/hanzii/02-the-bottleneck.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/work/hanzii/05-phase-1-discover.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/work/hanzii/04-design-process.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/work/hanzii/03-strategic-impact.webp",
+      "status": 200,
+      "ct": "image/webp"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/robot/player-track.json",
+      "status": 200,
+      "ct": "application/json"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/terrain/grass-mask-128.bin",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/audio/ambient/intro-loop.mp3",
+      "resourceType": "xhr"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/audio/ui/cta-button-click.mp3",
+      "resourceType": "xhr"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/audio/ui/button-click.mp3",
+      "resourceType": "xhr"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/audio/ui/drag.mp3",
+      "resourceType": "xhr"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/terrain/grass-mask-128.bin",
+      "status": 200,
+      "ct": "application/octet-stream"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/audio/ambient/intro-loop.mp3",
+      "status": 200,
+      "ct": "audio/mpeg"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/audio/ui/button-click.mp3",
+      "status": 200,
+      "ct": "audio/mpeg"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/audio/ui/drag.mp3",
+      "status": 200,
+      "ct": "audio/mpeg"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/audio/ui/cta-button-click.mp3",
+      "status": 200,
+      "ct": "audio/mpeg"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/robot/boss-track-01.json",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/robot/boss-track-02.json",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/audio/ambient/theme-loop.mp3",
+      "resourceType": "xhr"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/audio/ambient/day-loop.mp3",
+      "resourceType": "xhr"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/audio/ambient/wind-loop.mp3",
+      "resourceType": "xhr"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/audio/sfx/player/player-move.mp3",
+      "resourceType": "xhr"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/robot/boss-track-02.json",
+      "status": 200,
+      "ct": "application/json"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/robot/boss-track-01.json",
+      "status": 200,
+      "ct": "application/json"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/audio/ambient/theme-loop.mp3",
+      "status": 200,
+      "ct": "audio/mpeg"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/audio/ambient/day-loop.mp3",
+      "status": 200,
+      "ct": "audio/mpeg"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/audio/sfx/player/player-move.mp3",
+      "status": 200,
+      "ct": "audio/mpeg"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/audio/ambient/wind-loop.mp3",
+      "status": 200,
+      "ct": "audio/mpeg"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/model/robot/fodder-track.json",
+      "resourceType": "fetch"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/audio/sfx/player/player-boost.mp3",
+      "resourceType": "xhr"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/audio/sfx/player/player-boost.mp3",
+      "status": 200,
+      "ct": "audio/mpeg"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/model/robot/fodder-track.json",
+      "status": 200,
+      "ct": "application/json"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/pr2JiyVy.js",
+      "resourceType": "script"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/audio/sfx/object/grass.mp3",
+      "resourceType": "xhr"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/audio/sfx/player/player-jump.mp3",
+      "resourceType": "xhr"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/audio/sfx/player/player-landing.mp3",
+      "resourceType": "xhr"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/audio/sfx/player/player-shoot.mp3",
+      "resourceType": "xhr"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/pr2JiyVy.js",
+      "status": 200,
+      "ct": "application/javascript"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/boss-bar.svg",
+      "resourceType": "other"
+    },
+    {
+      "type": "req",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/fodder-bar.svg",
+      "resourceType": "other"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/boss-bar.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/elements/health-bar/fodder-bar.svg",
+      "status": 200,
+      "ct": "image/svg+xml"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/audio/sfx/object/grass.mp3",
+      "status": 200,
+      "ct": "audio/mpeg"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/audio/sfx/player/player-shoot.mp3",
+      "status": 200,
+      "ct": "audio/mpeg"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/audio/sfx/player/player-landing.mp3",
+      "status": 200,
+      "ct": "audio/mpeg"
+    },
+    {
+      "type": "res",
+      "url": "https://longhoang-lyo.com/assets/audio/sfx/player/player-jump.mp3",
+      "status": 200,
+      "ct": "audio/mpeg"
+    }
+  ],
+  "logs": [
+    {
+      "type": "clicked",
+      "text": "LET'S GO"
+    }
+  ],
+  "scripts": [
+    "https://longhoang-lyo.com/assets/elements/hud/title-intro.svg",
+    "https://longhoang-lyo.com/assets/fonts/Crocante-Medium.woff2",
+    "https://static.cloudflareinsights.com/beacon.min.js",
+    "https://longhoang-lyo.com/assets/vYUQZzfX.js",
+    "https://longhoang-lyo.com/assets/C0xwqhbh.js",
+    "https://longhoang-lyo.com/assets/DrDnj3Lb.js",
+    "https://longhoang-lyo.com/assets/BW6YWG0R.js",
+    "https://longhoang-lyo.com/assets/Co_82n2H.js",
+    "https://longhoang-lyo.com/assets/t1WzwXnd.js",
+    "https://longhoang-lyo.com/assets/D9JAKPuk.js",
+    "https://longhoang-lyo.com/assets/CozVMRND.js",
+    "https://longhoang-lyo.com/assets/DADMk73e.js",
+    "https://longhoang-lyo.com/assets/BlAypStk.js",
+    "https://longhoang-lyo.com/assets/C2vT0KxV.js",
+    "https://longhoang-lyo.com/assets/DPqB0RfP.js",
+    "https://longhoang-lyo.com/assets/BN-EMi2W.js",
+    "https://longhoang-lyo.com/assets/2ZE6MGkB.js",
+    "https://longhoang-lyo.com/assets/ypjPflCr.js",
+    "https://longhoang-lyo.com/assets/CJn-Xu8f.js",
+    "https://longhoang-lyo.com/assets/DjQoCJ1T.js",
+    "https://longhoang-lyo.com/assets/CQl67Veh.js",
+    "https://longhoang-lyo.com/assets/B1Nq4Kq6.js",
+    "https://longhoang-lyo.com/assets/ZmZwzdCV.js",
+    "https://longhoang-lyo.com/assets/C47JuxvO.js",
+    "https://longhoang-lyo.com/assets/BG4xpC7h.js",
+    "https://longhoang-lyo.com/assets/DzAfcUb9.js",
+    "https://longhoang-lyo.com/assets/C6MU3C_D.js",
+    "https://longhoang-lyo.com/assets/CZejaJVW.js",
+    "https://longhoang-lyo.com/assets/C4YGIT9J.js",
+    "https://longhoang-lyo.com/assets/BAJRzIjM.js",
+    "https://longhoang-lyo.com/assets/pr2JiyVy.js"
+  ]
+}

@@ -1,0 +1,1 @@
+var e=250;function t(){return typeof window>`u`?Promise.resolve():new Promise(t=>{let n=null,r=()=>{clearTimeout(i),n!==null&&window.cancelAnimationFrame(n),t()},i=setTimeout(r,e);n=window.requestAnimationFrame(()=>{n=window.requestAnimationFrame(r)})})}export{t};

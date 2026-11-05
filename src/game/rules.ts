@@ -1,0 +1,7315 @@
+/**
+ * Pure physics, camera spring, and gameplay math extracted via REA from
+ * https://longhoang-lyo.com/ (bundles CQl67Veh.js, B1Nq4Kq6.js, BlAypStk.js, CJn-Xu8f.js)
+ */
+
+export interface Vec3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export type LightingPresetKey = 'day' | 'dusk' | 'night' | 'dawn';
+
+export interface LightingPresetConfig {
+  key: LightingPresetKey;
+  label: string;
+  revealColor: string;
+  revealIntensity: number;
+  lightColor: string;
+  lightIntensity: number;
+  shadowColor: string;
+  fogColorA: string;
+  fogColorB: string;
+  fogNearRatio: number;
+  fogFarRatio: number;
+  viewportFilterColor: string;
+  viewportFilterOpacity: number;
+}
+
+/**
+ * Exact deobfuscated constants from longhoang-lyo.com production bundles
+ */
+export const REA_CONSTANTS = {
+  camera: {
+    fov: 42,
+    robloxPseudoOrthoFov: 18,
+    near: 0.1,
+    far: 1000,
+    chaseOffset: { x: 0, y: 5.2, z: 12.5 } as Vec3,
+    chaseLookAtYOffset: 2.4,
+    defaultAngleOffset: { x: 4, y: 14, z: 8 } as Vec3,
+    playerStartAngleOffset: { x: 0, y: 2, z: 14 } as Vec3,
+    powerCoreAngleOffset: { x: 0, y: 0, z: 10 } as Vec3,
+    zoom: {
+      minDistance: 9,
+      amplitude: 12,
+      defaultValue: 0.6,
+      defaultDistance: 16.2,
+      bridgeTargetDistance: 25,
+    },
+    followSpring: {
+      smoothTimeNormal: 0.18,
+      smoothTimeBoost: 0.22,
+      snapDistanceSqThreshold: 36,
+    },
+    mousePan: {
+      sensitivity: 1.3,
+      dampSpeed: 5,
+      dragPanSensitivity: 0.05,
+    },
+    recoil: {
+      kickDistance: 0.13,
+      maxRecoilDistance: 0.37,
+    },
+    intro: {
+      targetZoomScaleDesktop: 1.5,
+      targetZoomScaleMobile: 1.2,
+      centerX: 0.75,
+      centerY: 0.5,
+      playerRotationY: -0.52,
+      playerStartRotationYDeg: -180,
+    },
+    worldSpawns: {
+      playerStartPosition: { x: 57.334, y: 10.068, z: 98.584 } as Vec3,
+      tutorShootPosition: { x: 16.34, y: 7.652, z: 88.309 } as Vec3,
+    },
+  },
+  physics: {
+    gravity: { x: 0, y: -9.81, z: 0 } as Vec3,
+    fixedTimeStep: 1 / 60,
+    maxPhysicsStepsPerFrame: 5,
+    robotBody: {
+      modelScale: 0.9,
+      linearDamping: 0.5,
+      angularDamping: 0.8,
+      restitution: 0.4,
+      friction: 0.3,
+      lockRotationsX: true,
+      lockRotationsY: false,
+      lockRotationsZ: true,
+      ccdEnabled: true,
+    },
+    drive: {
+      speed: 8.0,
+      boostMultiplier: 1.9,
+      boostMaxSpeed: 15.2,
+      rotationSpeed: 3.12,
+      boostRotationMultiplier: 1.2,
+      driveLerpRate: 8.0,
+      rotationLerpRate: 50.0,
+      forwardFrictionFactor: 0.5,
+      lateralFrictionFactor: 20.0,
+      rotationDampingFactor: 0.15,
+      turretDamping: 0.06,
+      airControlFactor: 0.45,
+      airRotationControlFactor: 0.3,
+      collisionAngularMultiplier: 0.3,
+      collisionPushBackMultiplier: 0.35,
+    },
+    terrain: {
+      friction: 0.8,
+      restitution: 0.0,
+    },
+    enemyBody: {
+      linearDamping: 0.8,
+      angularDamping: 0.8,
+      restitution: 0.5,
+      friction: 0.3,
+      density: 10.0,
+      bevelRadius: 0.08,
+      fodderHealth: 14,
+      bossHealth: 40,
+      playerMaxHealth: 30,
+    },
+    cannon: {
+      fireRate: 0.2,
+      shotInterval: 0.08,
+      projectileSpeed: 55.0,
+      projectileLife: 1.0,
+      projectileSpread: 0.05,
+      recoilDistance: 0.16,
+      barrelRecoilDistance: 0.16,
+      recoilPushDuration: 0.1,
+      recoilReturnDuration: 0.5,
+      turretLiftAmount: 0.06,
+      turretRotateAngleDeg: 6,
+      bodyLiftAmount: 0.05,
+      bodyRotateAngleDeg: 12,
+      muzzleLightColor: '#00ff66',
+      muzzleLightIntensity: 1.1,
+      muzzleLightDistance: 6.0,
+    },
+    grabMode: {
+      holdingDistance: 6.0,
+      springStrength: 180.0,
+      damping: 16.0,
+      maxPositionDelta: 1.5,
+      maxAngleDelta: 0.4,
+      maxAcceleration: 120.0,
+      maxAngularAcceleration: 80.0,
+      laserTravelSpeed: 7.5,
+      hoverStrokeColor: '#ffaa00',
+      hoverStrokeWidth: 0.055,
+    },
+  },
+  shadersAndLighting: {
+    outline: {
+      strokeWidth: 0.018,
+      strokeMaxDepth: 1.5,
+      strokeColor: '#17110f',
+      strokeColorRgb: [23, 17, 15] as [number, number, number],
+    },
+    hatch: {
+      angleRad: 0.7854,
+      frequency: 204,
+      noiseScale: 8,
+      noiseAmp: 0.3,
+    },
+    directionalKeyLight: {
+      color: '#ffe8d6',
+      intensity: 2.0,
+      offset: { x: 2, y: 25, z: -2 } as Vec3,
+    },
+    smoke: {
+      spawnRadiusMin: 0.03,
+      spawnRadiusMax: 0.16,
+      upwardVelMin: 1.28,
+      upwardVelMax: 1.92,
+      lifetimeMin: 5.5,
+      lifetimeMax: 8.5,
+      startScaleMin: 0.14,
+      startScaleMax: 0.24,
+      endScaleMin: 0.9,
+      endScaleMax: 1.4,
+      peakOpacityMin: 0.72,
+      peakOpacityMax: 0.92,
+      swayFreqX: [0.44, 0.88] as [number, number],
+      swayFreqZ: [0.58, 1.12] as [number, number],
+      swayAmp: [0.06, 0.14] as [number, number],
+    },
+    palette: {
+      brand10: '#beef74',
+      brand20: '#c7ff72',
+      neonLime: '#b8ff3c',
+      introLime: '#b4ff39',
+      neutral5: '#11121a',
+      neutral10: '#191b24',
+      neutral20: '#272935',
+      statusRed: '#f42f4c',
+      statusYellow: '#fec83e',
+    },
+  },
+  introHexagonSvgPath:
+    'M165.38 1.02246L1.03955 130.303L18.744 351.961L165.38 480.474L359.797 463.998L468.628 351.961L498.16 191.008L394.397 15.8505L165.38 1.02246Z',
+};
+
+export const LIGHTING_PRESETS: Record<LightingPresetKey, LightingPresetConfig> = {
+  day: {
+    key: 'day',
+    label: 'Day (0.00)',
+    revealColor: '#5f7df7',
+    revealIntensity: 12,
+    lightColor: '#ffe6b1',
+    lightIntensity: 1.6,
+    shadowColor: '#454778',
+    fogColorA: '#00a2ff',
+    fogColorB: '#f1ff64',
+    fogNearRatio: 0.315,
+    fogFarRatio: 1.25,
+    viewportFilterColor: '#ffffff',
+    viewportFilterOpacity: 0,
+  },
+  dusk: {
+    key: 'dusk',
+    label: 'Dusk (0.35)',
+    revealColor: '#d7ff7c',
+    revealIntensity: 2.5,
+    lightColor: '#ffebc7',
+    lightIntensity: 1.4,
+    shadowColor: '#66009c',
+    fogColorA: '#ff6d6d',
+    fogColorB: '#fff229',
+    fogNearRatio: 0,
+    fogFarRatio: 1.25,
+    viewportFilterColor: '#ff8181',
+    viewportFilterOpacity: 0.12,
+  },
+  night: {
+    key: 'night',
+    label: 'Night (0.60)',
+    revealColor: '#c2c6ff',
+    revealIntensity: 10,
+    lightColor: '#6277b8',
+    lightIntensity: 1.5,
+    shadowColor: '#1e2238',
+    fogColorA: '#5560a2',
+    fogColorB: '#1d2030',
+    fogNearRatio: -0.043,
+    fogFarRatio: 1.0,
+    viewportFilterColor: '#3240ff',
+    viewportFilterOpacity: 0.14,
+  },
+  dawn: {
+    key: 'dawn',
+    label: 'Dawn (0.85)',
+    revealColor: '#ffffff',
+    revealIntensity: 4.85,
+    lightColor: '#ffe5c0',
+    lightIntensity: 1.5,
+    shadowColor: '#494949',
+    fogColorA: '#ffca58',
+    fogColorB: '#ffebb6',
+    fogNearRatio: 0.3,
+    fogFarRatio: 1.25,
+    viewportFilterColor: '#fff7ef',
+    viewportFilterOpacity: 0.08,
+  },
+};
+
+export function clamp(val: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, val));
+}
+
+export function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/**
+ * Exact 1:1 port of CQl67Veh.js initFollowTarget critically damped spring
+ */
+export function stepCriticalDampedSpring3D(
+  current: Vec3,
+  target: Vec3,
+  velocity: Vec3,
+  currentSpeed: number,
+  dt: number,
+): { position: Vec3; velocity: Vec3 } {
+  const clampedDt = clamp(dt, 0.0001, 0.05);
+  const baseSpeed = REA_CONSTANTS.physics.drive.speed;
+  const maxBoostSpeed = baseSpeed * REA_CONSTANTS.physics.drive.boostMultiplier;
+  const speedAlpha = clamp(
+    (currentSpeed - baseSpeed) / Math.max(0.001, maxBoostSpeed - baseSpeed),
+    0,
+    1,
+  );
+  const smoothTime = lerp(
+    REA_CONSTANTS.camera.followSpring.smoothTimeNormal,
+    REA_CONSTANTS.camera.followSpring.smoothTimeBoost,
+    speedAlpha,
+  );
+
+  const dx = current.x - target.x;
+  const dy = current.y - target.y;
+  const dz = current.z - target.z;
+  const distSq = dx * dx + dy * dy + dz * dz;
+
+  if (distSq > REA_CONSTANTS.camera.followSpring.snapDistanceSqThreshold || distSq < 1e-6) {
+    return {
+      position: { x: target.x, y: target.y, z: target.z },
+      velocity: { x: 0, y: 0, z: 0 },
+    };
+  }
+
+  const omega = 2 / Math.max(1e-4, smoothTime);
+  const exp = Math.exp(-omega * clampedDt);
+
+  const tempX = (velocity.x + dx * omega) * clampedDt;
+  const tempY = (velocity.y + dy * omega) * clampedDt;
+  const tempZ = (velocity.z + dz * omega) * clampedDt;
+
+  const nextVelX = (velocity.x - tempX * omega) * exp;
+  const nextVelY = (velocity.y - tempY * omega) * exp;
+  const nextVelZ = (velocity.z - tempZ * omega) * exp;
+
+  const nextPosX = target.x + (dx + tempX) * exp;
+  const nextPosY = target.y + (dy + tempY) * exp;
+  const nextPosZ = target.z + (dz + tempZ) * exp;
+
+  return {
+    position: { x: nextPosX, y: nextPosY, z: nextPosZ },
+    velocity: { x: nextVelX, y: nextVelY, z: nextVelZ },
+  };
+}
+
+/**
+ * Exact 1:1 port of ur.handlePhysics drive speed & boost ramp from B1Nq4Kq6.js
+ */
+export function computeTankSpeedStep(
+  currentSpeed: number,
+  isBoosting: boolean,
+  dt: number,
+): number {
+  const base = REA_CONSTANTS.physics.drive.speed;
+  const maxBoost = base * REA_CONSTANTS.physics.drive.boostMultiplier;
+  const deltaSpeed = (maxBoost - base) * (isBoosting ? 1 : -10) * dt;
+  return clamp(currentSpeed + deltaSpeed, base, maxBoost);
+}
+
+/**
+ * Computes shortest signed angle difference in radians (-PI..PI)
+ */
+export function shortestAngleDelta(fromRad: number, toRad: number): number {
+  let diff = ((toRad - fromRad + Math.PI) % (Math.PI * 2)) - Math.PI;
+  if (diff < -Math.PI) diff += Math.PI * 2;
+  return diff;
+}
+
+/**
+ * Exact turret slerp damping factor from B1Nq4Kq6.js applyTurretAim:
+ * n = turretDamping * 60; r = 1 - Math.exp(-n * dt)
+ */
+export function stepTurretYaw(currentYaw: number, targetYaw: number, dt: number): number {
+  const rate = REA_CONSTANTS.physics.drive.turretDamping * 60;
+  const alpha = 1 - Math.exp(-rate * clamp(dt, 0, 0.05));
+  return currentYaw + shortestAngleDelta(currentYaw, targetYaw) * alpha;
+}
+
+/**
+ * Checks whether all 4 collectible types have been gathered to unlock Power Core
+ */
+export function isPowerCoreReady(collectedCount: number, requiredCount = 4): boolean {
+  return collectedCount >= requiredCount;
+}
+
+/**
+ * BUDDY BLITZ: Crate Warfare (Team Buddies x Lyo Visual Direction) Constants
+ */
+export const LYO_ARENA_PALETTE = {
+  grassMain: '#5ec932',
+  grassBlade: '#6cd938',
+  dirtRoad: '#d89c60',
+  dirtBorder: '#c28348',
+  treeTrunk: '#8c4a27',
+  treeCanopy: '#1d1f8c',
+  skyBright: '#9ad9ea',
+  inkOutline: '#12121e',
+  redCrate: '#ff3b30',
+  superCrate: '#00d2ff',
+  megaCrate: '#8e95a5',
+  greenSwitch: '#32ff6a',
+  comicNeon: '#b4ff39',
+} as const;
+
+export type CrateSlotType = 'empty' | 'red' | 'super' | 'legend';
+
+export type RecipeCategory =
+  | 'none'
+  | 'lite_weapon'
+  | 'medium_weapon'
+  | 'grenade'
+  | 'skyshield'
+  | 'heavy_weapon'
+  | 'buddy_t1'
+  | 'buddy_t2'
+  | 'light_vehicle'
+  | 'truck'
+  | 'vehicle'
+  | 'aircraft';
+
+export type TeamBuddiesCrateSchemeId =
+  | 'classic_military'
+  | 'cyber_tech'
+  | 'heavy_ordnance'
+  | 'special_ops';
+
+export interface LeftoverPadWeaponDropSpec {
+  crateKind: Exclude<CrateSlotType, 'empty'>;
+  weaponId: 'pistol' | 'rifle' | 'rocket';
+  outputName: string;
+  isSuper: boolean;
+  isLegend: boolean;
+  hasBouncingSpread: boolean;
+  isMassDestructionSuperWeapon: boolean;
+}
+
+export interface PadEvaluationResult {
+  totalCrates: number;
+  redCount: number;
+  superCount: number;
+  legendCount: number;
+  isMerged: boolean;
+  isSuper: boolean;
+  isLegend: boolean;
+  shapeKey: 'Empty' | '1x1x1' | '2x1x1' | '1x1x2' | '2x2x1' | '2x1x2' | '2x2x2' | 'Partial';
+  category: RecipeCategory;
+  teamBuddiesCategoryLabel: string;
+  outputName: string;
+  crateSchemeVariantName: string;
+  crateSchemeExamples: string[];
+  spawnType:
+    | 'none'
+    | 'weapon'
+    | 'grenade'
+    | 'skyshield'
+    | 'buddy'
+    | 'light_vehicle'
+    | 'truck'
+    | 'tank'
+    | 'plane';
+  weaponId?: 'pistol' | 'rifle' | 'rocket';
+  hasBouncingSpread?: boolean;
+  isMassDestructionSuperWeapon?: boolean;
+  buddyStatMultiplier?: {
+    hpMultiplier: number;
+    speedMultiplier: number;
+  };
+  vehicleStatMultiplier?: {
+    seats: 1 | 2;
+    armorMultiplier: number;
+    speedMultiplier: number;
+    isLightVehicle: boolean;
+  };
+  isOddStackCount: boolean;
+  basePatternCratesUsed: number;
+  leftoverWeaponDropsCount: number;
+  leftoverWeaponDrops: LeftoverPadWeaponDropSpec[];
+}
+
+export interface TeamBuddiesStackingPatternCatalogEntry {
+  shapeKey: '1x1x1' | '2x1x1' | '1x1x2' | '2x2x1' | '2x1x2' | '2x2x2';
+  crateCount: 1 | 2 | 4 | 8;
+  patternTitle: string;
+  categoryLabel: string;
+  standardYellowOrangeOutputs: string[];
+  upgradeBlueOutputs: string[];
+  specialPurpleOutputs: string[];
+}
+
+export const TEAM_BUDDIES_STACKING_PATTERNS: Record<
+  '1x1x1' | '2x1x1' | '1x1x2' | '2x2x1' | '2x1x2' | '2x2x2',
+  TeamBuddiesStackingPatternCatalogEntry
+> = {
+  '1x1x1': {
+    shapeKey: '1x1x1',
+    crateCount: 1,
+    patternTitle: '1 Peti (Posisi Bebas)',
+    categoryLabel: 'Senjata Ringan (Tier 1)',
+    standardYellowOrangeOutputs: ['Uzi', 'Shotgun', 'Pistol', 'Flamethrower Kecil', 'Granat Dasar'],
+    upgradeBlueOutputs: ['Super Shotgun (Peluru Menyebar & Memantul)', 'Plasma Gun'],
+    specialPurpleOutputs: ['Nuclear Launcher', 'Airstrike Marker', 'Ion Cannon'],
+  },
+  '2x1x1': {
+    shapeKey: '2x1x1',
+    crateCount: 2,
+    patternTitle: '2 Peti Sejajar Horizontal (1 Lapis)',
+    categoryLabel: 'Senjata Menengah (Tier 2)',
+    standardYellowOrangeOutputs: ['Bazooka', 'Assault Rifle', 'Sniper Rifle', 'Shuriken'],
+    upgradeBlueOutputs: ['Laser Gun', 'Super Bazooka', 'Skyshield 35mm Turret'],
+    specialPurpleOutputs: ['Ion Cannon Rifle', 'Skyshield 35mm Turret'],
+  },
+  '1x1x2': {
+    shapeKey: '1x1x2',
+    crateCount: 2,
+    patternTitle: '2 Peti Bertumpuk Vertikal (Tiang 1x1x2)',
+    categoryLabel: 'Unit Pasukan (Buddy)',
+    standardYellowOrangeOutputs: ['Infanteri Biasa (Buddy Reguler)', 'Medic Buddy'],
+    upgradeBlueOutputs: [
+      'Super Buddy: Commando (2x HP & 2x Kecepatan Lari)',
+      'Super Buddy: Robo-Buddy / Cyborg (2x HP & 2x Kecepatan Lari)',
+    ],
+    specialPurpleOutputs: ['Ninja / Stealth Buddy (Katana + Shuriken)', 'Super Buddie'],
+  },
+  '2x2x1': {
+    shapeKey: '2x2x1',
+    crateCount: 4,
+    patternTitle: '4 Peti Mendatar (Lantai Penuh 2x2x1)',
+    categoryLabel: 'Senjata Berat / Turret (Tier 3)',
+    standardYellowOrangeOutputs: [
+      'Gatling Gun',
+      'Homing Missile Launcher',
+      'Mortar',
+      'Auto-Turret / Meriam Pertahanan Markas',
+      'Lyo Dump Truck',
+    ],
+    upgradeBlueOutputs: [
+      'Heavy Gatling Laser',
+      'Twin Homing Missile Launcher',
+      'Super Auto-Turret (Skyshield Mk.II)',
+      'Heavy Dump Truck',
+    ],
+    specialPurpleOutputs: ['Ion Cannon Turret', 'Tactical Nuke Mortar', 'Heavy Dump Truck'],
+  },
+  '2x1x2': {
+    shapeKey: '2x1x2',
+    crateCount: 4,
+    patternTitle: '4 Peti Berdiri Vertikal (Dinding 2x1x2)',
+    categoryLabel: 'Kendaraan Ringan',
+    standardYellowOrangeOutputs: [
+      'Mini-Tank (1 Kursi)',
+      'Motorbike / Trike',
+      'AT-ST Walker',
+      'Speedboat',
+    ],
+    upgradeBlueOutputs: [
+      'Super Mini-Tank (Laser Mini-Tank)',
+      'Armored AT-ST Walker',
+      'Super Buddie',
+    ],
+    specialPurpleOutputs: ['Stealth Hover-Tank', 'Super Buddie'],
+  },
+  '2x2x2': {
+    shapeKey: '2x2x2',
+    crateCount: 8,
+    patternTitle: '8 Peti Penuh (Kubus 2x2x2)',
+    categoryLabel: 'Kendaraan Berat & Pesawat',
+    standardYellowOrangeOutputs: [
+      'Heavy Tank (2 Kursi: Pengemudi + Penembak Meriam)',
+      'APC',
+      'Lyo Tank',
+    ],
+    upgradeBlueOutputs: [
+      'Super Tank: Laser Tank (Armor Jauh Lebih Tebal)',
+      'Super Tank: Mammoth / Tyrant Tank (Armor 2.2x)',
+    ],
+    specialPurpleOutputs: [
+      'Pesawat Pengebom (Bomber)',
+      'Helikopter Tempur',
+      'Lyo Fighter Plane',
+    ],
+  },
+};
+
+export const TEAM_BUDDIES_CRATE_SCHEMES: Record<
+  TeamBuddiesCrateSchemeId,
+  {
+    id: TeamBuddiesCrateSchemeId;
+    name: string;
+    tier1Standard: string;
+    tier1BlueSuper: string;
+    tier2Standard: string;
+    tier2BlueSuper: string;
+    tier3HeavyStandard: string;
+    tier3HeavyBlueSuper: string;
+    lightVehicleStandard: string;
+    lightVehicleBlueSuper: string;
+    heavyVehicleStandard: string;
+    heavyVehicleBlueSuper: string;
+    aircraftLegend: string;
+    purpleSuperWeapon: string;
+  }
+> = {
+  classic_military: {
+    id: 'classic_military',
+    name: 'Classic Military Scheme',
+    tier1Standard: 'Uzi / Shotgun',
+    tier1BlueSuper: 'Super Shotgun (Peluru Menyebar & Memantul)',
+    tier2Standard: 'Bazooka / Assault Rifle',
+    tier2BlueSuper: 'Super Bazooka / Skyshield Turret',
+    tier3HeavyStandard: 'Gatling Gun / Auto-Turret',
+    tier3HeavyBlueSuper: 'Homing Missile Launcher / Super Auto-Turret',
+    lightVehicleStandard: 'Mini-Tank (1 Kursi)',
+    lightVehicleBlueSuper: 'Super Mini-Tank (Laser Mini-Tank)',
+    heavyVehicleStandard: 'Heavy Tank (2 Kursi)',
+    heavyVehicleBlueSuper: 'Mammoth / Tyrant Super Tank',
+    aircraftLegend: 'Pesawat Pengebom / Lyo Fighter Plane',
+    purpleSuperWeapon: 'Nuclear Launcher',
+  },
+  cyber_tech: {
+    id: 'cyber_tech',
+    name: 'Cyber Tech Scheme',
+    tier1Standard: 'Pistol / Flamethrower Kecil',
+    tier1BlueSuper: 'Plasma Gun (Bounce)',
+    tier2Standard: 'Laser Gun / Sniper Rifle',
+    tier2BlueSuper: 'Pulse Laser Rifle / Skyshield Turret',
+    tier3HeavyStandard: 'Auto-Turret / Mortar',
+    tier3HeavyBlueSuper: 'Heavy Plasma Gatling / Super Auto-Turret',
+    lightVehicleStandard: 'AT-ST Walker (1 Kursi)',
+    lightVehicleBlueSuper: 'Armored Laser Walker',
+    heavyVehicleStandard: 'APC / Heavy Tank',
+    heavyVehicleBlueSuper: 'Laser Tank (Super Armor)',
+    aircraftLegend: 'Helikopter Tempur / Bomber',
+    purpleSuperWeapon: 'Ion Cannon',
+  },
+  heavy_ordnance: {
+    id: 'heavy_ordnance',
+    name: 'Heavy Ordnance Scheme',
+    tier1Standard: 'Shotgun / Granat Dasar',
+    tier1BlueSuper: 'Super Shotgun (Ricochet)',
+    tier2Standard: 'Bazooka',
+    tier2BlueSuper: 'Cluster Bazooka / Skyshield Turret',
+    tier3HeavyStandard: 'Mortar / Gatling Gun',
+    tier3HeavyBlueSuper: 'Twin Homing Missile Launcher',
+    lightVehicleStandard: 'Motorbike / Trike (1 Kursi)',
+    lightVehicleBlueSuper: 'Super Recon Mini-Tank',
+    heavyVehicleStandard: 'Heavy Tank (2 Kursi)',
+    heavyVehicleBlueSuper: 'Mammoth Tank (Super Armor)',
+    aircraftLegend: 'Heavy Carpet Bomber',
+    purpleSuperWeapon: 'Airstrike Marker',
+  },
+  special_ops: {
+    id: 'special_ops',
+    name: 'Special Ops Scheme',
+    tier1Standard: 'Uzi / Pistol',
+    tier1BlueSuper: 'Plasma Gun / Super Shotgun',
+    tier2Standard: 'Sniper Rifle / Shuriken',
+    tier2BlueSuper: 'Laser Sniper / Skyshield Turret',
+    tier3HeavyStandard: 'Homing Missile Launcher',
+    tier3HeavyBlueSuper: 'Stealth Auto-Turret',
+    lightVehicleStandard: 'Speedboat / Mini-Tank (1 Kursi)',
+    lightVehicleBlueSuper: 'Stealth Mini-Tank',
+    heavyVehicleStandard: 'APC (2 Kursi)',
+    heavyVehicleBlueSuper: 'Laser Mammoth Tank',
+    aircraftLegend: 'Stealth Fighter Bomber',
+    purpleSuperWeapon: 'Nuclear Launcher',
+  },
+};
+
+export type BuddyClassId =
+  | 'Infuntry'
+  | 'Commando'
+  | 'Medic'
+  | 'Ninja'
+  | 'Cyborg'
+  | 'Stealthy'
+  | 'SuperBuddie';
+
+export interface BuddyClassSpec {
+  id: BuddyClassId;
+  name: string;
+  tier: 1 | 2;
+  isSuperOnly: boolean;
+  maxHp: number;
+  speedMultiplier: number;
+  jumpMultiplier: number;
+  colorHex: string;
+  canSliceMergedCrates: boolean;
+  vehicleResistant: boolean;
+  canFly: boolean;
+  traitLabel: string;
+}
+
+export const BUDDY_CLASSES: Record<BuddyClassId, BuddyClassSpec> = {
+  Infuntry: {
+    id: 'Infuntry',
+    name: 'Infuntry',
+    tier: 1,
+    isSuperOnly: false,
+    maxHp: 100,
+    speedMultiplier: 1.0,
+    jumpMultiplier: 1.0,
+    colorHex: '#ff3b30',
+    canSliceMergedCrates: false,
+    vehicleResistant: false,
+    canFly: false,
+    traitLabel: 'Crate Harvester',
+  },
+  Commando: {
+    id: 'Commando',
+    name: 'Commando',
+    tier: 2,
+    isSuperOnly: false,
+    maxHp: 135,
+    speedMultiplier: 1.2,
+    jumpMultiplier: 1.05,
+    colorHex: '#ff9500',
+    canSliceMergedCrates: false,
+    vehicleResistant: false,
+    canFly: false,
+    traitLabel: 'Super-Strafe',
+  },
+  Medic: {
+    id: 'Medic',
+    name: 'Medic',
+    tier: 1,
+    isSuperOnly: false,
+    maxHp: 110,
+    speedMultiplier: 1.05,
+    jumpMultiplier: 1.0,
+    colorHex: '#ffffff',
+    canSliceMergedCrates: false,
+    vehicleResistant: false,
+    canFly: false,
+    traitLabel: 'HP Regen Aura',
+  },
+  Ninja: {
+    id: 'Ninja',
+    name: 'Ninja',
+    tier: 1,
+    isSuperOnly: false,
+    maxHp: 115,
+    speedMultiplier: 1.38,
+    jumpMultiplier: 1.45,
+    colorHex: '#1c1c28',
+    canSliceMergedCrates: true,
+    vehicleResistant: false,
+    canFly: false,
+    traitLabel: 'Katana Crate Slicer',
+  },
+  Cyborg: {
+    id: 'Cyborg',
+    name: 'Cyborg',
+    tier: 2,
+    isSuperOnly: false,
+    maxHp: 180,
+    speedMultiplier: 0.95,
+    jumpMultiplier: 1.0,
+    colorHex: '#7d889e',
+    canSliceMergedCrates: false,
+    vehicleResistant: true,
+    canFly: false,
+    traitLabel: 'Anti-Tank Fist',
+  },
+  Stealthy: {
+    id: 'Stealthy',
+    name: 'Stealthy',
+    tier: 1,
+    isSuperOnly: true,
+    maxHp: 125,
+    speedMultiplier: 1.3,
+    jumpMultiplier: 1.25,
+    colorHex: '#4f46e5',
+    canSliceMergedCrates: true,
+    vehicleResistant: false,
+    canFly: false,
+    traitLabel: 'Cloak + Disarm',
+  },
+  SuperBuddie: {
+    id: 'SuperBuddie',
+    name: 'Super Buddie',
+    tier: 2,
+    isSuperOnly: true,
+    maxHp: 260,
+    speedMultiplier: 1.45,
+    jumpMultiplier: 1.8,
+    colorHex: '#00d2ff',
+    canSliceMergedCrates: false,
+    vehicleResistant: true,
+    canFly: true,
+    traitLabel: 'Flight + Laser Eyes',
+  },
+};
+
+export type TeamCommandMode = 'FOLLOW' | 'HARVEST' | 'ATTACK' | 'DEFEND' | 'MOUNT';
+
+/**
+ * Builds a single Tier-1 / Super / Special leftover weapon drop spec from an excess crate on the Stacking Pad.
+ * Used when the player strikes an incomplete/odd stack (3, 5, 6, or 7 crates):
+ * the pad produces the nearest valid lower pattern (1, 2, or 4 crates) PLUS leftover weapon drops for each excess crate!
+ */
+export function buildLeftoverCrateWeaponDrop(
+  crateKind: Exclude<CrateSlotType, 'empty'>,
+  schemeId: TeamBuddiesCrateSchemeId = 'classic_military',
+): LeftoverPadWeaponDropSpec {
+  const scheme = TEAM_BUDDIES_CRATE_SCHEMES[schemeId] ?? TEAM_BUDDIES_CRATE_SCHEMES.classic_military;
+  if (crateKind === 'legend') {
+    return {
+      crateKind,
+      weaponId: 'rocket',
+      outputName: scheme.purpleSuperWeapon,
+      isSuper: true,
+      isLegend: true,
+      hasBouncingSpread: false,
+      isMassDestructionSuperWeapon: true,
+    };
+  }
+  if (crateKind === 'super') {
+    return {
+      crateKind,
+      weaponId: 'rifle',
+      outputName: scheme.tier1BlueSuper,
+      isSuper: true,
+      isLegend: false,
+      hasBouncingSpread: true,
+      isMassDestructionSuperWeapon: false,
+    };
+  }
+  return {
+    crateKind,
+    weaponId: 'pistol',
+    outputName: scheme.tier1Standard,
+    isSuper: false,
+    isLegend: false,
+    hasBouncingSpread: false,
+    isMassDestructionSuperWeapon: false,
+  };
+}
+
+/**
+ * Pure Team Buddies 2x2x2 Stacking Pad Recipe Evaluator.
+ * Slots 0..3 represent bottom layer (2x2); slots 4..7 represent top layer (2x2).
+ * Supports Standard Yellow/Orange ('red'), Upgrade Blue ('super'), and Special Purple ('legend') crate combinations
+ * as well as World Crate Schemes (`TeamBuddiesCrateSchemeId`) and Odd-Count Breakdown (`3, 5, 6, or 7 crates`):
+ * - 1x1x1 (1 crate): Senjata Ringan (Tier 1) — Uzi/Shotgun/Pistol (Yellow), Super Shotgun Spread+Bounce / Plasma Gun (Blue), Nuclear Launcher / Supazooka (Purple)
+ * - 2x1x1 (2 horizontal crates): Senjata Menengah (Tier 2) — Bazooka/Assault Rifle/Sniper/Shuriken (Yellow), Laser Gun / Skyshield 35mm Turret (Blue/Purple)
+ * - 1x1x2 (2 vertical crates): Unit Pasukan (Buddy) — Infantry/Medic (Yellow, 1x HP & Speed), Super Buddy Commando/Robo-Buddy (Blue, 2x HP & 2x Speed), Ninja/Cyborg (Purple)
+ * - 2x2x1 (4 flat 2x2 crates): Senjata Berat / Turret (Tier 3) & Dump Truck — Gatling/Homing/Mortar/Auto-Turret/Dump Truck
+ * - 2x1x2 (4 vertical wall crates): Kendaraan Ringan & Super Unit — Mini-Tank (1 Kursi) / Motorbike / AT-ST Walker (Yellow), Super Laser Mini-Tank / Super Buddie (Blue/Purple)
+ * - 2x2x2 (8 full cube crates): Kendaraan Berat & Pesawat — Heavy Tank 2 Kursi / Lyo Tank (Yellow), Super Tank / Mammoth Tyrant Tank 2.2x Armor (Blue), Pesawat Pengebom / Lyo Fighter Plane (Purple)
+ * - Jumlah Tanggung (3, 5, 6, atau 7 peti): Menghasilkan objek dari pola terdekat di bawahnya (2 atau 4 peti) DITAMBAH sisa senjata kecil (`leftoverWeaponDrops`) sesuai jumlah peti sisa!
+ */
+export function evaluateStackingPadRecipe(
+  slots: ReadonlyArray<CrateSlotType>,
+  schemeId: TeamBuddiesCrateSchemeId = 'classic_military',
+): PadEvaluationResult {
+  const scheme = TEAM_BUDDIES_CRATE_SCHEMES[schemeId] ?? TEAM_BUDDIES_CRATE_SCHEMES.classic_military;
+  let redCount = 0;
+  let superCount = 0;
+  let legendCount = 0;
+  let bottomCount = 0;
+  let topCount = 0;
+  const filledKinds: Array<Exclude<CrateSlotType, 'empty'>> = [];
+
+  for (let i = 0; i < 8; i++) {
+    const s = slots[i] ?? 'empty';
+    if (s === 'red') redCount++;
+    if (s === 'super') superCount++;
+    if (s === 'legend') legendCount++;
+    if (s !== 'empty') {
+      filledKinds.push(s);
+      if (i < 4) bottomCount++;
+      else topCount++;
+    }
+  }
+
+  const totalCrates = redCount + superCount + legendCount;
+  const isMerged = totalCrates >= 2;
+  const isLegend = legendCount >= 1;
+  const isSuper = superCount >= 1 || isLegend;
+
+  if (totalCrates === 0) {
+    return {
+      totalCrates: 0,
+      redCount: 0,
+      superCount: 0,
+      legendCount: 0,
+      isMerged: false,
+      isSuper: false,
+      isLegend: false,
+      shapeKey: 'Empty',
+      category: 'none',
+      teamBuddiesCategoryLabel: 'Pad Kosong',
+      outputName: 'Pad Kosong',
+      crateSchemeVariantName: 'Pad Kosong',
+      crateSchemeExamples: [],
+      spawnType: 'none',
+      isOddStackCount: false,
+      basePatternCratesUsed: 0,
+      leftoverWeaponDropsCount: 0,
+      leftoverWeaponDrops: [],
+    };
+  }
+
+  const computeLeftovers = (baseUsed: number): LeftoverPadWeaponDropSpec[] => {
+    const excessCount = Math.max(0, totalCrates - baseUsed);
+    if (excessCount <= 0) return [];
+    const leftovers: LeftoverPadWeaponDropSpec[] = [];
+    for (let i = filledKinds.length - excessCount; i < filledKinds.length; i++) {
+      leftovers.push(buildLeftoverCrateWeaponDrop(filledKinds[i], schemeId));
+    }
+    return leftovers;
+  };
+
+  if (totalCrates === 8) {
+    const patternMeta = TEAM_BUDDIES_STACKING_PATTERNS['2x2x2'];
+    if (isLegend) {
+      return {
+        totalCrates,
+        redCount,
+        superCount,
+        legendCount,
+        isMerged,
+        isSuper,
+        isLegend,
+        shapeKey: '2x2x2',
+        category: 'aircraft',
+        teamBuddiesCategoryLabel: patternMeta.categoryLabel,
+        outputName: 'Lyo Fighter Plane',
+        crateSchemeVariantName: scheme.aircraftLegend,
+        crateSchemeExamples: patternMeta.specialPurpleOutputs,
+        spawnType: 'plane',
+        vehicleStatMultiplier: {
+          seats: 2,
+          armorMultiplier: 2.5,
+          speedMultiplier: 1.8,
+          isLightVehicle: false,
+        },
+        isOddStackCount: false,
+        basePatternCratesUsed: 8,
+        leftoverWeaponDropsCount: 0,
+        leftoverWeaponDrops: [],
+      };
+    }
+    return {
+      totalCrates,
+      redCount,
+      superCount,
+      legendCount,
+      isMerged,
+      isSuper,
+      isLegend,
+      shapeKey: '2x2x2',
+      category: 'vehicle',
+      teamBuddiesCategoryLabel: patternMeta.categoryLabel,
+      outputName: isSuper ? 'Tyrant Tank' : 'Lyo Tank',
+      crateSchemeVariantName: isSuper ? scheme.heavyVehicleBlueSuper : scheme.heavyVehicleStandard,
+      crateSchemeExamples: isSuper
+        ? patternMeta.upgradeBlueOutputs
+        : patternMeta.standardYellowOrangeOutputs,
+      spawnType: 'tank',
+      vehicleStatMultiplier: {
+        seats: 2,
+        armorMultiplier: isSuper ? 2.2 : 1.0,
+        speedMultiplier: isSuper ? 1.15 : 1.0,
+        isLightVehicle: false,
+      },
+      isOddStackCount: false,
+      basePatternCratesUsed: 8,
+      leftoverWeaponDropsCount: 0,
+      leftoverWeaponDrops: [],
+    };
+  }
+
+  if (totalCrates >= 4) {
+    const isVerticalWall = topCount >= 2;
+    const leftovers = computeLeftovers(4);
+    const isOdd = totalCrates !== 4;
+    if (isVerticalWall) {
+      const patternMeta = TEAM_BUDDIES_STACKING_PATTERNS['2x1x2'];
+      return {
+        totalCrates,
+        redCount,
+        superCount,
+        legendCount,
+        isMerged,
+        isSuper,
+        isLegend,
+        shapeKey: '2x1x2',
+        category: 'buddy_t2',
+        teamBuddiesCategoryLabel: patternMeta.categoryLabel,
+        outputName: isSuper ? 'Super Buddie' : 'Commando / Cyborg',
+        crateSchemeVariantName: isSuper ? scheme.lightVehicleBlueSuper : scheme.lightVehicleStandard,
+        crateSchemeExamples: isLegend
+          ? patternMeta.specialPurpleOutputs
+          : isSuper
+            ? patternMeta.upgradeBlueOutputs
+            : patternMeta.standardYellowOrangeOutputs,
+        spawnType: 'buddy',
+        buddyStatMultiplier: {
+          hpMultiplier: isSuper ? 2.0 : 1.35,
+          speedMultiplier: isSuper ? 2.0 : 1.2,
+        },
+        vehicleStatMultiplier: {
+          seats: 1,
+          armorMultiplier: isSuper ? 1.8 : 1.0,
+          speedMultiplier: isSuper ? 1.5 : 1.35,
+          isLightVehicle: true,
+        },
+        isOddStackCount: isOdd,
+        basePatternCratesUsed: 4,
+        leftoverWeaponDropsCount: leftovers.length,
+        leftoverWeaponDrops: leftovers,
+      };
+    }
+    const patternMeta = TEAM_BUDDIES_STACKING_PATTERNS['2x2x1'];
+    return {
+      totalCrates,
+      redCount,
+      superCount,
+      legendCount,
+      isMerged,
+      isSuper,
+      isLegend,
+      shapeKey: '2x2x1',
+      category: 'truck',
+      teamBuddiesCategoryLabel: patternMeta.categoryLabel,
+      outputName: isSuper ? 'Heavy Dump Truck' : 'Lyo Dump Truck',
+      crateSchemeVariantName: isSuper ? scheme.tier3HeavyBlueSuper : scheme.tier3HeavyStandard,
+      crateSchemeExamples: isLegend
+        ? patternMeta.specialPurpleOutputs
+        : isSuper
+          ? patternMeta.upgradeBlueOutputs
+          : patternMeta.standardYellowOrangeOutputs,
+      spawnType: 'truck',
+      isOddStackCount: isOdd,
+      basePatternCratesUsed: 4,
+      leftoverWeaponDropsCount: leftovers.length,
+      leftoverWeaponDrops: leftovers,
+    };
+  }
+
+  if (totalCrates >= 2) {
+    const isVerticalColumn = topCount >= 1;
+    const leftovers = computeLeftovers(2);
+    const isOdd = totalCrates !== 2;
+    if (isVerticalColumn) {
+      const patternMeta = TEAM_BUDDIES_STACKING_PATTERNS['1x1x2'];
+      return {
+        totalCrates,
+        redCount,
+        superCount,
+        legendCount,
+        isMerged,
+        isSuper,
+        isLegend,
+        shapeKey: '1x1x2',
+        category: 'buddy_t1',
+        teamBuddiesCategoryLabel: patternMeta.categoryLabel,
+        outputName: isLegend
+          ? 'Commando / Ninja'
+          : isSuper
+            ? 'Stealthy / Ninja'
+            : 'Infuntry / Medic',
+        crateSchemeVariantName: isLegend
+          ? 'Super Ninja / Cyborg Buddy (2x HP & 2x Speed)'
+          : isSuper
+            ? 'Super Buddy: Commando / Robo-Buddy (2x HP & 2x Speed)'
+            : 'Infanteri Biasa (Buddy Reguler)',
+        crateSchemeExamples: isLegend
+          ? patternMeta.specialPurpleOutputs
+          : isSuper
+            ? patternMeta.upgradeBlueOutputs
+            : patternMeta.standardYellowOrangeOutputs,
+        spawnType: 'buddy',
+        buddyStatMultiplier: {
+          hpMultiplier: isLegend ? 2.4 : isSuper ? 2.0 : 1.0,
+          speedMultiplier: isLegend ? 2.0 : isSuper ? 2.0 : 1.0,
+        },
+        isOddStackCount: isOdd,
+        basePatternCratesUsed: 2,
+        leftoverWeaponDropsCount: leftovers.length,
+        leftoverWeaponDrops: leftovers,
+      };
+    }
+    const patternMeta = TEAM_BUDDIES_STACKING_PATTERNS['2x1x1'];
+    if (isSuper || isLegend) {
+      return {
+        totalCrates,
+        redCount,
+        superCount,
+        legendCount,
+        isMerged,
+        isSuper,
+        isLegend,
+        shapeKey: '2x1x1',
+        category: 'skyshield',
+        teamBuddiesCategoryLabel: patternMeta.categoryLabel,
+        outputName: 'Skyshield 35mm Turret',
+        crateSchemeVariantName: scheme.tier2BlueSuper,
+        crateSchemeExamples: isLegend
+          ? patternMeta.specialPurpleOutputs
+          : patternMeta.upgradeBlueOutputs,
+        spawnType: 'skyshield',
+        weaponId: 'rocket',
+        isOddStackCount: isOdd,
+        basePatternCratesUsed: 2,
+        leftoverWeaponDropsCount: leftovers.length,
+        leftoverWeaponDrops: leftovers,
+      };
+    }
+    return {
+      totalCrates,
+      redCount,
+      superCount,
+      legendCount,
+      isMerged,
+      isSuper,
+      isLegend,
+      shapeKey: '2x1x1',
+      category: 'heavy_weapon',
+      teamBuddiesCategoryLabel: patternMeta.categoryLabel,
+      outputName: 'Bazooka / Granat',
+      crateSchemeVariantName: scheme.tier2Standard,
+      crateSchemeExamples: patternMeta.standardYellowOrangeOutputs,
+      spawnType: 'weapon',
+      weaponId: 'rocket',
+      isOddStackCount: isOdd,
+      basePatternCratesUsed: 2,
+      leftoverWeaponDropsCount: leftovers.length,
+      leftoverWeaponDrops: leftovers,
+    };
+  }
+
+  const patternMeta1 = TEAM_BUDDIES_STACKING_PATTERNS['1x1x1'];
+  return {
+    totalCrates: 1,
+    redCount,
+    superCount,
+    legendCount,
+    isMerged: false,
+    isSuper,
+    isLegend,
+    shapeKey: '1x1x1',
+    category: isLegend ? 'heavy_weapon' : 'lite_weapon',
+    teamBuddiesCategoryLabel: patternMeta1.categoryLabel,
+    outputName: isLegend ? 'Supazooka' : isSuper ? 'Assault Rifle' : 'Pistol / Uzi',
+    crateSchemeVariantName: isLegend
+      ? scheme.purpleSuperWeapon
+      : isSuper
+        ? scheme.tier1BlueSuper
+        : scheme.tier1Standard,
+    crateSchemeExamples: isLegend
+      ? patternMeta1.specialPurpleOutputs
+      : isSuper
+        ? patternMeta1.upgradeBlueOutputs
+        : patternMeta1.standardYellowOrangeOutputs,
+    spawnType: 'weapon',
+    weaponId: isLegend ? 'rocket' : isSuper ? 'rifle' : 'pistol',
+    hasBouncingSpread: isSuper && !isLegend,
+    isMassDestructionSuperWeapon: isLegend,
+    isOddStackCount: false,
+    basePatternCratesUsed: 1,
+    leftoverWeaponDropsCount: 0,
+    leftoverWeaponDrops: [],
+  };
+}
+
+export type BuildOrderTarget =
+  | '1x1x1'
+  | '2x1x1'
+  | '1x1x2'
+  | '2x2x1'
+  | '2x1x2'
+  | '2x2x2'
+  | 'upgrade_building'
+  | 'upgrade_fence'
+  | 'build_parking'
+  | 'build_helipad'
+  | 'AUTO';
+
+export interface BuildOrderSpec {
+  key: BuildOrderTarget;
+  label: string;
+  targetCrates: number;
+  allowedSlots: ReadonlyArray<number>;
+  ghostBoxSize: [number, number, number];
+  ghostBoxCenter: [number, number, number];
+}
+
+export const BUILD_ORDER_SPECS: Record<BuildOrderTarget, BuildOrderSpec> = {
+  '1x1x1': {
+    key: '1x1x1',
+    label: 'Senjata (1x1x1)',
+    targetCrates: 1,
+    allowedSlots: [0],
+    ghostBoxSize: [1.52, 1.52, 1.52],
+    ghostBoxCenter: [-0.85, 0.92, -0.85],
+  },
+  '2x1x1': {
+    key: '2x1x1',
+    label: 'Bazooka / Skyshield',
+    targetCrates: 2,
+    allowedSlots: [0, 1],
+    ghostBoxSize: [3.25, 1.52, 1.52],
+    ghostBoxCenter: [0, 0.92, -0.85],
+  },
+  '1x1x2': {
+    key: '1x1x2',
+    label: 'Buddy T1',
+    targetCrates: 2,
+    allowedSlots: [0, 4],
+    ghostBoxSize: [1.52, 2.96, 1.52],
+    ghostBoxCenter: [-0.85, 1.63, -0.85],
+  },
+  '2x2x1': {
+    key: '2x2x1',
+    label: 'Dump Truck (2x2x1)',
+    targetCrates: 4,
+    allowedSlots: [0, 1, 2, 3],
+    ghostBoxSize: [3.25, 1.52, 3.25],
+    ghostBoxCenter: [0, 0.92, 0],
+  },
+  '2x1x2': {
+    key: '2x1x2',
+    label: 'Buddy T2',
+    targetCrates: 4,
+    allowedSlots: [0, 1, 4, 5],
+    ghostBoxSize: [3.25, 2.96, 1.52],
+    ghostBoxCenter: [0, 1.63, -0.85],
+  },
+  '2x2x2': {
+    key: '2x2x2',
+    label: 'Tank / Pesawat',
+    targetCrates: 8,
+    allowedSlots: [0, 1, 2, 3, 4, 5, 6, 7],
+    ghostBoxSize: [3.25, 2.96, 3.25],
+    ghostBoxCenter: [0, 1.63, 0],
+  },
+  upgrade_building: {
+    key: 'upgrade_building',
+    label: 'Upgrade Rumah (Lv.2/3)',
+    targetCrates: 2,
+    allowedSlots: [0, 1, 2, 3],
+    ghostBoxSize: [3.25, 1.52, 1.52],
+    ghostBoxCenter: [0, 0.92, -0.85],
+  },
+  upgrade_fence: {
+    key: 'upgrade_fence',
+    label: 'Upgrade Pagar Besi (Lv.2/3)',
+    targetCrates: 2,
+    allowedSlots: [0, 1, 2, 3],
+    ghostBoxSize: [3.25, 1.52, 1.52],
+    ghostBoxCenter: [0, 0.92, -0.85],
+  },
+  build_parking: {
+    key: 'build_parking',
+    label: 'Build Parkiran Mobil',
+    targetCrates: 2,
+    allowedSlots: [0, 1],
+    ghostBoxSize: [3.25, 1.52, 1.52],
+    ghostBoxCenter: [0, 0.92, -0.85],
+  },
+  build_helipad: {
+    key: 'build_helipad',
+    label: 'Build Helipad (H)',
+    targetCrates: 4,
+    allowedSlots: [0, 1, 2, 3],
+    ghostBoxSize: [3.25, 1.52, 3.25],
+    ghostBoxCenter: [0, 0.92, 0],
+  },
+  AUTO: {
+    key: 'AUTO',
+    label: 'Otomatis',
+    targetCrates: 8,
+    allowedSlots: [0, 4, 1, 5, 2, 3, 6, 7],
+    ghostBoxSize: [3.25, 2.96, 3.25],
+    ghostBoxCenter: [0, 1.63, 0],
+  },
+};
+
+export function getBuildOrderAllowedSlots(buildOrder: BuildOrderTarget): ReadonlyArray<number> {
+  return BUILD_ORDER_SPECS[buildOrder]?.allowedSlots ?? BUILD_ORDER_SPECS.AUTO.allowedSlots;
+}
+
+/**
+ * Selects the next physical 3D slot index (0..7) on a 2x2x2 Stacking Pad
+ * strictly constrained to the active Build Order pattern's allowed slots.
+ * Returns -1 when all slots in the active Build Order pattern are full.
+ */
+export function chooseNextPadSlotIndex(
+  slots: ReadonlyArray<CrateSlotType>,
+  buildOrder: BuildOrderTarget = '1x1x2',
+): number {
+  const allowedSlots = getBuildOrderAllowedSlots(buildOrder);
+  for (const idx of allowedSlots) {
+    if ((slots[idx] ?? 'empty') === 'empty') {
+      return idx;
+    }
+  }
+  return -1;
+}
+
+export interface CursorCommandInput {
+  cursorX: number;
+  cursorZ: number;
+  crates: ReadonlyArray<{ x: number; z: number }>;
+  enemies: ReadonlyArray<{ x: number; z: number }>;
+  emptyTanks: ReadonlyArray<{ x: number; z: number }>;
+  blueBase: { x: number; z: number; padX: number; padZ: number };
+  redBase: { x: number; z: number; padX: number; padZ: number };
+  currentCommand: TeamCommandMode;
+}
+
+export interface CursorCommandResolution {
+  command: TeamCommandMode;
+  saluteLabel: string;
+  targetTankIndex: number;
+}
+
+/**
+ * Resolves AI Squad command [V] based on what 3D object is under the player's cursor crosshair.
+ */
+export function resolveCursorCommandTarget(input: CursorCommandInput): CursorCommandResolution {
+  const { cursorX, cursorZ, crates, enemies, emptyTanks, blueBase, redBase, currentCommand } = input;
+
+  // 1. Check unoccupied Blue Tank under cursor (within 5.5m)
+  for (let i = 0; i < emptyTanks.length; i++) {
+    const t = emptyTanks[i];
+    if (Math.hypot(cursorX - t.x, cursorZ - t.z) <= 5.5) {
+      return { command: 'MOUNT', saluteLabel: 'NAIK TANK', targetTankIndex: i };
+    }
+  }
+
+  // 2. Check Crate under cursor (within 5.2m)
+  for (const c of crates) {
+    if (Math.hypot(cursorX - c.x, cursorZ - c.z) <= 5.2) {
+      return { command: 'HARVEST', saluteLabel: 'PANEN PETI', targetTankIndex: -1 };
+    }
+  }
+
+  // 3. Check Enemy unit or Red Base HQ under cursor
+  for (const e of enemies) {
+    if (Math.hypot(cursorX - e.x, cursorZ - e.z) <= 6.0) {
+      return { command: 'ATTACK', saluteLabel: 'SERANG MUSUH', targetTankIndex: -1 };
+    }
+  }
+  if (
+    Math.hypot(cursorX - redBase.x, cursorZ - redBase.z) <= 8.5 ||
+    Math.hypot(cursorX - redBase.padX, cursorZ - redBase.padZ) <= 6.5
+  ) {
+    return { command: 'ATTACK', saluteLabel: 'SERANG RED HQ', targetTankIndex: -1 };
+  }
+
+  // 4. Check Blue Base HQ or Blue Stacking Pad under cursor
+  if (
+    Math.hypot(cursorX - blueBase.x, cursorZ - blueBase.z) <= 8.5 ||
+    Math.hypot(cursorX - blueBase.padX, cursorZ - blueBase.padZ) <= 6.5
+  ) {
+    return { command: 'DEFEND', saluteLabel: 'JAGA MARKAS', targetTankIndex: -1 };
+  }
+
+  // 5. Fallback: cycle command mode if pointing at open ground
+  const cycle: TeamCommandMode[] = ['HARVEST', 'ATTACK', 'DEFEND', 'FOLLOW'];
+  const idx = cycle.indexOf(currentCommand);
+  const nextCmd = cycle[(idx + 1) % cycle.length];
+  const labelMap: Record<TeamCommandMode, string> = {
+    HARVEST: 'PANEN PETI',
+    ATTACK: 'SERANG MUSUH',
+    DEFEND: 'JAGA MARKAS',
+    FOLLOW: 'IKUTI PEMAIN',
+    MOUNT: 'NAIK TANK',
+  };
+  return { command: nextCmd, saluteLabel: labelMap[nextCmd], targetTankIndex: -1 };
+}
+
+// ============================================================================
+// OBJECT COLLISION PHYSICS (SOLID VS PUSHABLE VS DESTRUCTIBLE) & IMPACT SFX
+// ============================================================================
+
+export type ColliderCategory = 'solid' | 'pushable' | 'breakable' | 'none';
+export type CollisionMaterialTag = 'metal' | 'wood' | 'concrete' | 'brick' | 'plastic' | 'tree' | 'default';
+
+export interface PropCollisionSpec {
+  category: ColliderCategory;
+  materialTag: CollisionMaterialTag;
+  radius: number;
+  halfX?: number;
+  halfZ?: number;
+  mass: number;
+  restitution: number;
+  destructible: boolean;
+  maxHp: number;
+  ramBreakSpeed: number;
+  /** REA-extracted bullet impact impulse (`Ri.objectShootImpulseOverrides` in `B1Nq4Kq6.js:441572`). 0 for fixed/massive objects. */
+  shootImpulse: number;
+  /** Whether this prop is allowed to wobble/jiggle when hit by bullets or bumped. False for massive/fixed structures (turbine, crane, buildings, etc.). */
+  canJiggleOnHit: boolean;
+}
+
+/**
+ * Maps every placed map prop kind (plus crates, trees, and base structures)
+ * to its physical collision category, material sound tag, bounding radius / OBB half-extents, and durability.
+ * Large fixed structures (`turbine`, `crane`, `chimney`, `giant_tank`, `giant_pipe`, `shipping_container`, `blue_hq`, etc.)
+ * have `shootImpulse: 0` and `canJiggleOnHit: false` so they never shake when shot.
+ */
+export function getPropCollisionSpec(kind: string, scale = 1.0): PropCollisionSpec {
+  const s = Math.max(0.4, scale);
+  switch (kind) {
+    // 1. Solid Impenetrable Heavy Static Colliders (shootImpulse: 0, canJiggleOnHit: false)
+    case 'blue_hq':
+    case 'red_hq':
+      return {
+        category: 'solid',
+        materialTag: 'concrete',
+        radius: 3.45 * s,
+        mass: 9999,
+        restitution: 0.28,
+        destructible: false,
+        maxHp: 2000,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'blue_pad':
+    case 'red_pad':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 2.05 * s,
+        mass: 9999,
+        restitution: 0.25,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'giant_tank':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 2.35 * s,
+        mass: 9999,
+        restitution: 0.36,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'tank_1a':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 1.55 * s,
+        halfX: 1.05 * s,
+        halfZ: 2.75 * s,
+        mass: 9999,
+        restitution: 0.34,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'tank_1b':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 1.55 * s,
+        halfX: 1.22 * s,
+        halfZ: 2.58 * s,
+        mass: 9999,
+        restitution: 0.34,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'forklift':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 1.45 * s,
+        halfX: 0.92 * s,
+        halfZ: 1.58 * s,
+        mass: 9999,
+        restitution: 0.34,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'h_beam':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 1.15 * s,
+        halfX: 1.02 * s,
+        halfZ: 2.08 * s,
+        mass: 9999,
+        restitution: 0.32,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'concrete_pipe':
+      return {
+        category: 'solid',
+        materialTag: 'concrete',
+        radius: 0.92 * s,
+        halfX: 0.95 * s,
+        halfZ: 0.95 * s,
+        mass: 9999,
+        restitution: 0.28,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'chimney':
+      return {
+        category: 'solid',
+        materialTag: 'concrete',
+        radius: 1.85 * s,
+        halfX: 2.35 * s,
+        halfZ: 1.25 * s,
+        mass: 9999,
+        restitution: 0.26,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'crane':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 1.65 * s,
+        halfX: 1.32 * s,
+        halfZ: 1.85 * s,
+        mass: 9999,
+        restitution: 0.34,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'giant_pipe':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 1.65 * s,
+        halfX: 2.75 * s,
+        halfZ: 0.45 * s,
+        mass: 9999,
+        restitution: 0.35,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'giant_pipe_1b':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 1.55 * s,
+        halfX: 1.15 * s,
+        halfZ: 2.15 * s,
+        mass: 9999,
+        restitution: 0.35,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'pipe_cluster':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 1.55 * s,
+        halfX: 1.12 * s,
+        halfZ: 2.72 * s,
+        mass: 9999,
+        restitution: 0.35,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'pipe_cluster_1b':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 1.55 * s,
+        halfX: 1.02 * s,
+        halfZ: 2.72 * s,
+        mass: 9999,
+        restitution: 0.35,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'turbine':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 0.92 * s,
+        mass: 9999,
+        restitution: 0.32,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'dump_truck':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 2.15 * s,
+        halfX: 1.32 * s,
+        halfZ: 2.75 * s,
+        mass: 9999,
+        restitution: 0.35,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'power_core':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 1.65 * s,
+        halfX: 2.15 * s,
+        halfZ: 1.95 * s,
+        mass: 9999,
+        restitution: 0.34,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'lamppost_1a':
+    case 'lamppost_1b':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 0.42 * s,
+        mass: 9999,
+        restitution: 0.3,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'hydrant':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 0.48 * s,
+        mass: 9999,
+        restitution: 0.32,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'bench':
+      return {
+        category: 'solid',
+        materialTag: 'wood',
+        radius: 1.05 * s,
+        halfX: 1.22 * s,
+        halfZ: 0.56 * s,
+        mass: 9999,
+        restitution: 0.25,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'river_rock':
+      return {
+        category: 'solid',
+        materialTag: 'concrete',
+        radius: 0.95 * s,
+        mass: 9999,
+        restitution: 0.25,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'tree_purple':
+    case 'tree_gold':
+      return {
+        category: 'solid',
+        materialTag: 'tree',
+        radius: 0.85 * s,
+        mass: 9999,
+        restitution: 0.26,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'shipping_container':
+      return {
+        category: 'solid',
+        materialTag: 'metal',
+        radius: 1.55 * s,
+        halfX: 1.62 * s,
+        halfZ: 3.64 * s,
+        mass: 9999,
+        restitution: 0.3,
+        destructible: false,
+        maxHp: 9999,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+
+    // 2. Pushable / Physics Props (exact REA shootImpulse from Ri.objectShootImpulseOverrides)
+    case 'wheelbarrow':
+      return {
+        category: 'pushable',
+        materialTag: 'metal',
+        radius: 0.85 * s,
+        mass: 2.2,
+        restitution: 0.48,
+        destructible: false,
+        maxHp: 100,
+        ramBreakSpeed: 999,
+        shootImpulse: 10,
+        canJiggleOnHit: true,
+      };
+    case 'traffic_cone':
+      return {
+        category: 'pushable',
+        materialTag: 'plastic',
+        radius: 0.48 * s,
+        mass: 0.8,
+        restitution: 0.58,
+        destructible: false,
+        maxHp: 80,
+        ramBreakSpeed: 999,
+        shootImpulse: 4,
+        canJiggleOnHit: true,
+      };
+    case 'recycle_bin':
+      return {
+        category: 'pushable',
+        materialTag: 'plastic',
+        radius: 0.64 * s,
+        mass: 1.4,
+        restitution: 0.5,
+        destructible: false,
+        maxHp: 80,
+        ramBreakSpeed: 999,
+        shootImpulse: 4,
+        canJiggleOnHit: true,
+      };
+    case 'barrel_1c':
+    case 'fuel_cell':
+    case 'circuit_module':
+      return {
+        category: 'pushable',
+        materialTag: 'metal',
+        radius: 0.62 * s,
+        mass: 1.6,
+        restitution: 0.45,
+        destructible: false,
+        maxHp: 90,
+        ramBreakSpeed: 999,
+        shootImpulse: 5,
+        canJiggleOnHit: true,
+      };
+    case 'pallet_1a':
+      return {
+        category: 'none',
+        materialTag: 'wood',
+        radius: 0,
+        mass: 0,
+        restitution: 0,
+        destructible: false,
+        maxHp: 100,
+        ramBreakSpeed: 999,
+        shootImpulse: 6,
+        canJiggleOnHit: false,
+      };
+    case 'barricade':
+      return {
+        category: 'pushable',
+        materialTag: 'wood',
+        radius: 0.95 * s,
+        mass: 2.6,
+        restitution: 0.42,
+        destructible: true,
+        maxHp: 28,
+        ramBreakSpeed: 9.2,
+        shootImpulse: 5,
+        canJiggleOnHit: true,
+      };
+    case 'crate_wood':
+      return {
+        category: 'pushable',
+        materialTag: 'wood',
+        radius: 0.82 * s,
+        mass: 1.8,
+        restitution: 0.4,
+        destructible: true,
+        maxHp: 22,
+        ramBreakSpeed: 9.5,
+        shootImpulse: 5,
+        canJiggleOnHit: true,
+      };
+    case 'crate_metal':
+      return {
+        category: 'pushable',
+        materialTag: 'metal',
+        radius: 0.82 * s,
+        mass: 2.6,
+        restitution: 0.42,
+        destructible: true,
+        maxHp: 35,
+        ramBreakSpeed: 12.0,
+        shootImpulse: 5,
+        canJiggleOnHit: true,
+      };
+
+    // 3. Breakable / Destructible Props
+    case 'concrete_fence':
+      return {
+        category: 'solid',
+        materialTag: 'concrete',
+        radius: 1.31 * s,
+        halfX: 1.31 * s,
+        halfZ: 0.40 * s,
+        mass: 9999,
+        restitution: 0.22,
+        destructible: true,
+        maxHp: 60,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'concrete_fence_1b':
+      return {
+        category: 'solid',
+        materialTag: 'concrete',
+        radius: 1.82 * s,
+        halfX: 1.82 * s,
+        halfZ: 0.56 * s,
+        mass: 9999,
+        restitution: 0.22,
+        destructible: true,
+        maxHp: 60,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    case 'explosive_barrel':
+      return {
+        category: 'breakable',
+        materialTag: 'metal',
+        radius: 0.78 * s,
+        mass: 2.5,
+        restitution: 0.35,
+        destructible: true,
+        maxHp: 18,
+        ramBreakSpeed: 6.5,
+        shootImpulse: 0,
+        canJiggleOnHit: true,
+      };
+    case 'flower_cluster':
+      return {
+        category: 'none',
+        materialTag: 'default',
+        radius: 0,
+        mass: 0,
+        restitution: 0,
+        destructible: false,
+        maxHp: 1,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+    default:
+      return {
+        category: 'solid',
+        materialTag: 'default',
+        radius: 1.0 * s,
+        mass: 9999,
+        restitution: 0.3,
+        destructible: false,
+        maxHp: 100,
+        ramBreakSpeed: 999,
+        shootImpulse: 0,
+        canJiggleOnHit: false,
+      };
+  }
+}
+
+export interface SolidCollisionResolution2D {
+  collided: boolean;
+  x: number;
+  z: number;
+  vx: number;
+  vz: number;
+  impactSpeed: number;
+  contactX: number;
+  contactZ: number;
+  normalX: number;
+  normalZ: number;
+}
+
+/**
+ * Resolves 2D circle-vs-circle solid collision with zero mesh penetration,
+ * tangential sliding along the surface, and velocity-proportional impulse bounce.
+ */
+export function resolveSolidCollision2D(
+  moverX: number,
+  moverZ: number,
+  moverVx: number,
+  moverVz: number,
+  moverRadius: number,
+  colliderX: number,
+  colliderZ: number,
+  colliderRadius: number,
+  restitution = 0.32,
+): SolidCollisionResolution2D {
+  const minDist = moverRadius + colliderRadius;
+  const dx = moverX - colliderX;
+  const dz = moverZ - colliderZ;
+  const distSq = dx * dx + dz * dz;
+
+  if (distSq >= minDist * minDist) {
+    return {
+      collided: false,
+      x: moverX,
+      z: moverZ,
+      vx: moverVx,
+      vz: moverVz,
+      impactSpeed: 0,
+      contactX: moverX,
+      contactZ: moverZ,
+      normalX: 0,
+      normalZ: 1,
+    };
+  }
+
+  const dist = Math.sqrt(distSq);
+  const nx = dist > 1e-5 ? dx / dist : 0;
+  const nz = dist > 1e-5 ? dz / dist : 1;
+
+  // Push mover completely outside the solid collider radius (never penetrate mesh)
+  const pushedX = colliderX + nx * (minDist + 0.002);
+  const pushedZ = colliderZ + nz * (minDist + 0.002);
+
+  // Decompose velocity into normal and tangential (sliding) components
+  const vDotN = moverVx * nx + moverVz * nz;
+  const tangentX = -nz;
+  const tangentZ = nx;
+  const vDotT = moverVx * tangentX + moverVz * tangentZ;
+
+  let nextVx = moverVx;
+  let nextVz = moverVz;
+  let impactSpeed = 0;
+
+  if (vDotN < 0) {
+    const approachingSpeed = -vDotN;
+    impactSpeed = approachingSpeed + Math.abs(vDotT) * 0.2;
+    // Reflect normal component with restitution bounce + keep smooth tangential sliding
+    const bouncedNormalVel = approachingSpeed * clamp(restitution, 0, 0.85);
+    const slideFriction = 0.92;
+    nextVx = tangentX * (vDotT * slideFriction) + nx * bouncedNormalVel;
+    nextVz = tangentZ * (vDotT * slideFriction) + nz * bouncedNormalVel;
+  } else {
+    impactSpeed = Math.abs(vDotT) * 0.25;
+  }
+
+  return {
+    collided: true,
+    x: pushedX,
+    z: pushedZ,
+    vx: nextVx,
+    vz: nextVz,
+    impactSpeed,
+    contactX: colliderX + nx * colliderRadius,
+    contactZ: colliderZ + nz * colliderRadius,
+    normalX: nx,
+    normalZ: nz,
+  };
+}
+
+/**
+ * Tests whether a 2D point (px, pz) lies inside (or within `margin` meters of) an Oriented Bounding Box (OBB).
+ */
+export function pointInObb2D(
+  px: number,
+  pz: number,
+  boxX: number,
+  boxZ: number,
+  halfX: number,
+  halfZ: number,
+  rotY = 0,
+  margin = 0,
+): boolean {
+  const dx = px - boxX;
+  const dz = pz - boxZ;
+  const cosY = Math.cos(rotY);
+  const sinY = Math.sin(rotY);
+  const lx = dx * cosY - dz * sinY;
+  const lz = dx * sinY + dz * cosY;
+  return Math.abs(lx) <= halfX + margin && Math.abs(lz) <= halfZ + margin;
+}
+
+/**
+ * Resolves 2D circle-vs-OBB (Oriented Bounding Box) solid collision with zero corner/wall penetration,
+ * exact flat-wall sliding, and rounded corner deflection for rectangular buildings, containers & vehicles.
+ */
+export function resolveSolidObbCollision2D(
+  moverX: number,
+  moverZ: number,
+  moverVx: number,
+  moverVz: number,
+  moverRadius: number,
+  boxX: number,
+  boxZ: number,
+  halfX: number,
+  halfZ: number,
+  rotY = 0,
+  restitution = 0.28,
+): SolidCollisionResolution2D {
+  const dx = moverX - boxX;
+  const dz = moverZ - boxZ;
+  const cosY = Math.cos(rotY);
+  const sinY = Math.sin(rotY);
+
+  // Transform mover center into box local space
+  const lx = dx * cosY - dz * sinY;
+  const lz = dx * sinY + dz * cosY;
+
+  // Closest point on local box [-halfX, +halfX] x [-halfZ, +halfZ]
+  let cx = clamp(lx, -halfX, halfX);
+  let cz = clamp(lz, -halfZ, halfZ);
+  const dlx = lx - cx;
+  const dlz = lz - cz;
+  const distSq = dlx * dlx + dlz * dlz;
+
+  if (distSq >= moverRadius * moverRadius) {
+    return {
+      collided: false,
+      x: moverX,
+      z: moverZ,
+      vx: moverVx,
+      vz: moverVz,
+      impactSpeed: 0,
+      contactX: moverX,
+      contactZ: moverZ,
+      normalX: 0,
+      normalZ: 1,
+    };
+  }
+
+  let nlx = 0;
+  let nlz = 1;
+  let pushedLx = lx;
+  let pushedLz = lz;
+
+  if (distSq > 1e-6) {
+    const dist = Math.sqrt(distSq);
+    nlx = dlx / dist;
+    nlz = dlz / dist;
+    pushedLx = cx + nlx * (moverRadius + 0.002);
+    pushedLz = cz + nlz * (moverRadius + 0.002);
+  } else {
+    // Mover center penetrated inside the box — push out along the shallowest face axis
+    const penX = halfX - Math.abs(lx);
+    const penZ = halfZ - Math.abs(lz);
+    if (penX < penZ) {
+      nlx = lx >= 0 ? 1 : -1;
+      nlz = 0;
+      cx = nlx * halfX;
+      cz = lz;
+      pushedLx = nlx * (halfX + moverRadius + 0.002);
+      pushedLz = lz;
+    } else {
+      nlx = 0;
+      nlz = lz >= 0 ? 1 : -1;
+      cx = lx;
+      cz = nlz * halfZ;
+      pushedLx = lx;
+      pushedLz = nlz * (halfZ + moverRadius + 0.002);
+    }
+  }
+
+  // Transform pushed position, contact point, and outward surface normal back to world space
+  const pushedX = boxX + pushedLx * cosY + pushedLz * sinY;
+  const pushedZ = boxZ - pushedLx * sinY + pushedLz * cosY;
+  const contactX = boxX + cx * cosY + cz * sinY;
+  const contactZ = boxZ - cx * sinY + cz * cosY;
+  const nx = nlx * cosY + nlz * sinY;
+  const nz = -nlx * sinY + nlz * cosY;
+
+  const vDotN = moverVx * nx + moverVz * nz;
+  const tangentX = -nz;
+  const tangentZ = nx;
+  const vDotT = moverVx * tangentX + moverVz * tangentZ;
+
+  let nextVx = moverVx;
+  let nextVz = moverVz;
+  let impactSpeed = 0;
+
+  if (vDotN < 0) {
+    const approachingSpeed = -vDotN;
+    impactSpeed = approachingSpeed + Math.abs(vDotT) * 0.2;
+    const bouncedNormalVel = approachingSpeed * clamp(restitution, 0, 0.85);
+    const slideFriction = 0.92;
+    nextVx = tangentX * (vDotT * slideFriction) + nx * bouncedNormalVel;
+    nextVz = tangentZ * (vDotT * slideFriction) + nz * bouncedNormalVel;
+  } else {
+    impactSpeed = Math.abs(vDotT) * 0.25;
+  }
+
+  return {
+    collided: true,
+    x: pushedX,
+    z: pushedZ,
+    vx: nextVx,
+    vz: nextVz,
+    impactSpeed,
+    contactX,
+    contactZ,
+    normalX: nx,
+    normalZ: nz,
+  };
+}
+
+export interface PushableImpulseResolution2D {
+  collided: boolean;
+  moverX: number;
+  moverZ: number;
+  moverVx: number;
+  moverVz: number;
+  propX: number;
+  propZ: number;
+  propVx: number;
+  propVz: number;
+  angularImpulse: number;
+  impactSpeed: number;
+  contactX: number;
+  contactZ: number;
+}
+
+/**
+ * Resolves momentum transfer when a moving unit (Lyo Tank or running Buddy)
+ * strikes a light pushable physics prop (wheelbarrow, barricade, cone, bin, crate).
+ */
+export function computePushableImpulse2D(
+  moverX: number,
+  moverZ: number,
+  moverVx: number,
+  moverVz: number,
+  moverRadius: number,
+  moverMass: number,
+  propX: number,
+  propZ: number,
+  propVx: number,
+  propVz: number,
+  propRadius: number,
+  propMass: number,
+  restitution = 0.48,
+): PushableImpulseResolution2D {
+  const minDist = moverRadius + propRadius;
+  const dx = propX - moverX;
+  const dz = propZ - moverZ;
+  const distSq = dx * dx + dz * dz;
+
+  if (distSq >= minDist * minDist) {
+    return {
+      collided: false,
+      moverX,
+      moverZ,
+      moverVx,
+      moverVz,
+      propX,
+      propZ,
+      propVx,
+      propVz,
+      angularImpulse: 0,
+      impactSpeed: 0,
+      contactX: propX,
+      contactZ: propZ,
+    };
+  }
+
+  const dist = Math.sqrt(distSq);
+  // Outward normal pointing from mover -> prop
+  const nx = dist > 1e-5 ? dx / dist : 0;
+  const nz = dist > 1e-5 ? dz / dist : 1;
+  const overlap = minDist - dist + 0.004;
+
+  const totalMass = Math.max(0.1, moverMass + propMass);
+  const moverShare = clamp(propMass / totalMass, 0.05, 0.5);
+  const propShare = 1 - moverShare;
+
+  const nextMoverX = moverX - nx * overlap * moverShare;
+  const nextMoverZ = moverZ - nz * overlap * moverShare;
+  const nextPropX = propX + nx * overlap * propShare;
+  const nextPropZ = propZ + nz * overlap * propShare;
+
+  const relVx = moverVx - propVx;
+  const relVz = moverVz - propVz;
+  const closingSpeed = relVx * nx + relVz * nz;
+
+  if (closingSpeed <= 0) {
+    const pushKick = Math.max(1.8, Math.hypot(moverVx, moverVz) * 0.65);
+    return {
+      collided: true,
+      moverX: nextMoverX,
+      moverZ: nextMoverZ,
+      moverVx,
+      moverVz,
+      propX: nextPropX,
+      propZ: nextPropZ,
+      propVx: propVx + nx * pushKick,
+      propVz: propVz + nz * pushKick,
+      angularImpulse: pushKick * 0.6,
+      impactSpeed: pushKick,
+      contactX: moverX + nx * moverRadius,
+      contactZ: moverZ + nz * moverRadius,
+    };
+  }
+
+  const e = clamp(restitution, 0.1, 0.9);
+  const impulseMag = ((1 + e) * closingSpeed) / (1 / Math.max(0.1, moverMass) + 1 / Math.max(0.1, propMass));
+
+  // Add a lively knockback boost so light props visibly fly/tumble when hit
+  const knockBoost = moverMass >= 8 ? 1.45 : 1.2;
+  const nextPropVx = propVx + (impulseMag / Math.max(0.1, propMass)) * nx * knockBoost;
+  const nextPropVz = propVz + (impulseMag / Math.max(0.1, propMass)) * nz * knockBoost;
+
+  const nextMoverVx = moverVx - (impulseMag / Math.max(0.1, moverMass)) * nx * 0.45;
+  const nextMoverVz = moverVz - (impulseMag / Math.max(0.1, moverMass)) * nz * 0.45;
+
+  // Compute off-center torque for rotational spin on impact
+  const tangentX = -nz;
+  const tangentZ = nx;
+  const tangentialVel = relVx * tangentX + relVz * tangentZ;
+  const angularImpulse = clamp(tangentialVel * 0.55 + closingSpeed * 0.45, -14, 14);
+
+  return {
+    collided: true,
+    moverX: nextMoverX,
+    moverZ: nextMoverZ,
+    moverVx: nextMoverVx,
+    moverVz: nextMoverVz,
+    propX: nextPropX,
+    propZ: nextPropZ,
+    propVx: nextPropVx,
+    propVz: nextPropVz,
+    angularImpulse,
+    impactSpeed: closingSpeed,
+    contactX: moverX + nx * moverRadius,
+    contactZ: moverZ + nz * moverRadius,
+  };
+}
+
+/**
+ * Checks whether a breakable prop (wooden crate, barricade, concrete fence, explosive barrel)
+ * should shatter into 3D debris chunks upon high-speed tank ramming or weapon damage.
+ */
+export function shouldShatterBreakableProp(
+  kind: string,
+  impactSpeed: number,
+  isVehicleRam: boolean,
+  remainingHp: number,
+): boolean {
+  if (remainingHp <= 0) return true;
+  const spec = getPropCollisionSpec(kind, 1.0);
+  if (!spec.destructible) return false;
+  if (isVehicleRam && impactSpeed >= spec.ramBreakSpeed) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Enforces an 80-120ms per-object cooldown during continuous collision contact
+ * so impact audio and spark/dust particles never spam or clip.
+ */
+export function canTriggerCollisionCooldown(
+  lastTriggerTimeSec: number | undefined,
+  nowSec: number,
+  cooldownSec = 0.1,
+): boolean {
+  if (lastTriggerTimeSec === undefined) return true;
+  return nowSec - lastTriggerTimeSec >= cooldownSec;
+}
+
+/**
+ * Determines whether a physical collision should play impact audio.
+ * - On-foot characters (`isVehicle === false`) NEVER play impact sounds when colliding with hard, large,
+ *   immovable objects (`isSmallPushable === false`: static buildings, fences, containers, trees, solid props, vehicles, or trams).
+ * - On-foot characters ONLY play collision sounds when pushing/sliding small movable objects (`isSmallPushable === true`,
+ *   such as pushable props like cones/bins/wheelbarrows/barrels/barricades or grounded crates).
+ * - Driven vehicles (`isVehicle === true`) play impact sounds on both solid structures and pushable props.
+ */
+export function shouldPlayMoverCollisionSound(
+  isVehicle: boolean,
+  isSmallPushable: boolean,
+  isPlayerControlled: boolean,
+  impactSpeed: number,
+  minImpactSpeed = 0.75,
+): boolean {
+  if (!isPlayerControlled) return false;
+  if (impactSpeed <= minImpactSpeed) return false;
+  if (!isVehicle && !isSmallPushable) return false;
+  return true;
+}
+
+/**
+ * Computes pitch playbackRate (0.90 - 1.15) and normalized volume (0.18 - 1.0)
+ * proportional to physical collision speed.
+ */
+export function computeCollisionAudioParams(
+  impactSpeed: number,
+  jitterSeed = 0.5,
+): { volume: number; playbackRate: number } {
+  const speedRatio = clamp((impactSpeed - 0.5) / 14.0, 0, 1);
+  const volume = clamp(0.22 + speedRatio * 0.78, 0.2, 1.0);
+  const jitter = (clamp(jitterSeed, 0, 1) - 0.5) * 0.08;
+  const playbackRate = clamp(0.9 + speedRatio * 0.21 + jitter, 0.9, 1.15);
+  return { volume, playbackRate };
+}
+
+// ============================================================================
+// LYO 5-LAYER CEL-SHADED EXPLOSION VFX & MULTI-STAGE DETONATION MATH
+// ============================================================================
+
+export type LyoExplosionType = 'cannon' | 'barrel' | 'crate' | 'vehicle' | 'hq';
+
+export interface LyoFireballVisualState {
+  colorHex: string;
+  radiusScale: number;
+  opacity: number;
+}
+
+function lerpChannel(a: number, b: number, t: number): number {
+  return Math.round(a + (b - a) * clamp(t, 0, 1));
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const toHex = (n: number) => clamp(n, 0, 255).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+/**
+ * Evaluates Layer (a) Core Fireball & Flash:
+ * - Rapidly expands in the first 0.15s (or first 35% of life)
+ * - Smoothly transitions color from incandescent white-yellow (#fff7c2)
+ *   -> bright orange (#ff7b00) -> deep crimson red (#d92b2b).
+ */
+export function evaluateLyoFireballState(
+  elapsedSec: number,
+  maxLifeSec = 0.42,
+  baseScale = 1.0,
+): LyoFireballVisualState {
+  const progress = clamp(elapsedSec / Math.max(0.05, maxLifeSec), 0, 1);
+  // Rapid expansion during the first 0.15s
+  const expandT = clamp(elapsedSec / 0.15, 0, 1);
+  const easeOut = 1 - Math.pow(1 - expandT, 3);
+  const shrinkTail = progress > 0.68 ? 1 - ((progress - 0.68) / 0.32) * 0.45 : 1.0;
+  const radiusScale = Math.max(0.05, baseScale * (0.28 + easeOut * 1.42) * shrinkTail);
+
+  // Color ramp: #fff7c2 (255, 247, 194) -> #ff7b00 (255, 123, 0) -> #d92b2b (217, 43, 43)
+  let r = 255;
+  let g = 247;
+  let b = 194;
+  if (progress < 0.42) {
+    const t = progress / 0.42;
+    r = lerpChannel(255, 255, t);
+    g = lerpChannel(247, 123, t);
+    b = lerpChannel(194, 0, t);
+  } else {
+    const t = (progress - 0.42) / 0.58;
+    r = lerpChannel(255, 217, t);
+    g = lerpChannel(123, 43, t);
+    b = lerpChannel(0, 43, t);
+  }
+
+  const opacity =
+    progress >= 1 ? 0 : progress < 0.55 ? 1.0 : clamp(1 - (progress - 0.55) / 0.45, 0, 1);
+  return {
+    colorHex: rgbToHex(r, g, b),
+    radiusScale,
+    opacity,
+  };
+}
+
+export interface LyoSmokePuffVisualState {
+  colorHex: string;
+  scaleMultiplier: number;
+  opacity: number;
+}
+
+/**
+ * Evaluates Layer (b) Billowing Toon Smoke Puffs:
+ * - Expands as it billows upward
+ * - Transitions color from fiery orange (#ff7b00) -> warm charcoal (#635652) -> dark slate gray (#3a3f4d)
+ * - Fades/dissolves cleanly in the final 30% of its lifetime.
+ */
+export function evaluateLyoSmokePuffState(progress01: number): LyoSmokePuffVisualState {
+  const p = clamp(progress01, 0, 1);
+  let r = 255;
+  let g = 123;
+  let b = 0;
+  if (p < 0.28) {
+    const t = p / 0.28;
+    // #ff7b00 (255,123,0) -> #5e5558 (94,85,88)
+    r = lerpChannel(255, 94, t);
+    g = lerpChannel(123, 85, t);
+    b = lerpChannel(0, 88, t);
+  } else {
+    const t = (p - 0.28) / 0.72;
+    // #5e5558 (94,85,88) -> #3a3f4d (58,63,77)
+    r = lerpChannel(94, 58, t);
+    g = lerpChannel(85, 63, t);
+    b = lerpChannel(88, 77, t);
+  }
+
+  const grow = p < 0.72 ? 0.45 + (p / 0.72) * 1.15 : 1.6 - ((p - 0.72) / 0.28) * 1.25;
+  const opacity = p >= 1 ? 0 : p < 0.65 ? 0.96 : clamp(0.96 * (1 - (p - 0.65) / 0.35), 0, 1);
+  return {
+    colorHex: rgbToHex(r, g, b),
+    scaleMultiplier: Math.max(0.05, grow),
+    opacity,
+  };
+}
+
+/**
+ * Generates a deterministic schedule of multi-stage sequential explosions
+ * when a vehicle (Lyo Tank / Lyo Plane) or Base HQ reaches 0 HP.
+ */
+export function computeMultiStageExplosionSchedule(
+  stages = 4,
+  spreadRadius = 2.6,
+): Array<{ delaySec: number; offsetX: number; offsetY: number; offsetZ: number; scale: number }> {
+  const count = clamp(Math.round(stages), 2, 8);
+  const result: Array<{ delaySec: number; offsetX: number; offsetY: number; offsetZ: number; scale: number }> = [];
+  for (let i = 0; i < count; i++) {
+    if (i === 0) {
+      result.push({ delaySec: 0, offsetX: 0, offsetY: 0.4, offsetZ: 0, scale: 1.15 });
+    } else if (i === count - 1) {
+      // Final climax detonation
+      result.push({
+        delaySec: i * 0.16,
+        offsetX: 0,
+        offsetY: 0.75,
+        offsetZ: 0,
+        scale: 1.55,
+      });
+    } else {
+      const angle = (i / (count - 1)) * Math.PI * 2 + 0.55;
+      const r = spreadRadius * (0.55 + (i % 2) * 0.35);
+      result.push({
+        delaySec: i * 0.15,
+        offsetX: Math.cos(angle) * r,
+        offsetY: 0.35 + (i % 2) * 0.4,
+        offsetZ: Math.sin(angle) * r,
+        scale: 0.92 + (i % 2) * 0.25,
+      });
+    }
+  }
+  return result;
+}
+
+// ============================================================================
+// DRIVABLE DUMP TRUCK: CONCRETE PIPE REMOVAL, 4-CRATE CARGO & HYDRAULIC LIFT
+// ============================================================================
+
+export const DUMP_TRUCK_MAX_CRATES = 4;
+export const DUMP_TRUCK_HYDRAULIC_CYCLE_SEC = 1.45;
+export const DUMP_TRUCK_MAX_TILT_RAD = 0.76; // ~43.5 degrees rear-hinged hydraulic dump angle
+
+export type DumpTruckIslandRole =
+  | 'pipe_remove'
+  | 'vessel'
+  | 'tailgate'
+  | 'wheel_fl'
+  | 'wheel_fr'
+  | 'wheel_rl'
+  | 'wheel_rr'
+  | 'chassis';
+
+/**
+ * Classifies connected triangle islands in DumpTruck.REF (dump-truck.glb):
+ * - 'pipe_remove': The 3 cylindrical concrete pipes sitting inside the cargo bed (tris=280, Z[1.01..3.30])
+ * - 'tailgate': Rear swinging tailgate door of the dump vessel (Z <= 0.25, Y >= -0.12)
+ * - 'vessel': Black rear-hinged cargo dump vessel body & side ribs (minY >= -1.05, maxZ <= 4.30)
+ * - 'wheel_fl' / 'wheel_fr' / 'wheel_rl' / 'wheel_rr': The 4 wheels + lug nuts so they spin while driving
+ * - 'chassis': Cab, frame rails, fenders, exhaust stack, bumper, lights, and mirrors
+ */
+export function classifyDumpTruckMeshIsland(
+  triCount: number,
+  minX: number,
+  maxX: number,
+  minY: number,
+  maxY: number,
+  minZ: number,
+  maxZ: number,
+): DumpTruckIslandRole {
+  // 1. Concrete pipes inside the black vessel (3 islands of 280 triangles each inside X[-0.75..0.75], Z[0.95..3.40])
+  if (
+    triCount >= 240 &&
+    triCount <= 320 &&
+    minX > -0.82 &&
+    maxX < 0.82 &&
+    minZ > 0.85 &&
+    maxZ < 3.55 &&
+    maxY > 0.2
+  ) {
+    return 'pipe_remove';
+  }
+
+  // 2. 4 Main Wheel Tires (tris=1004, Y[-2.04..-0.82]) + Wheel Lug Nuts (tris=20, Y[-1.70..-1.15], |X| > 1.20)
+  const isMainWheel = triCount >= 900 && minY < -1.8 && maxY < -0.7;
+  const isWheelLugNut =
+    triCount === 20 && minY >= -1.72 && maxY <= -1.12 && (minX > 1.18 || maxX < -1.18);
+  if (isMainWheel || isWheelLugNut) {
+    const centerX = (minX + maxX) * 0.5;
+    const centerZ = (minZ + maxZ) * 0.5;
+    if (centerZ > 3.0) {
+      return centerX >= 0 ? 'wheel_fl' : 'wheel_fr';
+    }
+    return centerX >= 0 ? 'wheel_rl' : 'wheel_rr';
+  }
+
+  // 3. Cab-mounted vertical exhaust stack & heat shield on right behind cab (stays on chassis)
+  if (minZ > 3.5 && maxX < -0.6) {
+    return 'chassis';
+  }
+
+  // 4. Rear Tailgate door & latches at Z[-0.10..0.25], Y >= -0.12
+  if (minY >= -0.12 && maxZ <= 0.25 && minX >= -1.18 && maxX <= 1.18) {
+    return 'tailgate';
+  }
+
+  // 5. Main Hydraulic Dump Vessel (Bak Truk) + Side Wall Ribs
+  if (minY >= -1.05 && maxZ <= 4.3) {
+    return 'vessel';
+  }
+
+  return 'chassis';
+}
+
+/**
+ * Checks if the Dump Truck can accept another crate into its cargo vessel (max 4 crates).
+ * Crates are NEVER auto-filled when driving the truck (`isCharacterManualLoad = false`);
+ * the character must load crates into the truck one-by-one (`isCharacterManualLoad = true`).
+ */
+export function canLoadCrateIntoDumpTruck(
+  storedCratesCount: number,
+  isDumping: boolean,
+  isCharacterManualLoad = true,
+): boolean {
+  if (!isCharacterManualLoad) return false;
+  if (isDumping) return false;
+  return storedCratesCount >= 0 && storedCratesCount < DUMP_TRUCK_MAX_CRATES;
+}
+
+export interface DumpTruckHydraulicState {
+  phase: 'idle' | 'lifting' | 'dumping' | 'lowering';
+  liftRatio: number;
+  vesselTiltRad: number;
+  tailgateOpenRad: number;
+  pistonExtension: number;
+  crateSlideOffsetZ: number;
+  shouldReleaseCrates: boolean;
+  finished: boolean;
+}
+
+/**
+ * Evaluates the Dump Truck hydraulic vessel lifting & unloading animation cycle:
+ * - 0.00..0.40: 'lifting' (hydraulic piston extends, vessel tilts 0° -> 43.5°, tailgate swings open)
+ * - 0.40..0.62: 'dumping' (holds peak tilt with subtle hydraulic shudder; triggers crate release at t >= 0.44)
+ * - 0.62..1.00: 'lowering' (hydraulic cylinder retracts smoothly back to 0°)
+ */
+export function evaluateDumpTruckHydraulicCycle(
+  elapsedSec: number,
+  cycleDurationSec = DUMP_TRUCK_HYDRAULIC_CYCLE_SEC,
+): DumpTruckHydraulicState {
+  if (elapsedSec <= 0) {
+    return {
+      phase: 'idle',
+      liftRatio: 0,
+      vesselTiltRad: 0,
+      tailgateOpenRad: 0,
+      pistonExtension: 0,
+      crateSlideOffsetZ: 0,
+      shouldReleaseCrates: false,
+      finished: false,
+    };
+  }
+
+  const dur = Math.max(0.4, cycleDurationSec);
+  const p = clamp(elapsedSec / dur, 0, 1);
+
+  if (p >= 1) {
+    return {
+      phase: 'idle',
+      liftRatio: 0,
+      vesselTiltRad: 0,
+      tailgateOpenRad: 0,
+      pistonExtension: 0,
+      crateSlideOffsetZ: 0,
+      shouldReleaseCrates: true,
+      finished: true,
+    };
+  }
+
+  let phase: DumpTruckHydraulicState['phase'] = 'lifting';
+  let liftRatio = 0;
+
+  if (p < 0.4) {
+    phase = 'lifting';
+    const u = p / 0.4;
+    // Smoothstep ease-in-out hydraulic lift
+    liftRatio = u * u * (3 - 2 * u);
+  } else if (p < 0.62) {
+    phase = 'dumping';
+    const dumpU = (p - 0.4) / 0.22;
+    // Peak hydraulic hold with subtle mechanical shake at top of stroke
+    liftRatio = clamp(1.0 + Math.sin(dumpU * Math.PI * 3) * 0.025, 0, 1.03);
+  } else {
+    phase = 'lowering';
+    const downU = (p - 0.62) / 0.38;
+    const easeDown = downU * downU * (3 - 2 * downU);
+    liftRatio = Math.max(0, 1 - easeDown);
+  }
+
+  const vesselTiltRad = liftRatio * DUMP_TRUCK_MAX_TILT_RAD;
+  const tailgateOpenRad =
+    liftRatio > 0.15 ? clamp((liftRatio - 0.15) / 0.85, 0, 1) * 0.92 : 0;
+  const pistonExtension = clamp(liftRatio, 0, 1.03) * 1.85;
+  const crateSlideOffsetZ =
+    p < 0.18 ? 0 : -clamp((p - 0.18) / 0.32, 0, 1) * 2.15;
+  const shouldReleaseCrates = p >= 0.44;
+
+  return {
+    phase,
+    liftRatio: clamp(liftRatio, 0, 1),
+    vesselTiltRad,
+    tailgateOpenRad,
+    pistonExtension,
+    crateSlideOffsetZ,
+    shouldReleaseCrates,
+    finished: false,
+  };
+}
+
+export interface DumpTruckPhysicsState {
+  forwardSpeed: number;
+  steerAngle: number;
+  hullYaw: number;
+}
+
+export interface DumpTruckPhysicsInput {
+  throttle: number;
+  steer: number;
+  boost: boolean;
+}
+
+export interface DumpTruckPhysicsStepResult {
+  forwardSpeed: number;
+  steerAngle: number;
+  hullYaw: number;
+  vx: number;
+  vz: number;
+  yawRate: number;
+  bodyPitchRad: number;
+  bodyRollRad: number;
+}
+
+/**
+ * Steps authentic wheeled Dump Truck physics (Ackermann / kinematic bicycle front-wheel steering):
+ * - Unlike a tracked tank, the truck CANNOT pivot-spin in place when stationary (yawRate = 0 when |forwardSpeed| < 0.12).
+ * - Front tires turn smoothly up to ±0.52 rad (~30°) when steering and self-center when released.
+ * - Longitudinal motion features diesel torque acceleration, smooth rubber-tire coasting inertia,
+ *   strong air-brakes when pressing opposite throttle, and natural reverse steering kinematics.
+ */
+export function stepDumpTruckWheeledPhysics(
+  state: DumpTruckPhysicsState,
+  input: DumpTruckPhysicsInput,
+  dt: number,
+): DumpTruckPhysicsStepResult {
+  const safeDt = clamp(dt, 0, 0.1);
+  const throttle = clamp(input.throttle, -1, 1);
+  const steer = clamp(input.steer, -1, 1);
+
+  // 1. Front-wheel steering knuckle angle (narrows slightly at top speed for stability)
+  const MAX_STEER_RAD = 0.52;
+  const speedRatio = clamp(Math.abs(state.forwardSpeed) / 18.0, 0, 1);
+  const maxSteerAtSpeed = MAX_STEER_RAD * (1.0 - 0.24 * speedRatio);
+  const targetSteer = steer * maxSteerAtSpeed;
+
+  let nextSteerAngle = state.steerAngle;
+  if (Math.abs(steer) > 0.01) {
+    const steerRate = 3.8;
+    const diff = targetSteer - nextSteerAngle;
+    const maxStep = steerRate * safeDt;
+    nextSteerAngle += clamp(diff, -maxStep, maxStep);
+  } else {
+    // Self-centering caster return (faster when rolling)
+    const returnRate = 4.4 + Math.abs(state.forwardSpeed) * 0.25;
+    const maxStep = returnRate * safeDt;
+    if (Math.abs(nextSteerAngle) <= maxStep) {
+      nextSteerAngle = 0;
+    } else {
+      nextSteerAngle -= Math.sign(nextSteerAngle) * maxStep;
+    }
+  }
+  nextSteerAngle = clamp(nextSteerAngle, -MAX_STEER_RAD, MAX_STEER_RAD);
+
+  // 2. Longitudinal acceleration, coasting rolling resistance, air-braking & reverse gear
+  const maxForwardSpeed = input.boost ? 18.5 : 14.2;
+  const maxReverseSpeed = -7.6;
+  let nextForwardSpeed = state.forwardSpeed;
+  let accelLon = 0;
+
+  if (throttle > 0.01) {
+    if (nextForwardSpeed < -0.15) {
+      // Braking while rolling backward
+      accelLon = 28.0;
+    } else {
+      // Forward diesel torque acceleration
+      accelLon = (input.boost ? 21.5 : 15.8) * throttle;
+    }
+    nextForwardSpeed = Math.min(maxForwardSpeed, nextForwardSpeed + accelLon * safeDt);
+  } else if (throttle < -0.01) {
+    if (nextForwardSpeed > 0.15) {
+      // Air-braking while rolling forward
+      accelLon = -28.0;
+    } else {
+      // Reverse gear acceleration
+      accelLon = 11.8 * throttle;
+    }
+    nextForwardSpeed = Math.max(maxReverseSpeed, nextForwardSpeed + accelLon * safeDt);
+  } else {
+    // Smooth rubber-tire coasting (rolling resistance)
+    const coastDecel = 5.2;
+    const drop = coastDecel * safeDt;
+    if (Math.abs(nextForwardSpeed) <= drop) {
+      accelLon = -nextForwardSpeed / Math.max(0.001, safeDt);
+      nextForwardSpeed = 0;
+    } else {
+      accelLon = -Math.sign(nextForwardSpeed) * coastDecel;
+      nextForwardSpeed -= Math.sign(nextForwardSpeed) * drop;
+    }
+  }
+
+  // If speed exceeds normal cap after releasing boost, bleed back gently
+  if (!input.boost && nextForwardSpeed > maxForwardSpeed) {
+    nextForwardSpeed = Math.max(maxForwardSpeed, nextForwardSpeed - 9.5 * safeDt);
+  }
+
+  // 3. Ackermann / Kinematic Bicycle yaw rate: strictly zero when stationary!
+  const WHEELBASE_METERS = 3.15;
+  const isRolling = Math.abs(nextForwardSpeed) >= 0.12;
+  const yawRate = isRolling
+    ? (nextForwardSpeed / WHEELBASE_METERS) * Math.tan(nextSteerAngle)
+    : 0;
+
+  const nextHullYaw = state.hullYaw + yawRate * safeDt;
+  const vx = Math.cos(nextHullYaw) * nextForwardSpeed;
+  const vz = -Math.sin(nextHullYaw) * nextForwardSpeed;
+
+  // 4. Suspension squat/nose-dive pitch & cornering body roll
+  const bodyPitchRad = clamp(-accelLon * 0.0022, -0.045, 0.055);
+  const bodyRollRad = clamp(yawRate * nextForwardSpeed * 0.0045, -0.065, 0.065);
+
+  return {
+    forwardSpeed: nextForwardSpeed,
+    steerAngle: nextSteerAngle,
+    hullYaw: nextHullYaw,
+    vx,
+    vz,
+    yawRate,
+    bodyPitchRad,
+    bodyRollRad,
+  };
+}
+
+/**
+ * Pure kinematics evaluator for the Military Base Perimeter Checkpoint Boom Barrier.
+ * Opens upward to 90° (Math.PI / 2) when any friendly/active unit (Player, Buddy, Dump Truck, or Tank)
+ * is within `triggerRadiusMeters` (default 8.0m) of the gate center, and lowers smoothly to 0° when clear.
+ */
+export function stepMilitaryBaseBoomBarrier(
+  currentAngleRad: number,
+  minDistanceToGateMeters: number,
+  dt: number,
+  triggerRadiusMeters = 8.0,
+  maxOpenAngleRad = Math.PI * 0.5,
+): { angleRad: number; isOpen: boolean } {
+  const safeDt = Math.max(0, Math.min(0.1, dt));
+  const isOpen = minDistanceToGateMeters < triggerRadiusMeters;
+  const targetAngle = isOpen ? maxOpenAngleRad : 0;
+  const speedRate = isOpen ? 5.8 : 3.6;
+  const blend = 1 - Math.exp(-speedRate * safeDt);
+  const nextAngle = Math.max(
+    0,
+    Math.min(maxOpenAngleRad, currentAngleRad + (targetAngle - currentAngleRad) * blend),
+  );
+  return {
+    angleRad: Math.abs(targetAngle - nextAngle) < 0.002 ? targetAngle : nextAngle,
+    isOpen,
+  };
+}
+
+// ============================================================================
+// TEAM BUDDIES CHARACTER JUMP PHYSICS, UNARMED PUNCH COMBO & FRONT KICK
+// ============================================================================
+
+export interface BuddyJumpPhysicsState {
+  jumpOffset: number;
+  vy: number;
+  isGrounded: boolean;
+  justJumped: boolean;
+  justLanded: boolean;
+}
+
+/**
+ * Pure vertical jump & gravity kinematics for Team Buddies on-foot characters:
+ * - Launches upward from ground (`isGrounded === true`) when `jumpRequested` is true.
+ * - Scales initial vertical impulse by `jumpMultiplier` (e.g. Ninja 1.4x, Tankie 0.85x)
+ *   and applies a slight 0.86x load factor when carrying a crate overhead.
+ * - Integrates gravity (`26.0 m/s²`) and detects ground touchdown (`justLanded`).
+ */
+export function stepBuddyJumpPhysics(
+  jumpOffset: number,
+  vy: number,
+  isGrounded: boolean,
+  jumpRequested: boolean,
+  jumpMultiplier = 1.0,
+  carryingCrate = false,
+  dt: number,
+): BuddyJumpPhysicsState {
+  const safeDt = clamp(dt, 0, 0.1);
+  const GRAVITY = 26.0;
+  const BASE_JUMP_VY = 9.6;
+
+  let nextOffset = Math.max(0, jumpOffset);
+  let nextVy = vy;
+  let nextGrounded = isGrounded;
+  let justJumped = false;
+  let justLanded = false;
+
+  if (jumpRequested && nextGrounded && nextOffset <= 0.02) {
+    const crateFactor = carryingCrate ? 0.86 : 1.0;
+    nextVy = BASE_JUMP_VY * clamp(jumpMultiplier, 0.5, 2.0) * crateFactor;
+    nextGrounded = false;
+    justJumped = true;
+  }
+
+  if (!nextGrounded || nextOffset > 0 || nextVy > 0) {
+    nextOffset += nextVy * safeDt;
+    nextVy -= GRAVITY * safeDt;
+    if (nextOffset <= 0) {
+      nextOffset = 0;
+      nextVy = 0;
+      if (!nextGrounded) {
+        justLanded = true;
+      }
+      nextGrounded = true;
+    } else {
+      nextGrounded = false;
+    }
+  }
+
+  return {
+    jumpOffset: nextOffset,
+    vy: nextVy,
+    isGrounded: nextGrounded,
+    justJumped,
+    justLanded,
+  };
+}
+
+export interface BuddyMeleeStrikeResult {
+  hit: boolean;
+  distance: number;
+  forwardDot: number;
+  damage: number;
+  knockbackVx: number;
+  knockbackVz: number;
+  upwardHopVy: number;
+}
+
+/**
+ * Evaluates a Team Buddies Unarmed Fist Punch (`'punch'`) or Heavy Boot Kick (`'kick'`)
+ * from `(attackerX, attackerZ)` facing `attackerYaw` against a target at `(targetX, targetZ)`:
+ * - `'punch'`: fast alternating left/right jab-hook (`reach = 2.55m`, forward cone `dot >= 0.15`,
+ *   `damage = 8`, `knockbackSpeed = 7.8 m/s`).
+ * - `'kick'`: heavy front boot punt (`reach = 2.95m`, wider cone `dot >= -0.05` so crates right at
+ *   the character's feet are always punted cleanly, `damage = 14`, `knockbackSpeed = 16.5 m/s`,
+ *   `upwardHopVy = 5.2 m/s`).
+ */
+export function evaluateBuddyMeleeStrike(
+  attackerX: number,
+  attackerZ: number,
+  attackerYaw: number,
+  targetX: number,
+  targetZ: number,
+  targetRadius = 0.65,
+  kind: 'punch' | 'kick' = 'punch',
+): BuddyMeleeStrikeResult {
+  const dx = targetX - attackerX;
+  const dz = targetZ - attackerZ;
+  const dist = Math.hypot(dx, dz);
+
+  const fwdX = Math.cos(attackerYaw);
+  const fwdZ = -Math.sin(attackerYaw);
+  const forwardDot = dist > 0.001 ? (dx * fwdX + dz * fwdZ) / dist : 1.0;
+
+  const baseReach = kind === 'kick' ? 2.45 : 2.05;
+  const maxReach = baseReach + Math.max(0, targetRadius);
+  const minDot = kind === 'kick' ? -0.05 : 0.15;
+
+  // If the target is almost directly overlapping the character's feet (< 0.95m), always allow hit
+  const inCone = dist < 0.95 || forwardDot >= minDot;
+  if (dist > maxReach || !inCone) {
+    return {
+      hit: false,
+      distance: dist,
+      forwardDot,
+      damage: 0,
+      knockbackVx: 0,
+      knockbackVz: 0,
+      upwardHopVy: 0,
+    };
+  }
+
+  // Blend knockback direction mostly along character's facing direction (Team Buddies straight punt!)
+  // with slight radial outward push so kicked crates fly cleanly where the character is facing.
+  const radialX = dist > 0.05 ? dx / dist : fwdX;
+  const radialZ = dist > 0.05 ? dz / dist : fwdZ;
+  const blendFwd = kind === 'kick' ? 0.78 : 0.65;
+  const rawDirX = fwdX * blendFwd + radialX * (1 - blendFwd);
+  const rawDirZ = fwdZ * blendFwd + radialZ * (1 - blendFwd);
+  const dirLen = Math.max(0.001, Math.hypot(rawDirX, rawDirZ));
+  const dirX = rawDirX / dirLen;
+  const dirZ = rawDirZ / dirLen;
+
+  const knockbackSpeed = kind === 'kick' ? 16.5 : 7.8;
+  const damage = kind === 'kick' ? 14 : 8;
+  const upwardHopVy = kind === 'kick' ? 5.2 : 1.8;
+
+  return {
+    hit: true,
+    distance: dist,
+    forwardDot,
+    damage,
+    knockbackVx: dirX * knockbackSpeed,
+    knockbackVz: dirZ * knockbackSpeed,
+    upwardHopVy,
+  };
+}
+
+// ============================================================================
+// TEAM BUDDIES 4V4 ONLINE MATCHMAKING, PERSONAL SQUAD SWAP & SMART BUDDY AI
+// ============================================================================
+
+export const COMMANDERS_PER_TEAM = 4;
+export const MAX_CHARACTERS_PER_COMMANDER = 4;
+export const MIN_HUMANS_PER_TEAM_TO_START = 2;
+
+export type CommanderControllerType = 'human' | 'ai';
+
+export interface CommanderSlotState {
+  commanderId: number; // 0..3 (P1..P4)
+  team: 'blue' | 'red';
+  controller: CommanderControllerType;
+  callsign: string;
+  padIndex: number; // 0..3 (Pad P1..P4)
+  helipadIndex: number; // 0..3 (Helipad P1..P4)
+  parkingBayIndex: number; // 0..3 (Bay P1..P4)
+  joinedAtSec: number;
+}
+
+export interface Matchmaking4v4State {
+  blueCommanders: CommanderSlotState[];
+  redCommanders: CommanderSlotState[];
+  minHumansPerTeamToStart: number;
+  matchStarted: boolean;
+}
+
+/**
+ * Checks whether a Commander (Player P1..P4) is allowed to build another character on their Stacking Pad.
+ * Strictly capped at `MAX_CHARACTERS_PER_COMMANDER` (4 characters per player).
+ */
+export function canCommanderBuildCharacter(
+  ownedAliveCount: number,
+  maxPerCommander = MAX_CHARACTERS_PER_COMMANDER,
+): boolean {
+  return ownedAliveCount < maxPerCommander;
+}
+
+/**
+ * Returns the next alive Buddy owned strictly by `(team, ownerCommanderId)` when the player presses `[Tab]`.
+ * Players can ONLY swap among characters built/owned by themselves (`b.ownerCommanderId === ownerCommanderId`),
+ * never hijacking characters owned by teammates (`P2..P4`).
+ */
+export function getNextOwnedBuddyForSwap<
+  T extends { id: string; team: 'blue' | 'red'; ownerCommanderId: number; hp: number },
+>(
+  buddies: ReadonlyArray<T>,
+  team: 'blue' | 'red',
+  ownerCommanderId: number,
+  currentBuddyId: string,
+): T | null {
+  const owned = buddies.filter(
+    (b) => b.team === team && b.ownerCommanderId === ownerCommanderId && b.hp > 0,
+  );
+  if (owned.length === 0) return null;
+  const currentIdx = owned.findIndex((b) => b.id === currentBuddyId);
+  if (currentIdx === -1) return owned[0];
+  return owned[(currentIdx + 1) % owned.length];
+}
+
+/**
+ * Evaluates whether a 4v4 Online Matchmaking lobby has enough human players to start immediately:
+ * - Minimum 2 human players per team (`4 human players total` across both teams).
+ * - Remaining 2 slots per team are controlled by AI Commanders until human players hot-join.
+ */
+export function canStartMatchmaking4v4(
+  blueHumanCount: number,
+  redHumanCount: number,
+  minPerTeam = MIN_HUMANS_PER_TEAM_TO_START,
+): boolean {
+  return (
+    blueHumanCount >= minPerTeam &&
+    redHumanCount >= minPerTeam &&
+    blueHumanCount + redHumanCount >= minPerTeam * 2
+  );
+}
+
+/**
+ * Creates a 4v4 Online Matchmaking state with 4 Commander slots per team (`P1..P4`).
+ * By default starts in fast-matchmaking mode with 2 Human + 2 AI per team (`4 Human + 4 AI = 8 Commanders`).
+ */
+export function createMatchmaking4v4State(
+  initialBlueHumans = MIN_HUMANS_PER_TEAM_TO_START,
+  initialRedHumans = MIN_HUMANS_PER_TEAM_TO_START,
+): Matchmaking4v4State {
+  const clampedBlue = clamp(Math.floor(initialBlueHumans), 0, COMMANDERS_PER_TEAM);
+  const clampedRed = clamp(Math.floor(initialRedHumans), 0, COMMANDERS_PER_TEAM);
+
+  const blueCommanders: CommanderSlotState[] = [];
+  const redCommanders: CommanderSlotState[] = [];
+
+  for (let i = 0; i < COMMANDERS_PER_TEAM; i++) {
+    const isBlueHuman = i < clampedBlue;
+    blueCommanders.push({
+      commanderId: i,
+      team: 'blue',
+      controller: isBlueHuman ? 'human' : 'ai',
+      callsign: isBlueHuman ? (i === 0 ? 'P1 (Anda)' : `P${i + 1} (Player)`) : `P${i + 1} [AI Bot]`,
+      padIndex: i,
+      helipadIndex: i,
+      parkingBayIndex: i,
+      joinedAtSec: 0,
+    });
+
+    const isRedHuman = i < clampedRed;
+    redCommanders.push({
+      commanderId: i,
+      team: 'red',
+      controller: isRedHuman ? 'human' : 'ai',
+      callsign: isRedHuman ? `R${i + 1} (Player)` : `R${i + 1} [AI Bot]`,
+      padIndex: i,
+      helipadIndex: i,
+      parkingBayIndex: i,
+      joinedAtSec: 0,
+    });
+  }
+
+  return {
+    blueCommanders,
+    redCommanders,
+    minHumansPerTeamToStart: MIN_HUMANS_PER_TEAM_TO_START,
+    matchStarted: canStartMatchmaking4v4(clampedBlue, clampedRed),
+  };
+}
+
+/**
+ * Hot-Join AI Replacement:
+ * When a new human player joins an ongoing match, immediately replaces one of the active AI Commander slots
+ * (`controller: 'ai' -> 'human'`), inheriting that slot's Stacking Pad (`Pad P_i`), Helipad (`Helipad P_i`),
+ * Parking Bay (`Bay P_i`), and all characters/vehicles already built by that slot.
+ */
+export function hotJoinReplaceAiCommander(
+  state: Matchmaking4v4State,
+  preferredTeam?: 'blue' | 'red',
+  nowSec = 0,
+  customCallsign?: string,
+): { updatedState: Matchmaking4v4State; replacedSlot: CommanderSlotState | null } {
+  const nextBlue = state.blueCommanders.map((c) => ({ ...c }));
+  const nextRed = state.redCommanders.map((c) => ({ ...c }));
+
+  const blueAiIdx = nextBlue.findIndex((c) => c.controller === 'ai');
+  const redAiIdx = nextRed.findIndex((c) => c.controller === 'ai');
+
+  let targetTeam: 'blue' | 'red' | null = null;
+  if (preferredTeam === 'blue' && blueAiIdx !== -1) {
+    targetTeam = 'blue';
+  } else if (preferredTeam === 'red' && redAiIdx !== -1) {
+    targetTeam = 'red';
+  } else if (blueAiIdx !== -1 && redAiIdx !== -1) {
+    // Balance teams by replacing AI on whichever team currently has more AI slots (preferring Blue on tie)
+    const blueAiCount = nextBlue.filter((c) => c.controller === 'ai').length;
+    const redAiCount = nextRed.filter((c) => c.controller === 'ai').length;
+    targetTeam = blueAiCount >= redAiCount ? 'blue' : 'red';
+  } else if (blueAiIdx !== -1) {
+    targetTeam = 'blue';
+  } else if (redAiIdx !== -1) {
+    targetTeam = 'red';
+  }
+
+  if (!targetTeam) {
+    return {
+      updatedState: {
+        ...state,
+        blueCommanders: nextBlue,
+        redCommanders: nextRed,
+      },
+      replacedSlot: null,
+    };
+  }
+
+  const list = targetTeam === 'blue' ? nextBlue : nextRed;
+  const slotIdx = targetTeam === 'blue' ? blueAiIdx : redAiIdx;
+  const slot = list[slotIdx];
+  const prefix = targetTeam === 'blue' ? 'P' : 'R';
+  slot.controller = 'human';
+  slot.joinedAtSec = nowSec;
+  slot.callsign = customCallsign ?? `${prefix}${slot.commanderId + 1} (Hot-Join)`;
+
+  const blueHumans = nextBlue.filter((c) => c.controller === 'human').length;
+  const redHumans = nextRed.filter((c) => c.controller === 'human').length;
+
+  return {
+    updatedState: {
+      blueCommanders: nextBlue,
+      redCommanders: nextRed,
+      minHumansPerTeamToStart: state.minHumansPerTeamToStart,
+      matchStarted: state.matchStarted || canStartMatchmaking4v4(blueHumans, redHumans),
+    },
+    replacedSlot: { ...slot },
+  };
+}
+
+export type SmartBuddyAiAction =
+  | 'DELIVER_TO_OWNER_PAD'
+  | 'TRIGGER_OWNER_PAD_CRAFT'
+  | 'HEAL_WOUNDED_ALLY'
+  | 'EQUIP_GROUND_WEAPON'
+  | 'MOUNT_VEHICLE'
+  | 'HARVEST_CRATE'
+  | 'ATTACK_ENEMY'
+  | 'DEFEND_OWNER_PAD'
+  | 'FOLLOW_COMMANDER';
+
+export interface SmartBuddyAiInput {
+  buddyClass: BuddyClassId;
+  weaponId: 'unarmed' | 'pistol' | 'rifle' | 'rocket';
+  carryingCrate: boolean;
+  hp: number;
+  maxHp: number;
+  commandMode: TeamCommandMode;
+  ownerBuildOrder: BuildOrderTarget;
+  ownerPadHasSpace: boolean;
+  ownerPadReadyToCraft: boolean;
+  ownerIsAiCommander: boolean;
+  ownerAliveBuddyCount: number;
+  ownerHasBuiltTurret: boolean;
+  ownerHasBuiltVehicle: boolean;
+  woundedAllyDist: number | null;
+  nearestEnemyDist: number | null;
+  nearestFreeCrateDist: number | null;
+  nearestGroundWeaponDist: number | null;
+  nearestEmptyVehicleDist: number | null;
+  canUpgradeFromGroundWeapon?: boolean;
+}
+
+export interface SmartBuddyAiDecision {
+  action: SmartBuddyAiAction;
+  recommendedBuildOrder: BuildOrderTarget;
+}
+
+/**
+ * Pure Utility AI Evaluator for Built Characters (`ownerCommanderId` 0..3):
+ * 1. Computes strategic `recommendedBuildOrder` for AI Commanders:
+ *    - If unarmed at start of match -> `'1x1x1'` (build a weapon first)
+ *    - Else if squad has fewer than 3 buddies (`ownerAliveBuddyCount < 3`) -> `'1x1x2'` (build Buddy T1)
+ *    - Else if base has unbuilt Skyshield turret -> `'2x1x1'` (build Skyshield / Bazooka)
+ *    - Else if squad has fewer than 4 buddies (`MAX_CHARACTERS_PER_COMMANDER`) -> `'2x1x2'` (build Buddy T2)
+ *    - Else if no vehicle yet -> `'2x2x2'` (build Tank / Fighter Plane) or `'2x2x1'` (Dump Truck)
+ * 2. Selects highest-utility action for the character:
+ *    - If carrying a crate and owner's Stacking Pad has space -> `'DELIVER_TO_OWNER_PAD'`
+ *    - If AI Commander's pad recipe is complete -> `'TRIGGER_OWNER_PAD_CRAFT'`
+ *    - If Medic and wounded ally is within 18m -> `'HEAL_WOUNDED_ALLY'`
+ *    - If unarmed OR holding a lower-tier weapon (`canUpgradeFromGroundWeapon`) and a ground weapon is nearby (`<= 24m`) -> `'EQUIP_GROUND_WEAPON'`
+ *    - Respects `commandMode` (`MOUNT`, `DEFEND`, `ATTACK`, `HARVEST`, `FOLLOW`) with smart self-defense fallback.
+ */
+export function evaluateBuiltBuddySmartAiDecision(
+  input: SmartBuddyAiInput,
+): SmartBuddyAiDecision {
+  // 1. Recommended Build Order progression for Zero-Prebuilt start
+  let recommendedBuildOrder: BuildOrderTarget = input.ownerBuildOrder;
+  if (input.ownerIsAiCommander || input.ownerBuildOrder === 'AUTO') {
+    if (input.weaponId === 'unarmed' && input.ownerAliveBuddyCount <= 1) {
+      recommendedBuildOrder = '1x1x1';
+    } else if (input.ownerAliveBuddyCount < 3) {
+      recommendedBuildOrder = '1x1x2';
+    } else if (!input.ownerHasBuiltTurret) {
+      recommendedBuildOrder = '2x1x1';
+    } else if (input.ownerAliveBuddyCount < MAX_CHARACTERS_PER_COMMANDER) {
+      recommendedBuildOrder = '2x1x2';
+    } else if (!input.ownerHasBuiltVehicle) {
+      recommendedBuildOrder = '2x2x2';
+    } else {
+      recommendedBuildOrder = '2x2x1';
+    }
+  }
+
+  // 2. If carrying a crate, always deliver to owner's personal Stacking Pad (`Pad P_i`)
+  if (input.carryingCrate && input.ownerPadHasSpace) {
+    return {
+      action: 'DELIVER_TO_OWNER_PAD',
+      recommendedBuildOrder,
+    };
+  }
+
+  // 3. If owner's Stacking Pad has completed its target recipe, trigger craft!
+  if (input.ownerPadReadyToCraft && input.ownerIsAiCommander) {
+    return {
+      action: 'TRIGGER_OWNER_PAD_CRAFT',
+      recommendedBuildOrder,
+    };
+  }
+
+  // 4. Medic class prioritizes healing wounded squadmates within 18m
+  if (
+    input.buddyClass === 'Medic' &&
+    input.woundedAllyDist !== null &&
+    input.woundedAllyDist <= 18.0
+  ) {
+    return {
+      action: 'HEAL_WOUNDED_ALLY',
+      recommendedBuildOrder,
+    };
+  }
+
+  // 5. Team Buddies Auto-Loot (`Diambil Otomatis oleh AI Tim & Rentan Dicuri Lawan`):
+  // Unarmed characters OR characters holding a lower-tier weapon automatically run to pick up a crafted/dropped weapon nearby!
+  if (
+    (input.weaponId === 'unarmed' || input.canUpgradeFromGroundWeapon) &&
+    input.nearestGroundWeaponDist !== null &&
+    input.nearestGroundWeaponDist <= 24.0
+  ) {
+    return {
+      action: 'EQUIP_GROUND_WEAPON',
+      recommendedBuildOrder,
+    };
+  }
+
+  // 6. Immediate self-defense if an enemy is very close (<= 11m)
+  if (input.nearestEnemyDist !== null && input.nearestEnemyDist <= 11.0) {
+    return {
+      action: 'ATTACK_ENEMY',
+      recommendedBuildOrder,
+    };
+  }
+
+  // 7. Command-specific utility behavior
+  if (
+    input.commandMode === 'MOUNT' &&
+    input.nearestEmptyVehicleDist !== null &&
+    input.nearestEmptyVehicleDist <= 38.0
+  ) {
+    return {
+      action: 'MOUNT_VEHICLE',
+      recommendedBuildOrder,
+    };
+  }
+
+  if (input.commandMode === 'DEFEND') {
+    if (input.nearestEnemyDist !== null && input.nearestEnemyDist <= 24.0) {
+      return {
+        action: 'ATTACK_ENEMY',
+        recommendedBuildOrder,
+      };
+    }
+    return {
+      action: 'DEFEND_OWNER_PAD',
+      recommendedBuildOrder,
+    };
+  }
+
+  if (input.commandMode === 'ATTACK') {
+    if (
+      input.nearestEmptyVehicleDist !== null &&
+      input.nearestEmptyVehicleDist <= 14.0 &&
+      input.hp < input.maxHp * 0.65
+    ) {
+      return {
+        action: 'MOUNT_VEHICLE',
+        recommendedBuildOrder,
+      };
+    }
+    return {
+      action: 'ATTACK_ENEMY',
+      recommendedBuildOrder,
+    };
+  }
+
+  if (input.commandMode === 'HARVEST') {
+    if (
+      input.ownerPadHasSpace &&
+      input.nearestFreeCrateDist !== null &&
+      input.nearestFreeCrateDist <= 180.0
+    ) {
+      return {
+        action: 'HARVEST_CRATE',
+        recommendedBuildOrder,
+      };
+    }
+    if (input.nearestEnemyDist !== null && input.nearestEnemyDist <= 28.0) {
+      return {
+        action: 'ATTACK_ENEMY',
+        recommendedBuildOrder,
+      };
+    }
+  }
+
+  return {
+    action: 'FOLLOW_COMMANDER',
+    recommendedBuildOrder,
+  };
+}
+
+// ============================================================================
+// A* NAVIGATION GRID PATHFINDING WITH BINARY MIN-HEAP OPEN SET
+// - Binary heap for the open set
+// - g as the cost so far
+// - Manhattan heuristic for 4-way movement or Octile heuristic for 8-way movement
+// - Ties on f broken towards lower h
+// - Path rebuilt from parent links when the goal is popped
+// ============================================================================
+
+export interface AStarHeapNode {
+  idx: number;
+  g: number;
+  h: number;
+  f: number;
+}
+
+/**
+ * Compares two A* open-set nodes: orders by lowest `f = g + h`,
+ * breaking ties on `f` (`|fA - fB| <= 1e-6`) towards lower `h`.
+ */
+export function isBetterAStarNode(a: AStarHeapNode, b: AStarHeapNode): boolean {
+  const df = a.f - b.f;
+  if (Math.abs(df) > 1e-6) {
+    return df < 0;
+  }
+  return a.h < b.h;
+}
+
+/**
+ * Binary Min-Heap for the A* open set, ordering by lowest `f` with ties broken towards lower `h`.
+ */
+export class AStarBinaryHeap {
+  private readonly items: AStarHeapNode[] = [];
+
+  get size(): number {
+    return this.items.length;
+  }
+
+  clear(): void {
+    this.items.length = 0;
+  }
+
+  push(node: AStarHeapNode): void {
+    this.items.push(node);
+    this.siftUp(this.items.length - 1);
+  }
+
+  pop(): AStarHeapNode | undefined {
+    const n = this.items.length;
+    if (n === 0) return undefined;
+    const top = this.items[0];
+    const last = this.items.pop()!;
+    if (n > 1) {
+      this.items[0] = last;
+      this.siftDown(0);
+    }
+    return top;
+  }
+
+  private siftUp(index: number): void {
+    let i = index;
+    while (i > 0) {
+      const parentIdx = (i - 1) >> 1;
+      if (isBetterAStarNode(this.items[i], this.items[parentIdx])) {
+        const tmp = this.items[i];
+        this.items[i] = this.items[parentIdx];
+        this.items[parentIdx] = tmp;
+        i = parentIdx;
+      } else {
+        break;
+      }
+    }
+  }
+
+  private siftDown(index: number): void {
+    let i = index;
+    const len = this.items.length;
+    while (true) {
+      const left = (i << 1) + 1;
+      const right = left + 1;
+      let smallest = i;
+
+      if (left < len && isBetterAStarNode(this.items[left], this.items[smallest])) {
+        smallest = left;
+      }
+      if (right < len && isBetterAStarNode(this.items[right], this.items[smallest])) {
+        smallest = right;
+      }
+      if (smallest !== i) {
+        const tmp = this.items[i];
+        this.items[i] = this.items[smallest];
+        this.items[smallest] = tmp;
+        i = smallest;
+      } else {
+        break;
+      }
+    }
+  }
+}
+
+/**
+ * Admissible Manhattan distance heuristic for 4-way grid movement (never overestimates).
+ */
+export function computeManhattanHeuristic(
+  gx: number,
+  gz: number,
+  goalGx: number,
+  goalGz: number,
+): number {
+  return Math.abs(goalGx - gx) + Math.abs(goalGz - gz);
+}
+
+/**
+ * Admissible Octile distance heuristic for 8-way grid movement (never overestimates).
+ */
+export function computeOctileHeuristic(
+  gx: number,
+  gz: number,
+  goalGx: number,
+  goalGz: number,
+): number {
+  const dx = Math.abs(goalGx - gx);
+  const dz = Math.abs(goalGz - gz);
+  const minD = Math.min(dx, dz);
+  const maxD = Math.max(dx, dz);
+  return maxD + (Math.SQRT2 - 1) * minD;
+}
+
+export interface AStarNavGrid {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  cellSize: number;
+  cols: number;
+  rows: number;
+  blocked: Uint8Array;
+}
+
+export function createAStarNavGrid(
+  minX = -108,
+  maxX = 108,
+  minZ = -108,
+  maxZ = 108,
+  cellSize = 1.5,
+): AStarNavGrid {
+  const safeCell = Math.max(0.25, cellSize);
+  const cols = Math.max(1, Math.ceil((maxX - minX) / safeCell));
+  const rows = Math.max(1, Math.ceil((maxZ - minZ) / safeCell));
+  return {
+    minX,
+    maxX,
+    minZ,
+    maxZ,
+    cellSize: safeCell,
+    cols,
+    rows,
+    blocked: new Uint8Array(cols * rows),
+  };
+}
+
+export function worldToNavGridCell(
+  grid: AStarNavGrid,
+  worldX: number,
+  worldZ: number,
+): { gx: number; gz: number } {
+  const gx = clamp(Math.floor((worldX - grid.minX) / grid.cellSize), 0, grid.cols - 1);
+  const gz = clamp(Math.floor((worldZ - grid.minZ) / grid.cellSize), 0, grid.rows - 1);
+  return { gx, gz };
+}
+
+export function navGridCellToWorld(
+  grid: AStarNavGrid,
+  gx: number,
+  gz: number,
+): { x: number; z: number } {
+  return {
+    x: grid.minX + (gx + 0.5) * grid.cellSize,
+    z: grid.minZ + (gz + 0.5) * grid.cellSize,
+  };
+}
+
+export function setNavGridCellBlocked(
+  grid: AStarNavGrid,
+  gx: number,
+  gz: number,
+  isBlocked = true,
+): void {
+  if (gx < 0 || gx >= grid.cols || gz < 0 || gz >= grid.rows) return;
+  grid.blocked[gz * grid.cols + gx] = isBlocked ? 1 : 0;
+}
+
+export function isNavGridCellWalkable(grid: AStarNavGrid, gx: number, gz: number): boolean {
+  if (gx < 0 || gx >= grid.cols || gz < 0 || gz >= grid.rows) return false;
+  return grid.blocked[gz * grid.cols + gx] === 0;
+}
+
+export function rasterizeCircleObstacleToNavGrid(
+  grid: AStarNavGrid,
+  cx: number,
+  cz: number,
+  radius: number,
+  agentClearance = 0.65,
+): void {
+  const r = Math.max(0, radius + agentClearance);
+  const minCell = worldToNavGridCell(grid, cx - r, cz - r);
+  const maxCell = worldToNavGridCell(grid, cx + r, cz + r);
+  const rSq = r * r;
+  for (let gz = minCell.gz; gz <= maxCell.gz; gz++) {
+    const wz = grid.minZ + (gz + 0.5) * grid.cellSize;
+    for (let gx = minCell.gx; gx <= maxCell.gx; gx++) {
+      const wx = grid.minX + (gx + 0.5) * grid.cellSize;
+      const dx = wx - cx;
+      const dz = wz - cz;
+      if (dx * dx + dz * dz <= rSq) {
+        grid.blocked[gz * grid.cols + gx] = 1;
+      }
+    }
+  }
+}
+
+export function rasterizeObbObstacleToNavGrid(
+  grid: AStarNavGrid,
+  boxX: number,
+  boxZ: number,
+  halfX: number,
+  halfZ: number,
+  rotY = 0,
+  agentClearance = 0.65,
+): void {
+  const boundR = Math.hypot(halfX + agentClearance, halfZ + agentClearance);
+  const minCell = worldToNavGridCell(grid, boxX - boundR, boxZ - boundR);
+  const maxCell = worldToNavGridCell(grid, boxX + boundR, boxZ + boundR);
+  for (let gz = minCell.gz; gz <= maxCell.gz; gz++) {
+    const wz = grid.minZ + (gz + 0.5) * grid.cellSize;
+    for (let gx = minCell.gx; gx <= maxCell.gx; gx++) {
+      const wx = grid.minX + (gx + 0.5) * grid.cellSize;
+      if (pointInObb2D(wx, wz, boxX, boxZ, halfX, halfZ, rotY, agentClearance)) {
+        grid.blocked[gz * grid.cols + gx] = 1;
+      }
+    }
+  }
+}
+
+export function findNearestWalkableNavCell(
+  grid: AStarNavGrid,
+  startGx: number,
+  startGz: number,
+  maxRadiusCells = 14,
+): { gx: number; gz: number } {
+  const gx0 = clamp(startGx, 0, grid.cols - 1);
+  const gz0 = clamp(startGz, 0, grid.rows - 1);
+  if (isNavGridCellWalkable(grid, gx0, gz0)) {
+    return { gx: gx0, gz: gz0 };
+  }
+  for (let r = 1; r <= maxRadiusCells; r++) {
+    let bestGx = -1;
+    let bestGz = -1;
+    let bestDistSq = Infinity;
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue;
+        const nx = gx0 + dx;
+        const nz = gz0 + dz;
+        if (isNavGridCellWalkable(grid, nx, nz)) {
+          const dSq = dx * dx + dz * dz;
+          if (dSq < bestDistSq) {
+            bestDistSq = dSq;
+            bestGx = nx;
+            bestGz = nz;
+          }
+        }
+      }
+    }
+    if (bestGx !== -1) {
+      return { gx: bestGx, gz: bestGz };
+    }
+  }
+  return { gx: gx0, gz: gz0 };
+}
+
+export interface AStarPathResult {
+  waypoints: Array<{ x: number; z: number }>;
+  cellPath: Array<{ gx: number; gz: number }>;
+  reachedGoal: boolean;
+  expandedCount: number;
+  totalCost: number;
+}
+
+const DIRS_4WAY: ReadonlyArray< readonly [number, number, number] > = [
+  [1, 0, 1.0],
+  [-1, 0, 1.0],
+  [0, 1, 1.0],
+  [0, -1, 1.0],
+];
+
+const DIRS_8WAY: ReadonlyArray< readonly [number, number, number] > = [
+  [1, 0, 1.0],
+  [-1, 0, 1.0],
+  [0, 1, 1.0],
+  [0, -1, 1.0],
+  [1, 1, Math.SQRT2],
+  [1, -1, Math.SQRT2],
+  [-1, 1, Math.SQRT2],
+  [-1, -1, Math.SQRT2],
+];
+
+/**
+ * Runs A* pathfinding on `grid`:
+ * - Uses a binary min-heap (`AStarBinaryHeap`) for the open set
+ * - Tracks `g` as the cost so far
+ * - Uses Manhattan heuristic for 4-way movement (`allowDiagonal = false`) or Octile heuristic for 8-way (`allowDiagonal = true`)
+ * - Breaks ties on `f` towards lower `h`
+ * - Rebuilds the shortest path from `parent` links when the goal tile is popped from the open set.
+ */
+export function findPathAStar(
+  grid: AStarNavGrid,
+  startX: number,
+  startZ: number,
+  goalX: number,
+  goalZ: number,
+  options?: {
+    allowDiagonal?: boolean;
+    maxIterations?: number;
+  },
+): AStarPathResult {
+  const allowDiagonal = options?.allowDiagonal ?? true;
+  const maxIterations = options?.maxIterations ?? 8192;
+
+  const rawStart = worldToNavGridCell(grid, startX, startZ);
+  const rawGoal = worldToNavGridCell(grid, goalX, goalZ);
+  const startCell = findNearestWalkableNavCell(grid, rawStart.gx, rawStart.gz);
+  const goalCell = findNearestWalkableNavCell(grid, rawGoal.gx, rawGoal.gz);
+
+  const cols = grid.cols;
+  const totalCells = cols * grid.rows;
+  const startIdx = startCell.gz * cols + startCell.gx;
+  const goalIdx = goalCell.gz * cols + goalCell.gx;
+
+  if (startIdx === goalIdx) {
+    const goalPos = isNavGridCellWalkable(grid, rawGoal.gx, rawGoal.gz)
+      ? { x: goalX, z: goalZ }
+      : navGridCellToWorld(grid, goalCell.gx, goalCell.gz);
+    return {
+      waypoints: [goalPos],
+      cellPath: [{ gx: goalCell.gx, gz: goalCell.gz }],
+      reachedGoal: true,
+      expandedCount: 1,
+      totalCost: 0,
+    };
+  }
+
+  const gScore = new Float32Array(totalCells);
+  gScore.fill( Infinity );
+  const parent = new Int32Array(totalCells);
+  parent.fill(-1);
+  const closed = new Uint8Array(totalCells);
+
+  const computeH = allowDiagonal ? computeOctileHeuristic : computeManhattanHeuristic;
+  const dirs = allowDiagonal ? DIRS_8WAY : DIRS_4WAY;
+
+  const openHeap = new AStarBinaryHeap();
+  const hStart = computeH(startCell.gx, startCell.gz, goalCell.gx, goalCell.gz);
+  gScore[startIdx] = 0;
+  openHeap.push({
+    idx: startIdx,
+    g: 0,
+    h: hStart,
+    f: hStart,
+  });
+
+  let expandedCount = 0;
+  let reachedGoal = false;
+  let bestFallbackIdx = startIdx;
+  let bestFallbackH = hStart;
+
+  while (openHeap.size > 0 && expandedCount < maxIterations) {
+    const current = openHeap.pop()!;
+    const currIdx = current.idx;
+    if (closed[currIdx] !== 0) {
+      continue;
+    }
+    closed[currIdx] = 1;
+    expandedCount++;
+
+    if (current.h < bestFallbackH) {
+      bestFallbackH = current.h;
+      bestFallbackIdx = currIdx;
+    }
+
+    if (currIdx === goalIdx) {
+      reachedGoal = true;
+      bestFallbackIdx = goalIdx;
+      break;
+    }
+
+    const cx = currIdx % cols;
+    const cz = (currIdx / cols) | 0;
+    const currG = gScore[currIdx];
+
+    for (let di = 0; di < dirs.length; di++) {
+      const [dx, dz, stepCost] = dirs[di];
+      const nx = cx + dx;
+      const nz = cz + dz;
+      if (nx < 0 || nx >= cols || nz < 0 || nz >= grid.rows) continue;
+
+      const nIdx = nz * cols + nx;
+      if (closed[nIdx] !== 0 || grid.blocked[nIdx] !== 0) continue;
+
+      // Prevent diagonal corner-cutting across blocked cardinal neighbors
+      if (dx !== 0 && dz !== 0) {
+        if (grid.blocked[cz * cols + (cx + dx)] !== 0 || grid.blocked[(cz + dz) * cols + cx] !== 0) {
+          continue;
+        }
+      }
+
+      const tentativeG = currG + stepCost;
+      if (tentativeG + 1e-6 < gScore[nIdx]) {
+        gScore[nIdx] = tentativeG;
+        parent[nIdx] = currIdx;
+        const h = computeH(nx, nz, goalCell.gx, goalCell.gz);
+        openHeap.push({
+          idx: nIdx,
+          g: tentativeG,
+          h,
+          f: tentativeG + h,
+        });
+      }
+    }
+  }
+
+  // Rebuild path from parent links starting at the popped goal tile (or closest fallback tile)
+  const targetIdx = reachedGoal ? goalIdx : bestFallbackIdx;
+  const revIndices: number[] = [];
+  let trace = targetIdx;
+  let safety = 0;
+  while (trace !== -1 && safety <= totalCells) {
+    revIndices.push(trace);
+    if (trace === startIdx) break;
+    trace = parent[trace];
+    safety++;
+  }
+  revIndices.reverse();
+
+  const cellPath: Array<{ gx: number; gz: number }> = [];
+  const waypoints: Array<{ x: number; z: number }> = [];
+  for (let i = 0; i < revIndices.length; i++) {
+    const idx = revIndices[i];
+    const gx = idx % cols;
+    const gz = (idx / cols) | 0;
+    cellPath.push({ gx, gz });
+    // Skip pushing the start cell itself if there are subsequent cells so the agent immediately moves toward cell[1]
+    if (i === 0 && revIndices.length > 1) continue;
+    waypoints.push(navGridCellToWorld(grid, gx, gz));
+  }
+
+  if (reachedGoal && isNavGridCellWalkable(grid, rawGoal.gx, rawGoal.gz) && waypoints.length > 0) {
+    waypoints[waypoints.length - 1] = { x: goalX, z: goalZ };
+  }
+
+  return {
+    waypoints,
+    cellPath,
+    reachedGoal,
+    expandedCount,
+    totalCost: gScore[targetIdx],
+  };
+}
+
+// ============================================================================
+// REA-EXTRACTED LYO HIT REACTION, STUN EFFECT, SHOT RECOIL & EMISSIVE FLASH
+// (`ir.handleHitReaction`, `ya.handleHitReaction`, `Ci`, `ci.fireSingleShot` in `B1Nq4Kq6.js`)
+// ============================================================================
+
+export interface LyoHitReactionPose {
+  hopY: number;
+  liftY: number;
+  rotX: number;
+  rotZ: number;
+}
+
+/**
+ * Evaluates Lyo's directional hit-reaction body hop & tilt (`ir.handleHitReaction` @ `B1Nq4Kq6.js:40549`
+ * for Player/Vehicle: `+0.05m` lift, `12°` max tilt; `ya.handleHitReaction` @ `B1Nq4Kq6.js:696500`
+ * for Enemy/Bot: `+0.10m` lift, `30°` max tilt; `0.10s` `power2.out` attack, `0.50s` `power3.out` recovery).
+ * `hitTimerRemaining` counts down from `durationSec` (`0.60s`) to `0`.
+ */
+export function evaluateLyoHitReactionPose(
+  hitTimerRemaining: number,
+  durationSec = 0.6,
+  localDirX = 0,
+  localDirZ = 1,
+  isPlayerOrVehicle = false,
+): LyoHitReactionPose {
+  if (hitTimerRemaining <= 0 || durationSec <= 0) {
+    return { hopY: 0, liftY: 0, rotX: 0, rotZ: 0 };
+  }
+  const elapsedSec = clamp(durationSec - hitTimerRemaining, 0, durationSec);
+  const attackDur = 0.1;
+  const recoverDur = Math.max(0.01, durationSec - attackDur);
+
+  let env = 0;
+  if (elapsedSec < attackDur) {
+    const u = elapsedSec / attackDur;
+    // power2.out: 1 - (1 - u)^2
+    env = 1 - (1 - u) * (1 - u);
+  } else {
+    const u = (elapsedSec - attackDur) / recoverDur;
+    // power3.out back to 0: (1 - u)^3
+    const inv = Math.max(0, 1 - u);
+    env = inv * inv * inv;
+  }
+
+  const maxLift = isPlayerOrVehicle ? 0.05 : 0.1;
+  const maxTiltRad = ((isPlayerOrVehicle ? 12 : 30) * Math.PI) / 180;
+  const hopY = maxLift * env;
+  return {
+    hopY,
+    liftY: hopY,
+    rotX: localDirZ * maxTiltRad * env,
+    rotZ: -localDirX * maxTiltRad * env,
+  };
+}
+
+export interface LyoStunEffectState {
+  active: boolean;
+  visible: boolean;
+  scale: number;
+  rotationZ: number;
+}
+
+/**
+ * Evaluates Lyo's overhead spinning stunned star effect (`ir.updateStunEffect` & `xa.updateStunEffect`
+ * @ `B1Nq4Kq6.js:61800, 725000`):
+ * - `stunDuration = 1.5s` default
+ * - First `0.25s`: `back.out(1.5)` scale `0 -> 1`
+ * - Last `0.25s`: `power2.in` scale `1 -> 0`
+ * - Spins `2` full turns (`4π` radians) over the stun duration.
+ */
+export function evaluateLyoStunEffectState(
+  stunTimerRemaining: number,
+  stunDuration = 1.5,
+): LyoStunEffectState {
+  if (stunTimerRemaining <= 0 || stunDuration <= 0) {
+    return { active: false, visible: false, scale: 0, rotationZ: 0 };
+  }
+  const elapsed = clamp(stunDuration - stunTimerRemaining, 0, stunDuration);
+  const progress = clamp(elapsed / stunDuration, 0, 1);
+  const rotationZ = progress * Math.PI * 4;
+
+  let scale = 1.0;
+  if (elapsed < 0.25) {
+    const u = elapsed / 0.25;
+    const s = 1.5;
+    const t = u - 1;
+    // back.out(1.5)
+    scale = Math.max(0, 1 + (s + 1) * t * t * t + s * t * t);
+  } else if (stunTimerRemaining < 0.25) {
+    const u = 1 - stunTimerRemaining / 0.25;
+    // power2.in from 1 -> 0
+    scale = Math.max(0, 1 - u * u);
+  }
+
+  const active = scale > 0.005;
+  return {
+    active,
+    visible: active,
+    scale,
+    rotationZ,
+  };
+}
+
+export interface LyoTankShotRecoilPose {
+  cameraKick: number;
+  turretSlideBack: number;
+  turretLiftY: number;
+  turretPitchRad: number;
+  barrelSlideBack: number;
+  bodyLiftY: number;
+  bodyTiltRad: number;
+}
+
+/**
+ * Evaluates Lyo's 4-part tank cannon firing recoil (`ci.fireSingleShot` @ `B1Nq4Kq6.js:228877`):
+ * - Camera kick `0.13m`
+ * - Turret & Barrel slide back `0.16m` (`0.05s` `sine.out` push, `0.22s` `power2.out` return)
+ * - Turret lifts `+0.06m` & pitches `6°` (`0.05s` out, `0.22s` return)
+ * - Hull body lifts `+0.05m` & tilts `12°` opposite firing direction (`0.05s` `power2.out`, `0.25s` `power3.out` return).
+ * `recoilTimerRemaining` counts down from `durationSec` (`0.24s`) to `0`.
+ */
+export function evaluateLyoTankShotRecoilPose(
+  recoilTimerRemaining: number,
+  durationSec = 0.24,
+): LyoTankShotRecoilPose {
+  if (recoilTimerRemaining <= 0 || durationSec <= 0) {
+    return {
+      cameraKick: 0,
+      turretSlideBack: 0,
+      turretLiftY: 0,
+      turretPitchRad: 0,
+      barrelSlideBack: 0,
+      bodyLiftY: 0,
+      bodyTiltRad: 0,
+    };
+  }
+
+  const elapsedSec = clamp(durationSec - recoilTimerRemaining, 0, durationSec);
+  const attackDur = 0.05;
+  const recoverDur = Math.max(0.01, durationSec - attackDur);
+
+  let turretEnv = 0;
+  if (elapsedSec < attackDur) {
+    const u = elapsedSec / attackDur;
+    turretEnv = Math.sin((u * Math.PI) / 2); // sine.out
+  } else {
+    const u = (elapsedSec - attackDur) / recoverDur;
+    const inv = Math.max(0, 1 - u);
+    turretEnv = inv * inv; // power2.out back to 0
+  }
+
+  let bodyEnv = 0;
+  if (elapsedSec < attackDur) {
+    const u = elapsedSec / attackDur;
+    bodyEnv = 1 - (1 - u) * (1 - u); // power2.out
+  } else {
+    const u = (elapsedSec - attackDur) / recoverDur;
+    const inv = Math.max(0, 1 - u);
+    bodyEnv = inv * inv * inv; // power3.out back to 0
+  }
+
+  return {
+    cameraKick: 0.13 * turretEnv,
+    turretSlideBack: 0.16 * turretEnv,
+    turretLiftY: 0.06 * turretEnv,
+    turretPitchRad: ((6 * Math.PI) / 180) * turretEnv,
+    barrelSlideBack: 0.16 * turretEnv,
+    bodyLiftY: 0.05 * bodyEnv,
+    bodyTiltRad: ((12 * Math.PI) / 180) * bodyEnv,
+  };
+}
+
+/**
+ * Evaluates Lyo's yellow emissive hit flash intensity (`Ci` @ `B1Nq4Kq6.js:334028`):
+ * `flashColor = '#ffff00'`, `flashDuration = 0.15s`,
+ * decaying quadratically from `1.0` to `0.0` as `remainingRatio^2`.
+ */
+export function evaluateLyoEmissiveHitFlash(
+  flashTimerRemaining: number,
+  durationSec = 0.15,
+): number {
+  if (flashTimerRemaining <= 0 || durationSec <= 0) return 0;
+  const r = clamp(flashTimerRemaining / durationSec, 0, 1);
+  return r * r;
+}
+
+// ============================================================================
+// MUZZLE RAYCAST HIT DETECTION (MAX 100 UNITS, LAYER MASK SKIPPING SHOOTER,
+// CLOSEST HIT POINT + SURFACE NORMAL, & TARGET LOCK-ON FOR ENEMY / VEHICLE / SKYSHIELD)
+// ============================================================================
+
+export const RAYCAST_MAX_DISTANCE = 100.0;
+
+export const RAYCAST_LAYERS = {
+  SHOOTER: 1 << 0,         // 1: The shooter unit/vehicle itself (always skipped by muzzle mask)
+  ENEMY_CHARACTER: 1 << 1, // 2: Hostile / targetable Buddy character
+  VEHICLE: 1 << 2,         // 4: Targetable Vehicle (Lyo Tank, Dump Truck, Fighter Plane)
+  SKYSHIELD: 1 << 3,       // 8: 35mm Skyshield Air & Ground Defense Turret
+  PROP: 1 << 4,            // 16: Map props, explosive barrels, crates, trees, fences
+  STRUCTURE: 1 << 5,       // 32: Base buildings (HQ, Barracks, Hangar, Checkpoints, Walls)
+  DEFAULT_MUZZLE_MASK: (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5),
+} as const;
+
+export type RaycastTargetKind =
+  | 'enemy_character'
+  | 'vehicle'
+  | 'skyshield'
+  | 'prop'
+  | 'structure'
+  | 'none';
+
+export interface RaycastCollider3D {
+  id: string;
+  layer: number;
+  targetKind: Exclude<RaycastTargetKind, 'none'>;
+  /** Team affiliation ('blue' | 'red'); friendly colliders matching shooterTeam are NEVER target-locked! */
+  team?: 'blue' | 'red';
+  label?: string;
+  shape: 'sphere' | 'cylinder' | 'obb';
+  center: Vec3;
+  /** For 'sphere' and 'cylinder' */
+  radius?: number;
+  /** For 'cylinder' and 'obb': full vertical height or half-extents */
+  halfExtents?: Vec3;
+  /** For 'obb': Y-axis yaw rotation in radians */
+  rotY?: number;
+}
+
+export interface RayPrimitiveHit3D {
+  distance: number;
+  point: Vec3;
+  normal: Vec3;
+}
+
+export interface MuzzleRaycastResult {
+  hit: boolean;
+  distance: number;
+  point: Vec3;
+  normal: Vec3;
+  colliderId: string | null;
+  targetKind: RaycastTargetKind;
+  targetLabel: string | null;
+  /**
+   * True when the raycast line touches a lockable target:
+   * Enemy Character ('enemy_character'), Vehicle ('vehicle'), or Skyshield ('skyshield').
+   */
+  isTargetLocked: boolean;
+  lockCenter: Vec3 | null;
+  lockRadius: number;
+}
+
+/**
+ * Ray-Sphere intersection in 3D. Returns closest hit in (0, maxDistance] with outward unit normal.
+ */
+export function intersectRaySphere3D(
+  origin: Vec3,
+  dir: Vec3,
+  center: Vec3,
+  radius: number,
+  maxDistance = RAYCAST_MAX_DISTANCE,
+): RayPrimitiveHit3D | null {
+  if (radius <= 0) return null;
+  const ocX = origin.x - center.x;
+  const ocY = origin.y - center.y;
+  const ocZ = origin.z - center.z;
+
+  const b = ocX * dir.x + ocY * dir.y + ocZ * dir.z;
+  const c = ocX * ocX + ocY * ocY + ocZ * ocZ - radius * radius;
+  const disc = b * b - c;
+  if (disc < 0) return null;
+
+  const sqrtDisc = Math.sqrt(disc);
+  let t = -b - sqrtDisc;
+  if (t <= 1e-4) {
+    t = -b + sqrtDisc;
+  }
+  if (t <= 1e-4 || t > maxDistance) return null;
+
+  const px = origin.x + dir.x * t;
+  const py = origin.y + dir.y * t;
+  const pz = origin.z + dir.z * t;
+  const nx = px - center.x;
+  const ny = py - center.y;
+  const nz = pz - center.z;
+  const nLen = Math.hypot(nx, ny, nz) || 1;
+
+  return {
+    distance: t,
+    point: { x: px, y: py, z: pz },
+    normal: { x: nx / nLen, y: ny / nLen, z: nz / nLen },
+  };
+}
+
+/**
+ * Ray-Vertical Cylinder intersection in 3D (centered at `center`, radius `radius`, half-height `halfHeight`).
+ * Returns closest hit in (0, maxDistance] with exact side-wall or cap normal.
+ */
+export function intersectRayCylinderY3D(
+  origin: Vec3,
+  dir: Vec3,
+  center: Vec3,
+  radius: number,
+  halfHeight: number,
+  maxDistance = RAYCAST_MAX_DISTANCE,
+): RayPrimitiveHit3D | null {
+  if (radius <= 0 || halfHeight <= 0) return null;
+  const minY = center.y - halfHeight;
+  const maxY = center.y + halfHeight;
+  const ox = origin.x - center.x;
+  const oz = origin.z - center.z;
+
+  let bestT = Infinity;
+  let bestNormal: Vec3 = { x: 0, y: 1, z: 0 };
+
+  // 1. Curved side wall in XZ
+  const a = dir.x * dir.x + dir.z * dir.z;
+  const b = 2 * (ox * dir.x + oz * dir.z);
+  const c = ox * ox + oz * oz - radius * radius;
+
+  if (a > 1e-8) {
+    const disc = b * b - 4 * a * c;
+    if (disc >= 0) {
+      const sqrtDisc = Math.sqrt(disc);
+      const tCandidates = [(-b - sqrtDisc) / (2 * a), (-b + sqrtDisc) / (2 * a)];
+      for (const t of tCandidates) {
+        if (t > 1e-4 && t <= maxDistance && t < bestT) {
+          const hitY = origin.y + dir.y * t;
+          if (hitY >= minY && hitY <= maxY) {
+            const hx = ox + dir.x * t;
+            const hz = oz + dir.z * t;
+            const hLen = Math.hypot(hx, hz) || 1;
+            bestT = t;
+            bestNormal = { x: hx / hLen, y: 0, z: hz / hLen };
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Top and bottom circular caps
+  if (Math.abs(dir.y) > 1e-8) {
+    const capYs: Array<{ y: number; ny: number }> = [
+      { y: maxY, ny: 1 },
+      { y: minY, ny: -1 },
+    ];
+    for (const cap of capYs) {
+      const t = (cap.y - origin.y) / dir.y;
+      if (t > 1e-4 && t <= maxDistance && t < bestT) {
+        const hx = ox + dir.x * t;
+        const hz = oz + dir.z * t;
+        if (hx * hx + hz * hz <= radius * radius) {
+          bestT = t;
+          bestNormal = { x: 0, y: cap.ny, z: 0 };
+        }
+      }
+    }
+  }
+
+  if (!Number.isFinite(bestT)) return null;
+  return {
+    distance: bestT,
+    point: {
+      x: origin.x + dir.x * bestT,
+      y: origin.y + dir.y * bestT,
+      z: origin.z + dir.z * bestT,
+    },
+    normal: bestNormal,
+  };
+}
+
+/**
+ * Ray-Oriented Bounding Box (OBB) intersection in 3D (centered at `center`, half-extents `halfExtents`,
+ * rotated around Y axis by `rotY` radians). Returns closest hit in (0, maxDistance] with world-space face normal.
+ */
+export function intersectRayObb3D(
+  origin: Vec3,
+  dir: Vec3,
+  center: Vec3,
+  halfExtents: Vec3,
+  rotY = 0,
+  maxDistance = RAYCAST_MAX_DISTANCE,
+): RayPrimitiveHit3D | null {
+  const dx = origin.x - center.x;
+  const dy = origin.y - center.y;
+  const dz = origin.z - center.z;
+
+  const cosY = Math.cos(rotY);
+  const sinY = Math.sin(rotY);
+
+  // Transform ray origin & direction into OBB local space (rotate by -rotY around Y)
+  const localOx = dx * cosY - dz * sinY;
+  const localOy = dy;
+  const localOz = dx * sinY + dz * cosY;
+
+  const localDx = dir.x * cosY - dir.z * sinY;
+  const localDy = dir.y;
+  const localDz = dir.x * sinY + dir.z * cosY;
+
+  let tMin = -Infinity;
+  let tMax = Infinity;
+  let nearLocalNormal: Vec3 = { x: 0, y: 1, z: 0 };
+  let farLocalNormal: Vec3 = { x: 0, y: 1, z: 0 };
+
+  const slabs: Array<{
+    o: number;
+    d: number;
+    half: number;
+    nx: number;
+    ny: number;
+    nz: number;
+  }> = [
+    { o: localOx, d: localDx, half: halfExtents.x, nx: 1, ny: 0, nz: 0 },
+    { o: localOy, d: localDy, half: halfExtents.y, nx: 0, ny: 1, nz: 0 },
+    { o: localOz, d: localDz, half: halfExtents.z, nx: 0, ny: 0, nz: 1 },
+  ];
+
+  for (const s of slabs) {
+    if (Math.abs(s.d) < 1e-8) {
+      if (Math.abs(s.o) > s.half) return null;
+    } else {
+      let t1 = (-s.half - s.o) / s.d;
+      let t2 = (s.half - s.o) / s.d;
+      let n1 = -1;
+      let n2 = 1;
+      if (t1 > t2) {
+        const tmpT = t1;
+        t1 = t2;
+        t2 = tmpT;
+        const tmpN = n1;
+        n1 = n2;
+        n2 = tmpN;
+      }
+      if (t1 > tMin) {
+        tMin = t1;
+        nearLocalNormal = { x: s.nx * n1, y: s.ny * n1, z: s.nz * n1 };
+      }
+      if (t2 < tMax) {
+        tMax = t2;
+        farLocalNormal = { x: s.nx * n2, y: s.ny * n2, z: s.nz * n2 };
+      }
+      if (tMin > tMax) return null;
+    }
+  }
+
+  let hitT = tMin;
+  let chosenLocalNormal = nearLocalNormal;
+  if (hitT <= 1e-4) {
+    hitT = tMax;
+    chosenLocalNormal = farLocalNormal;
+  }
+  if (hitT <= 1e-4 || hitT > maxDistance) return null;
+
+  // Rotate local face normal back to world space (+rotY around Y)
+  const worldNx = chosenLocalNormal.x * cosY + chosenLocalNormal.z * sinY;
+  const worldNy = chosenLocalNormal.y;
+  const worldNz = -chosenLocalNormal.x * sinY + chosenLocalNormal.z * cosY;
+  const nLen = Math.hypot(worldNx, worldNy, worldNz) || 1;
+
+  return {
+    distance: hitT,
+    point: {
+      x: origin.x + dir.x * hitT,
+      y: origin.y + dir.y * hitT,
+      z: origin.z + dir.z * hitT,
+    },
+    normal: {
+      x: worldNx / nLen,
+      y: worldNy / nLen,
+      z: worldNz / nLen,
+    },
+  };
+}
+
+/**
+ * Casts a 3D ray from the weapon muzzle along `direction` up to `maxDistance` (default 100 units),
+ * filtering colliders with `layerMask` (which skips `RAYCAST_LAYERS.SHOOTER`) and optional `shooterId`.
+ * Returns the closest hit along with its 3D hit point, surface normal, and Target Lock-On state
+ * when the ray touches an enemy character, vehicle, or Skyshield turret.
+ */
+export function castMuzzleRaycast3D(
+  origin: Vec3,
+  direction: Vec3,
+  colliders: readonly RaycastCollider3D[],
+  options?: {
+    maxDistance?: number;
+    layerMask?: number;
+    shooterId?: string | null;
+    shooterTeam?: 'blue' | 'red';
+  },
+): MuzzleRaycastResult {
+  const maxDistance = options?.maxDistance ?? RAYCAST_MAX_DISTANCE;
+  const layerMask = options?.layerMask ?? RAYCAST_LAYERS.DEFAULT_MUZZLE_MASK;
+  const shooterId = options?.shooterId ?? null;
+  const shooterTeam = options?.shooterTeam ?? 'blue';
+
+  const dirLen = Math.hypot(direction.x, direction.y, direction.z);
+  const normDir: Vec3 =
+    dirLen > 1e-6
+      ? { x: direction.x / dirLen, y: direction.y / dirLen, z: direction.z / dirLen }
+      : { x: 0, y: 0, z: 1 };
+
+  let bestDistance = maxDistance;
+  let bestHit: RayPrimitiveHit3D | null = null;
+  let bestCollider: RaycastCollider3D | null = null;
+
+  for (let i = 0; i < colliders.length; i++) {
+    const col = colliders[i];
+    // Skip any collider excluded by layerMask or matching shooterId
+    if ((col.layer & layerMask) === 0) continue;
+    if (shooterId !== null && col.id === shooterId) continue;
+    // Never hit or lock onto friendly units, friendly vehicles, or friendly Skyshield turrets!
+    if (
+      col.team !== undefined &&
+      col.team === shooterTeam &&
+      (col.targetKind === 'enemy_character' ||
+        col.targetKind === 'vehicle' ||
+        col.targetKind === 'skyshield')
+    ) {
+      continue;
+    }
+
+    let hit: RayPrimitiveHit3D | null = null;
+    if (col.shape === 'sphere') {
+      hit = intersectRaySphere3D(origin, normDir, col.center, col.radius ?? 1.0, bestDistance);
+    } else if (col.shape === 'cylinder') {
+      const halfH = col.halfExtents?.y ?? 1.1;
+      hit = intersectRayCylinderY3D(
+        origin,
+        normDir,
+        col.center,
+        col.radius ?? 0.9,
+        halfH,
+        bestDistance,
+      );
+    } else if (col.shape === 'obb') {
+      const he = col.halfExtents ?? { x: 1, y: 1, z: 1 };
+      hit = intersectRayObb3D(origin, normDir, col.center, he, col.rotY ?? 0, bestDistance);
+    }
+
+    if (hit && hit.distance < bestDistance) {
+      bestDistance = hit.distance;
+      bestHit = hit;
+      bestCollider = col;
+    }
+  }
+
+  if (!bestHit || !bestCollider) {
+    return {
+      hit: false,
+      distance: maxDistance,
+      point: {
+        x: origin.x + normDir.x * maxDistance,
+        y: origin.y + normDir.y * maxDistance,
+        z: origin.z + normDir.z * maxDistance,
+      },
+      normal: { x: 0, y: 1, z: 0 },
+      colliderId: null,
+      targetKind: 'none',
+      targetLabel: null,
+      isTargetLocked: false,
+      lockCenter: null,
+      lockRadius: 0,
+    };
+  }
+
+  const targetKind = bestCollider.targetKind;
+  const isFriendly = bestCollider.team !== undefined && bestCollider.team === shooterTeam;
+  const isTargetLocked =
+    !isFriendly &&
+    (targetKind === 'enemy_character' ||
+      targetKind === 'vehicle' ||
+      targetKind === 'skyshield');
+
+  const lockRadius =
+    bestCollider.shape === 'obb' && bestCollider.halfExtents
+      ? Math.max(bestCollider.halfExtents.x, bestCollider.halfExtents.z) * 1.15
+      : (bestCollider.radius ?? 1.2) * 1.35;
+
+  return {
+    hit: true,
+    distance: bestHit.distance,
+    point: bestHit.point,
+    normal: bestHit.normal,
+    colliderId: bestCollider.id,
+    targetKind,
+    targetLabel: bestCollider.label ?? bestCollider.id,
+    isTargetLocked,
+    lockCenter: { ...bestCollider.center },
+    lockRadius,
+  };
+}
+
+// ============================================================================
+// WEAPON-PROPORTIONAL 3D PROJECTILE CALIBER & LENGTH SPECIFICATION
+// Ensures every projectile's cross-sectional diameter & length are strictly
+// proportional to the physical barrel bore of the weapon that fires it.
+// ============================================================================
+
+export interface WeaponProjectileVisualSpec {
+  /** Which 3D GLB shell template to show ('boss' = finned rocket, 'player' = cannon shell, 'fodder' = streamlined bullet) */
+  shellKind: 'boss' | 'player' | 'fodder';
+  /** World-space cross-sectional diameter (X & Y scale on unit-normalized projectile mesh), strictly < barrelOuterDiameter */
+  diameter: number;
+  /** World-space longitudinal length along flight vector (Z scale on unit-normalized projectile mesh) */
+  length: number;
+  /** Reference outer barrel/muzzle diameter of the firing weapon in world units */
+  barrelOuterDiameter: number;
+}
+
+export function getWeaponProjectileVisualSpec(weaponType: string): WeaponProjectileVisualSpec {
+  const w = weaponType.trim();
+
+  // 1. Heavy Tank Cannon (player.glb barrel outer diameter ~0.32m at 2.45x-2.75x scale)
+  if (w === 'TankCannon') {
+    return {
+      shellKind: 'player',
+      diameter: 0.22,
+      length: 0.48,
+      barrelOuterDiameter: 0.32,
+    };
+  }
+
+  // 2. Shoulder-Mounted Bazooka / Rocket Launcher (recessed warhead diameter 0.22m inside 0.406m launch tube)
+  if (w === 'Bazooka' || w === 'Supazooka' || w === 'LyoRocketLauncher' || w.includes('Rocket')) {
+    return {
+      shellKind: 'boss',
+      diameter: 0.19,
+      length: 0.45,
+      barrelOuterDiameter: 0.22,
+    };
+  }
+
+  // 3. 35mm Skyshield C-RAM / AHEAD Turret (barrel tube 0.124m-0.152m, muzzle sensor rings 0.204m)
+  if (w === 'Skyshield35mm') {
+    return {
+      shellKind: 'player',
+      diameter: 0.115,
+      length: 0.36,
+      barrelOuterDiameter: 0.152,
+    };
+  }
+
+  // 4. Fighter Plane Twin Under-Wing 20mm Rotary Gatling Cannon ('PlaneGatling' / 'Uzi')
+  if (w === 'PlaneGatling' || w === 'Uzi') {
+    return {
+      shellKind: 'fodder',
+      diameter: 0.082,
+      length: 0.30,
+      barrelOuterDiameter: 0.11,
+    };
+  }
+
+  // 5. Tactical Assault Rifle / Carbine ('LyoAssaultRifle' / 'Machine Gun' / 'Shotgun')
+  //    Barrel diameter = 0.042 * 2 * 1.16 = 0.097m, muzzle brake = 0.158m
+  if (
+    w === 'LyoAssaultRifle' ||
+    w.includes('Rifle') ||
+    w.includes('Machine') ||
+    w.includes('Shotgun')
+  ) {
+    return {
+      shellKind: 'fodder',
+      diameter: 0.074,
+      length: 0.26,
+      barrelOuterDiameter: 0.097,
+    };
+  }
+
+  // 6. Tactical Pistol ('LyoPistol' & compact sidearms)
+  //    Barrel bore diameter = 0.032 * 2 * 1.16 = 0.074m, slide width = 0.162m
+  return {
+    shellKind: 'fodder',
+    diameter: 0.062,
+    length: 0.18,
+    barrelOuterDiameter: 0.074,
+  };
+}
+
+// ============================================================================
+// FIXED PREALLOCATED OBJECT POOL FOR BULLETS & PARTICLES (ZERO GC STALLS)
+// - Preallocates the peak count up front at initialization
+// - Takes an inactive instance and resets its fields on spawn
+// - Marks it inactive on death instead of destroying it (zero GC churn)
+// - Logs a warning if the pool ever runs out of preallocated slots
+// ============================================================================
+
+export const DEFAULT_BULLET_LANE_POOL_SIZE = 14;
+
+export const POOL_PEAK_CAPACITIES = {
+  /** Single-lane reference pool size (recycles the same 14 slots without GC pauses) */
+  bulletLane: DEFAULT_BULLET_LANE_POOL_SIZE,
+  /** Full 4v4 arena peak simultaneous bullets (Infantry, Tanks, Planes & 8 Skyshield AA Turrets) */
+  bullets: 64,
+  /** Burst, directional spark, and collision contact particles */
+  explosionParticles: 96,
+  /** 3D shattered wood, concrete, and metal debris chunks */
+  debrisChunks: 64,
+  /** Persistent tank caterpillar tread marks on terrain */
+  tankTrackMarks: 220,
+  /** Lyo 5-Layer VFX Layer A: Core Fireballs & Bullet-Hit Flash Bursts */
+  fireballs: 24,
+  /** Lyo 5-Layer VFX Layer B: Billowing Toon Smoke Puffs */
+  smokePuffs: 112,
+  /** Lyo 5-Layer VFX Layer C: Expanding Ground Shockwave Rings */
+  shockwaveRings: 24,
+  /** Lyo 5-Layer VFX Layer D: Flying Sparks & Confetti Squares */
+  confettiSparks: 140,
+  /** Lyo 5-Layer VFX Layer E: Ground Scorch Mark Decals */
+  scorchDecals: 24,
+  /** Weapon Muzzle Flash Cones & Stars */
+  muzzleFlashes: 24,
+  /** Multi-stage sequential explosion timer slots */
+  multiStageExplosions: 28,
+} as const;
+
+export interface PooledSlot {
+  active: boolean;
+}
+
+export interface FixedObjectPoolOptions<T extends PooledSlot> {
+  /** Human-readable pool identifier used in exhaustion warnings */
+  name: string;
+  /** Peak number of instances preallocated up front */
+  peakCapacity: number;
+  /** Factory called exactly `peakCapacity` times during preallocation */
+  createSlot: (index: number) => T;
+  /** Called on `acquire()` to reset fields to clean defaults before spawn customization */
+  resetSlot?: (slot: T) => void;
+  /** Called on `release()` / death to hide visuals & clear state instead of destroying the instance */
+  deactivateSlot?: (slot: T) => void;
+  /** Optional custom warning logger when the pool runs out (defaults to `console.warn`) */
+  onWarnExhausted?: (message: string, poolName: string, peakCapacity: number) => void;
+}
+
+export interface FixedObjectPool<T extends PooledSlot> {
+  readonly name: string;
+  readonly capacity: number;
+  readonly slots: readonly T[];
+  readonly activeCount: number;
+  readonly peakActiveCount: number;
+  readonly totalSpawns: number;
+  readonly exhaustionWarnings: number;
+  /** Takes an inactive instance, marks it active, resets its fields on spawn, or logs a warning and returns null if full */
+  acquire(initOnSpawn?: (slot: T) => void): T | null;
+  /** Marks an active instance inactive on death instead of destroying it */
+  release(slot: T): void;
+  /** Marks all active instances inactive (e.g. on match/mode reset) without destroying any slot */
+  releaseAll(): void;
+}
+
+export function createFixedObjectPool<T extends PooledSlot>(
+  options: FixedObjectPoolOptions<T>,
+): FixedObjectPool<T> {
+  const capacity = Math.max(1, Math.floor(options.peakCapacity));
+  const slots: T[] = new Array<T>(capacity);
+  const spawnedOnceSet = new Set<T>();
+
+  for (let i = 0; i < capacity; i++) {
+    const slot = options.createSlot(i);
+    slot.active = false;
+    options.deactivateSlot?.(slot);
+    slots[i] = slot;
+  }
+
+  let nextCursor = 0;
+  let activeCount = 0;
+  let peakActiveCount = 0;
+  let totalSpawns = 0;
+  let exhaustionWarnings = 0;
+
+  const warnFn =
+    options.onWarnExhausted ??
+    ((msg: string) => {
+      console.warn(msg);
+    });
+
+  return {
+    name: options.name,
+    capacity,
+    slots,
+    get activeCount() {
+      return activeCount;
+    },
+    get peakActiveCount() {
+      return peakActiveCount;
+    },
+    get totalSpawns() {
+      return totalSpawns;
+    },
+    get exhaustionWarnings() {
+      return exhaustionWarnings;
+    },
+    acquire(initOnSpawn?: (slot: T) => void): T | null {
+      for (let step = 0; step < capacity; step++) {
+        const idx = (nextCursor + step) % capacity;
+        const candidate = slots[idx];
+        if (!candidate.active) {
+          nextCursor = (idx + 1) % capacity;
+          candidate.active = true;
+          activeCount++;
+          totalSpawns++;
+          spawnedOnceSet.add(candidate);
+          if (activeCount > peakActiveCount) {
+            peakActiveCount = activeCount;
+          }
+          options.resetSlot?.(candidate);
+          initOnSpawn?.(candidate);
+          return candidate;
+        }
+      }
+
+      exhaustionWarnings++;
+      warnFn(
+        `[ObjectPool:${options.name}] Pool exhausted! All ${capacity} preallocated slots are active.`,
+        options.name,
+        capacity,
+      );
+      return null;
+    },
+    release(slot: T): void {
+      if (!slot.active) return;
+      slot.active = false;
+      activeCount = Math.max(0, activeCount - 1);
+      options.deactivateSlot?.(slot);
+    },
+    releaseAll(): void {
+      for (let i = 0; i < capacity; i++) {
+        const slot = slots[i];
+        if (slot.active) {
+          slot.active = false;
+          options.deactivateSlot?.(slot);
+        }
+      }
+      activeCount = 0;
+      nextCursor = 0;
+    },
+  };
+}
+
+export interface BulletLanePoolSimulationResult {
+  totalShots: number;
+  poolCapacity: number;
+  unpooledAllocations: number;
+  unpooledGarbageDiscarded: number;
+  unpooledGcPauseStalls: number;
+  pooledPreallocatedSlots: number;
+  pooledRuntimeAllocations: number;
+  pooledGarbageDiscarded: number;
+  pooledGcPauseStalls: number;
+  pooledUniqueSlotsUsed: number;
+  pooledRecycledSpawns: number;
+  pooledExhaustionWarnings: number;
+}
+
+/**
+ * Compares an unpooled bullet lane (allocating a new bullet every shot and discarding it on death,
+ * triggering GC pause stalls) against a pooled bullet lane that preallocates `poolCapacity` (default 14)
+ * slots once up front and recycles the exact same 14 slots with zero garbage collection stalls.
+ */
+export function simulatePooledVsUnpooledBulletLane(
+  totalShots = 140,
+  poolCapacity = DEFAULT_BULLET_LANE_POOL_SIZE,
+): BulletLanePoolSimulationResult {
+  interface SimBullet extends PooledSlot {
+    id: number;
+    x: number;
+    y: number;
+    z: number;
+    vx: number;
+    vy: number;
+    vz: number;
+    life: number;
+    damage: number;
+  }
+
+  let createdCount = 0;
+  const uniqueSlots = new Set<SimBullet>();
+  const pool = createFixedObjectPool<SimBullet>({
+    name: 'BulletLane14',
+    peakCapacity: poolCapacity,
+    createSlot: (index) => {
+      createdCount++;
+      return {
+        id: index,
+        active: false,
+        x: 0,
+        y: 0,
+        z: 0,
+        vx: 0,
+        vy: 0,
+        vz: 0,
+        life: 0,
+        damage: 0,
+      };
+    },
+    resetSlot: (slot) => {
+      slot.x = 0;
+      slot.y = 0;
+      slot.z = 0;
+      slot.vx = 0;
+      slot.vy = 0;
+      slot.vz = 0;
+      slot.life = 1.25;
+      slot.damage = 10;
+    },
+    deactivateSlot: (slot) => {
+      slot.life = 0;
+      slot.vx = 0;
+      slot.vy = 0;
+      slot.vz = 0;
+    },
+  });
+
+  const preallocatedAtStart = createdCount;
+  const inFlightQueue: SimBullet[] = [];
+
+  for (let shot = 0; shot < totalShots; shot++) {
+    // When in-flight bullets reach their range/lifetime limit, mark the oldest inactive on death
+    if (inFlightQueue.length >= poolCapacity) {
+      const expired = inFlightQueue.shift()!;
+      pool.release(expired);
+    }
+    const bullet = pool.acquire((b) => {
+      b.x = shot * 0.5;
+      b.vx = 42;
+      b.life = 1.25;
+      b.damage = 12;
+    });
+    if (bullet) {
+      uniqueSlots.add(bullet);
+      inFlightQueue.push(bullet);
+    }
+  }
+
+  while (inFlightQueue.length > 0) {
+    pool.release(inFlightQueue.shift()!);
+  }
+
+  return {
+    totalShots,
+    poolCapacity,
+    unpooledAllocations: totalShots,
+    unpooledGarbageDiscarded: totalShots,
+    unpooledGcPauseStalls: Math.max(1, Math.floor(totalShots / poolCapacity)),
+    pooledPreallocatedSlots: preallocatedAtStart,
+    pooledRuntimeAllocations: createdCount - preallocatedAtStart,
+    pooledGarbageDiscarded: 0,
+    pooledGcPauseStalls: 0,
+    pooledUniqueSlotsUsed: uniqueSlots.size,
+    pooledRecycledSpawns: Math.max(0, totalShots - uniqueSlots.size),
+    pooledExhaustionWarnings: pool.exhaustionWarnings,
+  };
+}
+
+export interface SolidCratePushResolution2D {
+  collided: boolean;
+  moverX: number;
+  moverZ: number;
+  moverVx: number;
+  moverVz: number;
+  crateX: number;
+  crateZ: number;
+  crateVx: number;
+  crateVz: number;
+  angularImpulse: number;
+  impactSpeed: number;
+  normalX: number;
+  normalZ: number;
+  scaleX: 1;
+  scaleY: 1;
+  scaleZ: 1;
+}
+
+/**
+ * Resolves a rigid 2D OBB (Oriented Bounding Box) solid-box collision when a character or vehicle
+ * pushes or bumps into a grounded crate.
+ * - Uses true square/box geometry (`crateHalfExtent`) in the crate's rotated frame (`crateRotY`)
+ *   so all 4 flat faces of the box feel solid and flat when pushed.
+ * - Enforces 100% rigid separation so the mover never clips inside the crate.
+ * - Computes lever-arm torque so pushing the center of a face slides the box straight without spinning,
+ *   while pushing a corner turns the box naturally.
+ * - Strictly preserves rigid scale `(1, 1, 1)` (never squashes or deforms like jelly).
+ */
+export function resolveSolidCratePush2D(
+  moverX: number,
+  moverZ: number,
+  moverVx: number,
+  moverVz: number,
+  moverRadius: number,
+  moverMass: number,
+  crateX: number,
+  crateZ: number,
+  crateVx: number,
+  crateVz: number,
+  crateRotY: number,
+  crateHalfExtent = 0.68,
+  crateMass = 1.85,
+  restitution = 0.22,
+): SolidCratePushResolution2D {
+  const dx = moverX - crateX;
+  const dz = moverZ - crateZ;
+
+  // Quick bounding-circle reject
+  const maxReach = moverRadius + crateHalfExtent * 1.45;
+  if (dx * dx + dz * dz >= maxReach * maxReach) {
+    return {
+      collided: false,
+      moverX,
+      moverZ,
+      moverVx,
+      moverVz,
+      crateX,
+      crateZ,
+      crateVx,
+      crateVz,
+      angularImpulse: 0,
+      impactSpeed: 0,
+      normalX: 0,
+      normalZ: 1,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+    };
+  }
+
+  const c = Math.cos(-crateRotY);
+  const s = Math.sin(-crateRotY);
+  const localX = dx * c - dz * s;
+  const localZ = dx * s + dz * c;
+
+  const clampedX = clamp(localX, -crateHalfExtent, crateHalfExtent);
+  const clampedZ = clamp(localZ, -crateHalfExtent, crateHalfExtent);
+  const diffX = localX - clampedX;
+  const diffZ = localZ - clampedZ;
+  const distSq = diffX * diffX + diffZ * diffZ;
+
+  if (distSq >= moverRadius * moverRadius) {
+    return {
+      collided: false,
+      moverX,
+      moverZ,
+      moverVx,
+      moverVz,
+      crateX,
+      crateZ,
+      crateVx,
+      crateVz,
+      angularImpulse: 0,
+      impactSpeed: 0,
+      normalX: 0,
+      normalZ: 1,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+    };
+  }
+
+  // Compute outward normal from crate -> mover in crate local space, then flip to point mover -> crate
+  let localNx = 0;
+  let localNz = 1;
+  let overlap = 0;
+
+  if (distSq > 1e-6) {
+    const dist = Math.sqrt(distSq);
+    // Push direction from mover toward crate is (-diffX / dist, -diffZ / dist)
+    localNx = -diffX / dist;
+    localNz = -diffZ / dist;
+    overlap = moverRadius - dist + 0.006;
+  } else {
+    // Mover center penetrated inside the crate square: eject along nearest flat face
+    const penX = crateHalfExtent - Math.abs(localX);
+    const penZ = crateHalfExtent - Math.abs(localZ);
+    if (penX < penZ) {
+      localNx = localX >= 0 ? -1 : 1;
+      localNz = 0;
+      overlap = penX + moverRadius + 0.006;
+    } else {
+      localNx = 0;
+      localNz = localZ >= 0 ? -1 : 1;
+      overlap = penZ + moverRadius + 0.006;
+    }
+  }
+
+  // Rotate push normal (mover -> crate) back to world space
+  const cw = Math.cos(crateRotY);
+  const sw = Math.sin(crateRotY);
+  const pushNx = localNx * cw - localNz * sw;
+  const pushNz = localNx * sw + localNz * cw;
+
+  const safeMoverMass = Math.max(0.2, moverMass);
+  const safeCrateMass = Math.max(0.2, crateMass);
+  const totalMass = safeMoverMass + safeCrateMass;
+  // Heavy vehicles displace the crate almost 100%; characters share rigid separation so feet/hands never clip inside
+  const moverShare = moverMass >= 8 ? 0.08 : clamp(safeCrateMass / totalMass, 0.25, 0.48);
+  const crateShare = 1 - moverShare;
+
+  const nextMoverX = moverX - pushNx * overlap * moverShare;
+  const nextMoverZ = moverZ - pushNz * overlap * moverShare;
+  const nextCrateX = crateX + pushNx * overlap * crateShare;
+  const nextCrateZ = crateZ + pushNz * overlap * crateShare;
+
+  const relVx = moverVx - crateVx;
+  const relVz = moverVz - crateVz;
+  const closingSpeed = relVx * pushNx + relVz * pushNz;
+
+  // Lever arm in crate local space: pushing near the center of a face gives ~0 torque (slides straight!)
+  const leverArm = clampedX * localNz - clampedZ * localNx;
+  const torqueFactor = Math.abs(leverArm) < crateHalfExtent * 0.28 ? 0 : leverArm / crateHalfExtent;
+
+  if (closingSpeed <= 0) {
+    const steadyPushSpeed = Math.max(2.4, Math.hypot(moverVx, moverVz) * 0.88);
+    return {
+      collided: true,
+      moverX: nextMoverX,
+      moverZ: nextMoverZ,
+      moverVx,
+      moverVz,
+      crateX: nextCrateX,
+      crateZ: nextCrateZ,
+      crateVx: crateVx + pushNx * steadyPushSpeed,
+      crateVz: crateVz + pushNz * steadyPushSpeed,
+      angularImpulse: clamp(torqueFactor * steadyPushSpeed * 0.65, -3.5, 3.5),
+      impactSpeed: steadyPushSpeed,
+      normalX: pushNx,
+      normalZ: pushNz,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+    };
+  }
+
+  const e = clamp(restitution, 0.05, 0.6);
+  const impulseMag = ((1 + e) * closingSpeed) / (1 / safeMoverMass + 1 / safeCrateMass);
+  const pushBoost = moverMass >= 8 ? 1.35 : 1.15;
+  const nextCrateVx = crateVx + (impulseMag / safeCrateMass) * pushNx * pushBoost;
+  const nextCrateVz = crateVz + (impulseMag / safeCrateMass) * pushNz * pushBoost;
+  const moverDrag = moverMass >= 8 ? 0.12 : 0.42;
+  const nextMoverVx = moverVx - (impulseMag / safeMoverMass) * pushNx * moverDrag;
+  const nextMoverVz = moverVz - (impulseMag / safeMoverMass) * pushNz * moverDrag;
+
+  return {
+    collided: true,
+    moverX: nextMoverX,
+    moverZ: nextMoverZ,
+    moverVx: nextMoverVx,
+    moverVz: nextMoverVz,
+    crateX: nextCrateX,
+    crateZ: nextCrateZ,
+    crateVx: nextCrateVx,
+    crateVz: nextCrateVz,
+    angularImpulse: clamp(torqueFactor * closingSpeed * 0.55, -4.0, 4.0),
+    impactSpeed: closingSpeed,
+    normalX: pushNx,
+    normalZ: pushNz,
+    scaleX: 1,
+    scaleY: 1,
+    scaleZ: 1,
+  };
+}
+
+export interface CrateVsCrateResolution2D {
+  collided: boolean;
+  ax: number;
+  az: number;
+  avx: number;
+  avz: number;
+  bx: number;
+  bz: number;
+  bvx: number;
+  bvz: number;
+  impactSpeed: number;
+}
+
+/**
+ * Resolves rigid solid-box collision between two grounded crates when a thrown or pushed crate
+ * strikes another crate on the field, separating them without overlap and transferring momentum.
+ */
+export function resolveCrateVsCrateCollision2D(
+  ax: number,
+  az: number,
+  avx: number,
+  avz: number,
+  bx: number,
+  bz: number,
+  bvx: number,
+  bvz: number,
+  minDistance = 1.34,
+  restitution = 0.34,
+): CrateVsCrateResolution2D {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const distSq = dx * dx + dz * dz;
+  if (distSq >= minDistance * minDistance) {
+    return {
+      collided: false,
+      ax,
+      az,
+      avx,
+      avz,
+      bx,
+      bz,
+      bvx,
+      bvz,
+      impactSpeed: 0,
+    };
+  }
+
+  const dist = Math.sqrt(distSq);
+  const nx = dist > 1e-5 ? dx / dist : 1;
+  const nz = dist > 1e-5 ? dz / dist : 0;
+  const overlap = minDistance - dist + 0.005;
+
+  const nextAx = ax - nx * overlap * 0.5;
+  const nextAz = az - nz * overlap * 0.5;
+  const nextBx = bx + nx * overlap * 0.5;
+  const nextBz = bz + nz * overlap * 0.5;
+
+  const relVx = avx - bvx;
+  const relVz = avz - bvz;
+  const closingSpeed = relVx * nx + relVz * nz;
+
+  if (closingSpeed <= 0) {
+    return {
+      collided: true,
+      ax: nextAx,
+      az: nextAz,
+      avx,
+      avz,
+      bx: nextBx,
+      bz: nextBz,
+      bvx: bvx + nx * 1.2,
+      bvz: bvz + nz * 1.2,
+      impactSpeed: 1.2,
+    };
+  }
+
+  const e = clamp(restitution, 0.1, 0.8);
+  const j = 0.5 * (1 + e) * closingSpeed;
+
+  return {
+    collided: true,
+    ax: nextAx,
+    az: nextAz,
+    avx: avx - j * nx * 0.75,
+    avz: avz - j * nz * 0.75,
+    bx: nextBx,
+    bz: nextBz,
+    bvx: bvx + j * nx * 1.05,
+    bvz: bvz + j * nz * 1.05,
+    impactSpeed: closingSpeed,
+  };
+}
+
+// ============================================================================
+// MODERN URBAN STREET TRAM (100% LOW-FLOOR LRV — 1 RANGKAIAN 2 GERBONG)
+// Closed-LoopFilleted Road Track & Dual-Bogie Articulated Consist Kinematics
+// ============================================================================
+
+export interface CityTramCornerWaypoint {
+  x: number;
+  z: number;
+  filletRadius: number;
+}
+
+export interface CityTramTrackSample {
+  x: number;
+  z: number;
+  tangentX: number;
+  tangentZ: number;
+  yaw: number;
+  curvature: number;
+  distance: number;
+  totalTrackLength: number;
+}
+
+export interface CityTramCarPose {
+  x: number;
+  z: number;
+  yaw: number;
+  forwardX: number;
+  forwardZ: number;
+  frontBogieX: number;
+  frontBogieZ: number;
+  frontBogieYaw: number;
+  rearBogieX: number;
+  rearBogieZ: number;
+  rearBogieYaw: number;
+  frontCouplerX: number;
+  frontCouplerZ: number;
+  rearCouplerX: number;
+  rearCouplerZ: number;
+}
+
+export interface CityTramArticulationPose {
+  x: number;
+  z: number;
+  yaw: number;
+  articulationAngle: number;
+  spanLength: number;
+}
+
+export interface CityTramConsistState {
+  car1: CityTramCarPose;
+  car2: CityTramCarPose;
+  joint: CityTramArticulationPose;
+  leadDistance: number;
+  totalTrackLength: number;
+}
+
+/**
+ * Proportions of the Enlarged 2-Car Low-Floor Urban Street Tram (`1 rangkaian 2 gerbong`),
+ * scaled up 1.25x (4.42m roof height, 3.58m width, 9.00m car length, 19.50m total consist length)
+ * and paired with wide R=8.0m road curves so the 2-car consist turns smoothly without kinking ("tidak patah").
+ */
+export const CITY_TRAM_SPEC = {
+  carCount: 2,
+  carLength: 9.00,
+  carWidth: 3.58,
+  carHeight: 4.42,
+  carBogieSpan: 5.625,
+  jointLength: 1.50,
+  carCenterSpacing: 10.50, // carLength (9.00) + jointLength (1.50)
+  cruiseSpeed: 8.2,
+  railGauge: 1.80,
+} as const;
+
+const CITY_TRAM_CORNER_WAYPOINTS: readonly CityTramCornerWaypoint[] = [
+  { x: -70.0, z: -52.0, filletRadius: 8.0 }, // NW Highway-Collector Curve (exact R=8.0m road arc)
+  { x: 70.0, z: -52.0, filletRadius: 8.0 },  // NE Collector-East Highway Curve (exact R=8.0m road arc)
+  { x: 70.0, z: 52.0, filletRadius: 8.0 },   // SE East Highway-Collector Curve (exact R=8.0m road arc)
+  { x: -70.0, z: 52.0, filletRadius: 8.0 },  // SW Collector-Highway Curve (exact R=8.0m road arc)
+];
+
+export function getCityTramTrackWaypoints(): readonly CityTramCornerWaypoint[] {
+  return CITY_TRAM_CORNER_WAYPOINTS;
+}
+
+interface CompiledTramSegment {
+  kind: 'line' | 'arc';
+  startDist: number;
+  length: number;
+  // For 'line':
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+  ux: number;
+  uz: number;
+  // For 'arc':
+  cx: number;
+  cz: number;
+  radius: number;
+  startAngle: number;
+  deltaAngle: number; // signed angle sweep
+}
+
+let cachedTramTrack: {
+  segments: CompiledTramSegment[];
+  totalLength: number;
+} | null = null;
+
+function compileCityTramTrack(): {
+  segments: CompiledTramSegment[];
+  totalLength: number;
+} {
+  if (cachedTramTrack) return cachedTramTrack;
+
+  const pts = CITY_TRAM_CORNER_WAYPOINTS;
+  const n = pts.length;
+
+  interface CornerFilletGeom {
+    entryX: number;
+    entryZ: number;
+    exitX: number;
+    exitZ: number;
+    cx: number;
+    cz: number;
+    radius: number;
+    startAngle: number;
+    deltaAngle: number;
+    arcLength: number;
+  }
+
+  const fillets: CornerFilletGeom[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const prev = pts[(i - 1 + n) % n];
+    const curr = pts[i];
+    const next = pts[(i + 1) % n];
+
+    const inDx = curr.x - prev.x;
+    const inDz = curr.z - prev.z;
+    const inLen = Math.hypot(inDx, inDz);
+    const uInX = inDx / inLen;
+    const uInZ = inDz / inLen;
+
+    const outDx = next.x - curr.x;
+    const outDz = next.z - curr.z;
+    const outLen = Math.hypot(outDx, outDz);
+    const uOutX = outDx / outLen;
+    const uOutZ = outDz / outLen;
+
+    const dot = clamp(uInX * uOutX + uInZ * uOutZ, -0.9999, 0.9999);
+    const turnAngle = Math.acos(dot); // angle between incoming and outgoing tangent vectors
+    const r = curr.filletRadius;
+    const tanDist = r * Math.tan(turnAngle * 0.5);
+
+    const entryX = curr.x - uInX * tanDist;
+    const entryZ = curr.z - uInZ * tanDist;
+    const exitX = curr.x + uOutX * tanDist;
+    const exitZ = curr.z + uOutZ * tanDist;
+
+    // Cross product in XZ plane: cross > 0 means turning right (+Z from +X), cross < 0 means turning left
+    const cross = uInX * uOutZ - uInZ * uOutX;
+    const sign = cross >= 0 ? 1 : -1;
+
+    // Normal from entry point toward arc center (perpendicular to uIn in turn direction)
+    const nInX = -sign * uInZ;
+    const nInZ = sign * uInX;
+    const cx = entryX + nInX * r;
+    const cz = entryZ + nInZ * r;
+
+    const startAngle = Math.atan2(entryZ - cz, entryX - cx);
+    const deltaAngle = sign * turnAngle;
+    const arcLength = r * turnAngle;
+
+    fillets.push({
+      entryX,
+      entryZ,
+      exitX,
+      exitZ,
+      cx,
+      cz,
+      radius: r,
+      startAngle,
+      deltaAngle,
+      arcLength,
+    });
+  }
+
+  const segments: CompiledTramSegment[] = [];
+  let accumDist = 0;
+
+  for (let i = 0; i < n; i++) {
+    const prevFillet = fillets[(i - 1 + n) % n];
+    const currFillet = fillets[i];
+
+    // 1. Straight segment from prevFillet.exit to currFillet.entry
+    const dx = currFillet.entryX - prevFillet.exitX;
+    const dz = currFillet.entryZ - prevFillet.exitZ;
+    const lineLen = Math.hypot(dx, dz);
+    if (lineLen > 1e-4) {
+      segments.push({
+        kind: 'line',
+        startDist: accumDist,
+        length: lineLen,
+        x0: prevFillet.exitX,
+        z0: prevFillet.exitZ,
+        x1: currFillet.entryX,
+        z1: currFillet.entryZ,
+        ux: dx / lineLen,
+        uz: dz / lineLen,
+        cx: 0,
+        cz: 0,
+        radius: 0,
+        startAngle: 0,
+        deltaAngle: 0,
+      });
+      accumDist += lineLen;
+    }
+
+    // 2. Circular arc segment at corner i
+    if (currFillet.arcLength > 1e-4) {
+      segments.push({
+        kind: 'arc',
+        startDist: accumDist,
+        length: currFillet.arcLength,
+        x0: currFillet.entryX,
+        z0: currFillet.entryZ,
+        x1: currFillet.exitX,
+        z1: currFillet.exitZ,
+        ux: 0,
+        uz: 0,
+        cx: currFillet.cx,
+        cz: currFillet.cz,
+        radius: currFillet.radius,
+        startAngle: currFillet.startAngle,
+        deltaAngle: currFillet.deltaAngle,
+      });
+      accumDist += currFillet.arcLength;
+    }
+  }
+
+  cachedTramTrack = {
+    segments,
+    totalLength: accumDist,
+  };
+  return cachedTramTrack;
+}
+
+/**
+ * Samples the closed-loop filleted city tram track at any travel distance `distanceMeters` (wraps modulo loop length).
+ */
+export function sampleCityTramTrackAtDistance(distanceMeters: number): CityTramTrackSample {
+  const { segments, totalLength } = compileCityTramTrack();
+  let d = distanceMeters % totalLength;
+  if (d < 0) d += totalLength;
+
+  let seg = segments[segments.length - 1];
+  for (let i = 0; i < segments.length; i++) {
+    const candidate = segments[i];
+    if (d <= candidate.startDist + candidate.length || i === segments.length - 1) {
+      seg = candidate;
+      break;
+    }
+  }
+
+  const localS = clamp(d - seg.startDist, 0, seg.length);
+  if (seg.kind === 'line') {
+    const x = seg.x0 + seg.ux * localS;
+    const z = seg.z0 + seg.uz * localS;
+    const yaw = Math.atan2(-seg.uz, seg.ux);
+    return {
+      x,
+      z,
+      tangentX: seg.ux,
+      tangentZ: seg.uz,
+      yaw,
+      curvature: 0,
+      distance: d,
+      totalTrackLength: totalLength,
+    };
+  }
+
+  const t = seg.length > 1e-5 ? localS / seg.length : 0;
+  const angle = seg.startAngle + seg.deltaAngle * t;
+  const x = seg.cx + Math.cos(angle) * seg.radius;
+  const z = seg.cz + Math.sin(angle) * seg.radius;
+  const sign = seg.deltaAngle >= 0 ? 1 : -1;
+  const tangentX = -sign * Math.sin(angle);
+  const tangentZ = sign * Math.cos(angle);
+  const yaw = Math.atan2(-tangentZ, tangentX);
+
+  return {
+    x,
+    z,
+    tangentX,
+    tangentZ,
+    yaw,
+    curvature: sign / seg.radius,
+    distance: d,
+    totalTrackLength: totalLength,
+  };
+}
+
+function evaluateArticulatedTramCarPose(
+  coupledEndDist: number,
+  isFrontCar: boolean,
+): CityTramCarPose {
+  const carLen = CITY_TRAM_SPEC.carLength;
+  const halfCar = carLen * 0.5;
+  const scaleL = carLen / 7.20;
+  const endOverhang = 1.35 * scaleL; // Distance from outer nose/tail tip to outer bogie
+  const innerBogieOffset = 1.35 * scaleL; // Distance from coupled articulation end to inner bogie
+  const chordSpan = carLen - endOverhang; // Span from coupled end pin to outer bogie pin
+
+  // Pin the coupled articulation end AND the outer bogie directly on the smooth road curve!
+  // This guarantees zero lateral shear ("tidak patah") between Car 1, the Accordion Joint, and Car 2.
+  const coupledPin = sampleCityTramTrackAtDistance(coupledEndDist);
+  const outerBogieSample = sampleCityTramTrackAtDistance(
+    isFrontCar ? coupledEndDist + chordSpan : coupledEndDist - chordSpan,
+  );
+  const innerBogieSample = sampleCityTramTrackAtDistance(
+    isFrontCar ? coupledEndDist + innerBogieOffset : coupledEndDist - innerBogieOffset,
+  );
+
+  const dx = isFrontCar
+    ? outerBogieSample.x - coupledPin.x
+    : coupledPin.x - outerBogieSample.x;
+  const dz = isFrontCar
+    ? outerBogieSample.z - coupledPin.z
+    : coupledPin.z - outerBogieSample.z;
+  const len = Math.max(1e-5, Math.hypot(dx, dz));
+  const forwardX = dx / len;
+  const forwardZ = dz / len;
+  const yaw = Math.atan2(-forwardZ, forwardX);
+
+  const x = isFrontCar
+    ? coupledPin.x + forwardX * halfCar
+    : coupledPin.x - forwardX * halfCar;
+  const z = isFrontCar
+    ? coupledPin.z + forwardZ * halfCar
+    : coupledPin.z - forwardZ * halfCar;
+
+  const frontBogie = isFrontCar ? outerBogieSample : innerBogieSample;
+  const rearBogie = isFrontCar ? innerBogieSample : outerBogieSample;
+
+  return {
+    x,
+    z,
+    yaw,
+    forwardX,
+    forwardZ,
+    frontBogieX: frontBogie.x,
+    frontBogieZ: frontBogie.z,
+    frontBogieYaw: shortestAngleDelta(yaw, frontBogie.yaw),
+    rearBogieX: rearBogie.x,
+    rearBogieZ: rearBogie.z,
+    rearBogieYaw: shortestAngleDelta(yaw, rearBogie.yaw),
+    frontCouplerX: x + forwardX * halfCar,
+    frontCouplerZ: z + forwardZ * halfCar,
+    rearCouplerX: x - forwardX * halfCar,
+    rearCouplerZ: z - forwardZ * halfCar,
+  };
+}
+
+/**
+ * Evaluates the complete 2-Car Articulated City Tram (`1 rangkaian 2 gerbong`) pose at `leadDistanceMeters`:
+ * - Both `car1.rearCoupler` and `car2.frontCoupler` are pinned directly onto the smooth road curve at
+ *   `jointCenterDist ± jointLength * 0.5`, eliminating any lateral shear or kink ("tidak patah saat berbelok").
+ */
+export function evaluateCityTramConsistState(leadDistanceMeters: number): CityTramConsistState {
+  const { totalLength } = compileCityTramTrack();
+  const halfCar = CITY_TRAM_SPEC.carLength * 0.5;
+  const halfJoint = CITY_TRAM_SPEC.jointLength * 0.5;
+  const jointCenterDist = leadDistanceMeters - halfCar - halfJoint;
+
+  const car1 = evaluateArticulatedTramCarPose(jointCenterDist + halfJoint, true);
+  const car2 = evaluateArticulatedTramCarPose(jointCenterDist - halfJoint, false);
+  const jointCenter = sampleCityTramTrackAtDistance(jointCenterDist);
+
+  const jDx = car1.rearCouplerX - car2.frontCouplerX;
+  const jDz = car1.rearCouplerZ - car2.frontCouplerZ;
+  const spanLength = Math.hypot(jDx, jDz);
+  const articulationAngle = shortestAngleDelta(car2.yaw, car1.yaw);
+
+  let wrappedDist = leadDistanceMeters % totalLength;
+  if (wrappedDist < 0) wrappedDist += totalLength;
+
+  return {
+    car1,
+    car2,
+    joint: {
+      x: jointCenter.x,
+      z: jointCenter.z,
+      yaw: jointCenter.yaw,
+      articulationAngle,
+      spanLength,
+    },
+    leadDistance: wrappedDist,
+    totalTrackLength: totalLength,
+  };
+}
+
+// ============================================================================
+// 4v4 INDIVIDUAL BASE PROGRESSION (LV.1-3 BUILDING, LV.1-3 IRON FENCE,
+// BUILDABLE PARKING & HELIPAD) + MODULAR SKIN & GARDEN COSMETIC SYSTEM
+// ============================================================================
+
+export type BaseSkinThemeId = 'military_standard' | 'cyber_neon' | 'desert_ops' | 'royal_gold';
+export type BaseGardenPresetId = 'sakura_grove' | 'zen_rock' | 'golden_park' | 'tactical_plaza';
+
+export interface BaseSkinThemeSpec {
+  id: BaseSkinThemeId;
+  name: string;
+  wallPrimaryHex: string;
+  wallSecondaryHex: string;
+  roofHex: string;
+  fenceMetalHex: string;
+  fenceAccentHex: string;
+}
+
+export const BASE_SKIN_THEMES: Record<BaseSkinThemeId, BaseSkinThemeSpec> = {
+  military_standard: {
+    id: 'military_standard',
+    name: 'Military Olive Standard',
+    wallPrimaryHex: '#a49e7e',
+    wallSecondaryHex: '#78755a',
+    roofHex: '#6c7058',
+    fenceMetalHex: '#383d38',
+    fenceAccentHex: '#8f8b78',
+  },
+  cyber_neon: {
+    id: 'cyber_neon',
+    name: 'Cyber Neon Ops',
+    wallPrimaryHex: '#2b3548',
+    wallSecondaryHex: '#1e293b',
+    roofHex: '#0f172a',
+    fenceMetalHex: '#1e293b',
+    fenceAccentHex: '#00d2ff',
+  },
+  desert_ops: {
+    id: 'desert_ops',
+    name: 'Desert Storm Sand',
+    wallPrimaryHex: '#d4b886',
+    wallSecondaryHex: '#a68958',
+    roofHex: '#8c7248',
+    fenceMetalHex: '#5c4d38',
+    fenceAccentHex: '#e2c792',
+  },
+  royal_gold: {
+    id: 'royal_gold',
+    name: 'Royal Gold Commander',
+    wallPrimaryHex: '#f4f1e6',
+    wallSecondaryHex: '#d4a536',
+    roofHex: '#272a34',
+    fenceMetalHex: '#2c2f3a',
+    fenceAccentHex: '#f59e0b',
+  },
+};
+
+export const BASE_GARDEN_PRESETS: ReadonlyArray<{ id: BaseGardenPresetId; name: string }> = [
+  { id: 'sakura_grove', name: 'Taman Sakura Ungu' },
+  { id: 'zen_rock', name: 'Taman Batu Zen & Rumput' },
+  { id: 'golden_park', name: 'Taman Pohon Emas & Kursi' },
+  { id: 'tactical_plaza', name: 'Taman Minimalis Taktis' },
+];
+
+export const INDIVIDUAL_BASE_LEVEL_SPECS = {
+  /** 4 Individual Base Plots lined up along the complex avenue, separated by 3 Complex Roads at x = -30, 0, +30 */
+  basePlotCentersX: [-45.0, -15.0, 15.0, 45.0] as const,
+  complexDividerRoadX: [-30.0, 0.0, 30.0] as const,
+  blueBaseCenterZ: 80.0,
+  redBaseCenterZ: -80.0,
+  plotWidth: 21.0,
+  plotDepth: 34.0,
+  /** Main Building HP by Level (Lv.1 Field Barracks -> Lv.2 Command HQ -> Lv.3 Heavy Command Center) */
+  buildingMaxHpByLevel: [500, 1000, 1800] as const,
+  buildingNameByLevel: [
+    'Lv.1 Rumah Awal (Outpost)',
+    'Lv.2 Tactical Ops HQ',
+    'Lv.3 Command Center',
+  ] as const,
+  /** Iron Fence durability per segment & total perimeter durability by Level (Lv.1 -> Lv.2 -> Lv.3) */
+  fenceSegmentHpByLevel: [150, 350, 700] as const,
+  fenceTotalMaxHpByLevel: [600, 1400, 2800] as const,
+  fenceNameByLevel: [
+    'Lv.1 Pagar Besi Ringan',
+    'Lv.2 Pagar Baja Diperkuat',
+    'Lv.3 Pagar Lapis Bastion',
+  ] as const,
+  /** Highway asphalt color used inside every base plot ("gunakan warna aspal seperti di jalan raya") */
+  highwayAsphaltHex: '#7a8490',
+  highwayCurbHex: '#aba69c',
+} as const;
+
+export interface IndividualCommanderBaseState {
+  team: 'blue' | 'red';
+  commanderIdx: number;
+  plotCenterX: number;
+  plotCenterZ: number;
+  padX: number;
+  padZ: number;
+  buildingX: number;
+  buildingZ: number;
+  helipadX: number;
+  helipadZ: number;
+  parkingX: number;
+  parkingZ: number;
+  buildingLevel: 1 | 2 | 3;
+  buildingHp: number;
+  buildingMaxHp: number;
+  fenceLevel: 1 | 2 | 3;
+  fenceHp: number;
+  fenceMaxHp: number;
+  hasParkingBay: boolean;
+  hasHelipad: boolean;
+  hasSkyshield: boolean;
+  destroyed: boolean;
+  skinTheme: BaseSkinThemeId;
+  gardenPreset: BaseGardenPresetId;
+}
+
+export function createIndividualCommanderBasesState(
+  team: 'blue' | 'red',
+): IndividualCommanderBaseState[] {
+  const sign = team === 'blue' ? 1 : -1;
+  const centerZ = team === 'blue'
+    ? INDIVIDUAL_BASE_LEVEL_SPECS.blueBaseCenterZ
+    : INDIVIDUAL_BASE_LEVEL_SPECS.redBaseCenterZ;
+
+  return INDIVIDUAL_BASE_LEVEL_SPECS.basePlotCentersX.map((rawX, idx) => {
+    const plotCenterX = sign * rawX;
+    const plotCenterZ = centerZ;
+    return {
+      team,
+      commanderIdx: idx,
+      plotCenterX,
+      plotCenterZ,
+      // Compact 2x2 (4-column) Stacking Pad on the right bay (relZ = +5.8) of the plot
+      padX: plotCenterX + sign * 5.8,
+      padZ: plotCenterZ - sign * 4.2,
+      // Single Upgradeable Main Building at the rear-center of the plot
+      buildingX: plotCenterX,
+      buildingZ: plotCenterZ + sign * 8.2,
+      // Buildable Helipad on the left bay (relZ = -5.8) of the plot
+      helipadX: plotCenterX - sign * 5.8,
+      helipadZ: plotCenterZ - sign * 4.2,
+      // Buildable Vehicle Parking Bay in the center bay (relZ = 0.0, right beside Helipad)
+      parkingX: plotCenterX,
+      parkingZ: plotCenterZ - sign * 4.2,
+      buildingLevel: 1,
+      buildingHp: INDIVIDUAL_BASE_LEVEL_SPECS.buildingMaxHpByLevel[0],
+      buildingMaxHp: INDIVIDUAL_BASE_LEVEL_SPECS.buildingMaxHpByLevel[0],
+      fenceLevel: 1,
+      fenceHp: INDIVIDUAL_BASE_LEVEL_SPECS.fenceTotalMaxHpByLevel[0],
+      fenceMaxHp: INDIVIDUAL_BASE_LEVEL_SPECS.fenceTotalMaxHpByLevel[0],
+      hasParkingBay: false,
+      hasHelipad: false,
+      hasSkyshield: true,
+      destroyed: false,
+      skinTheme: 'military_standard',
+      gardenPreset: 'sakura_grove',
+    };
+  });
+}
+
+export function applyCommanderBaseUpgrade(
+  base: IndividualCommanderBaseState,
+  upgradeKind: 'upgrade_building' | 'upgrade_fence' | 'build_parking' | 'build_helipad',
+  crateCount: number,
+): { upgraded: boolean; message: string } {
+  if (base.destroyed || crateCount < 2) {
+    return { upgraded: false, message: 'Butuh minimal 2 Peti di Pad!' };
+  }
+
+  if (upgradeKind === 'upgrade_building') {
+    if (base.buildingLevel < 3) {
+      const nextLv = (base.buildingLevel + 1) as 2 | 3;
+      const nextMax = INDIVIDUAL_BASE_LEVEL_SPECS.buildingMaxHpByLevel[nextLv - 1];
+      base.buildingLevel = nextLv;
+      base.buildingMaxHp = nextMax;
+      base.buildingHp = nextMax;
+      return {
+        upgraded: true,
+        message: `${INDIVIDUAL_BASE_LEVEL_SPECS.buildingNameByLevel[nextLv - 1]} (${nextMax} HP)!`,
+      };
+    }
+    // Already Lv.3 -> Repair building HP to full
+    base.buildingHp = base.buildingMaxHp;
+    return { upgraded: true, message: 'Command Center Lv.3 Diperbaiki Penuh!' };
+  }
+
+  if (upgradeKind === 'upgrade_fence') {
+    if (base.fenceLevel < 3) {
+      const nextLv = (base.fenceLevel + 1) as 2 | 3;
+      const nextMax = INDIVIDUAL_BASE_LEVEL_SPECS.fenceTotalMaxHpByLevel[nextLv - 1];
+      base.fenceLevel = nextLv;
+      base.fenceMaxHp = nextMax;
+      base.fenceHp = nextMax;
+      return {
+        upgraded: true,
+        message: `${INDIVIDUAL_BASE_LEVEL_SPECS.fenceNameByLevel[nextLv - 1]} (${INDIVIDUAL_BASE_LEVEL_SPECS.fenceSegmentHpByLevel[nextLv - 1]} HP/Segmen)!`,
+      };
+    }
+    base.fenceHp = base.fenceMaxHp;
+    return { upgraded: true, message: 'Pagar Besi Lv.3 Diperbaiki Penuh!' };
+  }
+
+  if (upgradeKind === 'build_parking') {
+    base.hasParkingBay = true;
+    return { upgraded: true, message: 'Parkiran Kendaraan Selesai Dibangun!' };
+  }
+
+  if (upgradeKind === 'build_helipad') {
+    base.hasHelipad = true;
+    return { upgraded: true, message: 'Helipad (H) Selesai Dibangun!' };
+  }
+
+  return { upgraded: false, message: '' };
+}
+
+export function isTeamAllBasesDestroyed(bases: ReadonlyArray<IndividualCommanderBaseState>): boolean {
+  return bases.length > 0 && bases.every((b) => b.destroyed || b.buildingHp <= 0);
+}
+
+/**
+ * Checks whether a character at `(unitX, unitZ)` can board the City Tram at its current live position
+ * anywhere along the loop ("trem bisa di naiki di manapun dan turun di manapun").
+ * Evaluates OBB proximity to both Car 1 (`carIndex = 0`) and Car 2 (`carIndex = 1`).
+ */
+export function canUnitBoardCityTramAtAnyPoint(
+  unitX: number,
+  unitZ: number,
+  tramState: CityTramConsistState,
+  maxBoardMarginMeters = 2.8,
+): { canBoard: boolean; carIndex: 0 | 1; distanceMeters: number } {
+  const halfLen = CITY_TRAM_SPEC.carLength * 0.5;
+  const halfWid = CITY_TRAM_SPEC.carWidth * 0.5;
+  const cars: [CityTramCarPose, 0 | 1][] = [
+    [tramState.car1, 0],
+    [tramState.car2, 1],
+  ];
+
+  let bestCarIdx: 0 | 1 = 0;
+  let bestDist = Infinity;
+
+  for (const [car, idx] of cars) {
+    const dx = unitX - car.x;
+    const dz = unitZ - car.z;
+    const rightX = -car.forwardZ;
+    const rightZ = car.forwardX;
+    const localLong = Math.abs(dx * car.forwardX + dz * car.forwardZ);
+    const localLat = Math.abs(dx * rightX + dz * rightZ);
+    const exLong = Math.max(0, localLong - halfLen);
+    const exLat = Math.max(0, localLat - halfWid);
+    const obbDist = Math.hypot(exLong, exLat);
+    if (obbDist < bestDist) {
+      bestDist = obbDist;
+      bestCarIdx = idx;
+    }
+  }
+
+  return {
+    canBoard: bestDist <= maxBoardMarginMeters,
+    carIndex: bestCarIdx,
+    distanceMeters: bestDist,
+  };
+}
+
+/**
+ * Computes a clean roadside alighting/disembark coordinate beside the given tram car
+ * so the player can step off anywhere along the track without overlapping the tram hull.
+ */
+export function computeCityTramDisembarkPosition(
+  carPose: CityTramCarPose,
+  sideSign: -1 | 1 = 1,
+): { x: number; z: number; yaw: number } {
+  const rightX = -carPose.forwardZ;
+  const rightZ = carPose.forwardX;
+  const lateralOffset = CITY_TRAM_SPEC.carWidth * 0.5 + 1.25;
+  return {
+    x: carPose.x + rightX * (sideSign * lateralOffset),
+    z: carPose.z + rightZ * (sideSign * lateralOffset),
+    yaw: carPose.yaw,
+  };
+}
+
+/**
+ * Enforces per-plot Sliding Gate access control:
+ * ONLY the plot owner (`unitOwnerCommanderId === plotCommanderIdx`) and their built characters
+ * (`unitTeam === plotTeam && unitOwnerCommanderId === plotCommanderIdx`) can open and enter the gate!
+ */
+export function canUnitEnterCommanderBaseGate(
+  unitTeam: 'blue' | 'red',
+  unitOwnerCommanderId: number,
+  plotTeam: 'blue' | 'red',
+  plotCommanderIdx: number,
+): boolean {
+  return unitTeam === plotTeam && unitOwnerCommanderId === plotCommanderIdx;
+}
+
+/**
+ * Steps the smooth horizontal sliding gate animation (`slideRatio` in `[0, 1]`) for a single base plot:
+ * - Slides open (`1.0`) when an authorized unit (owner or owner's built character) is within `triggerRadiusMeters`.
+ * - Slides closed (`0.0`) when no authorized unit is within `triggerRadiusMeters`.
+ */
+export function stepCommanderSlidingGate(
+  currentSlideRatio: number,
+  minAuthorizedUnitDistanceMeters: number,
+  dt: number,
+  triggerRadiusMeters = 7.5,
+): { slideRatio: number; isOpen: boolean } {
+  const safeDt = Math.max(0, Math.min(0.1, dt));
+  const shouldOpen = minAuthorizedUnitDistanceMeters <= triggerRadiusMeters;
+  const speed = shouldOpen ? 3.2 : 2.6;
+  const nextRatio = shouldOpen
+    ? Math.min(1.0, currentSlideRatio + speed * safeDt)
+    : Math.max(0.0, currentSlideRatio - speed * safeDt);
+  return {
+    slideRatio: nextRatio,
+    isOpen: shouldOpen,
+  };
+}
+
+// ============================================================================
+// TEAM BUDDIES (PS1) DEATH ITEM DROP, DESPAWN TIMER, MEDICAL CRATE & SPLASH VULNERABILITY
+// ============================================================================
+
+export type BuddyPrimaryWeaponId = 'unarmed' | 'pistol' | 'rifle' | 'rocket';
+export type BuddySecondaryItemId = 'none' | 'hand_grenade' | 'cluster_bomb' | 'land_mine';
+export type BuddyMissionItemId = 'none' | 'time_bomb' | 'team_flag' | 'bombball';
+export type WorldCrateKind = 'red' | 'super' | 'legend' | 'medical';
+
+export type TeamBuddiesDropItemKind =
+  | 'weapon'
+  | 'coin_gold'
+  | 'coin_silver'
+  | 'crate'
+  | 'secondary'
+  | 'mission_item'
+  | 'health'
+  | 'ammo'
+  | 'powerup';
+
+export interface BuddyDeathDropInputState {
+  weaponId: BuddyPrimaryWeaponId;
+  ammo: number;
+  carryingCrate: 'none' | WorldCrateKind;
+  secondaryItem?: BuddySecondaryItemId;
+  secondaryCount?: number;
+  missionItem?: BuddyMissionItemId;
+  isEnemyKill: boolean;
+  classId?: BuddyClassId;
+  killedByChainExplosion?: boolean;
+}
+
+export interface TeamBuddiesSpawnedDropSpec {
+  kind: TeamBuddiesDropItemKind;
+  label: string;
+  weaponId?: 'pistol' | 'rifle' | 'rocket';
+  remainingAmmo?: number;
+  crateKind?: WorldCrateKind;
+  secondaryId?: Exclude<BuddySecondaryItemId, 'none'>;
+  secondaryCount?: number;
+  missionItemId?: Exclude<BuddyMissionItemId, 'none'>;
+  scoreValue?: number;
+  offsetX: number;
+  offsetZ: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  despawnTimerSec: number;
+  hp: number;
+}
+
+export const TEAM_BUDDIES_WEAPON_DESPAWN_SEC = 12.0;
+export const TEAM_BUDDIES_DESPAWN_BLINK_WINDOW_SEC = 4.0;
+
+/**
+ * Pure Team Buddies (PS1) Battlefield Death Item Drop Evaluator:
+ * 1. Primary Weapon (`weapon`): Any held primary weapon (`pistol` / Uzi, `rifle` / Shotgun-AR, `rocket` / Bazooka-Supazooka)
+ *    bounces into the air (`vy = 6.8`) and falls to the ground retaining its exact `remainingAmmo` from right before death.
+ * 2. Coins (`coin_gold` / `coin_silver`): Killing an enemy character drops Gold and/or Silver coins that add score when collected.
+ * 3. Carried Overhead Crate (`crate`): Any crate carried overhead (`'red' | 'super' | 'legend' | 'medical'`) is thrown
+ *    onto the ground intact (`vy = 6.2`), UNLESS `killedByChainExplosion === true`.
+ * 4. Secondary Weapon / Grenade (`secondary`): Carried hand grenades (`hand_grenade`), cluster bombs (`cluster_bomb`),
+ *    or land mines (`land_mine`) drop intact to the ground.
+ * 5. Mission Object (`mission_item`): Carried mission objects (`time_bomb`, `team_flag`, `bombball`) drop intact to the ground.
+ * 6. NO Medkit Drop from Corpses: Dead characters NEVER drop a Health Pack / Medkit (`kind === 'health'`).
+ *    Medkits are ONLY obtained by destroying white medical crates with a red cross (`kind === 'medical'`).
+ */
+export function evaluateTeamBuddiesDeathDrops(
+  state: BuddyDeathDropInputState,
+): TeamBuddiesSpawnedDropSpec[] {
+  const drops: TeamBuddiesSpawnedDropSpec[] = [];
+
+  // 1. Primary Weapon (Senjata Utama): Drops if holding a weapon with remaining ammo > 0
+  if (state.weaponId !== 'unarmed' && state.ammo > 0) {
+    const remainingAmmo = Math.max(1, Math.floor(state.ammo));
+    const weaponNames: Record<'pistol' | 'rifle' | 'rocket', string> = {
+      pistol: 'Uzi / Pistol',
+      rifle: 'Shotgun / Assault Rifle',
+      rocket: 'Bazooka',
+    };
+    const angle = 0.35;
+    const speed = 3.2;
+    drops.push({
+      kind: 'weapon',
+      label: `${weaponNames[state.weaponId]} (${remainingAmmo} Ammo)`,
+      weaponId: state.weaponId,
+      remainingAmmo,
+      offsetX: Math.cos(angle) * 0.65,
+      offsetZ: Math.sin(angle) * 0.65,
+      vx: Math.cos(angle) * speed,
+      vy: 6.8,
+      vz: Math.sin(angle) * speed,
+      despawnTimerSec: TEAM_BUDDIES_WEAPON_DESPAWN_SEC,
+      hp: 18,
+    });
+  }
+
+  // 2. Coins / Money (Koin Emas / Perak) when killing an enemy character
+  if (state.isEnemyKill) {
+    const classTier = state.classId ? (BUDDY_CLASSES[state.classId]?.tier ?? 1) : 1;
+    const isElite =
+      classTier >= 2 ||
+      state.weaponId === 'rocket' ||
+      state.carryingCrate === 'super' ||
+      state.carryingCrate === 'legend';
+    const primaryCoinKind: 'coin_gold' | 'coin_silver' = isElite ? 'coin_gold' : 'coin_silver';
+    const primaryScore = isElite ? 250 : 100;
+    const coinAngle = 2.45;
+    const coinSpeed = 2.8;
+    drops.push({
+      kind: primaryCoinKind,
+      label: primaryCoinKind === 'coin_gold' ? 'Gold Coin +250 Pts' : 'Silver Coin +100 Pts',
+      scoreValue: primaryScore,
+      offsetX: Math.cos(coinAngle) * 0.6,
+      offsetZ: Math.sin(coinAngle) * 0.6,
+      vx: Math.cos(coinAngle) * coinSpeed,
+      vy: 6.4,
+      vz: Math.sin(coinAngle) * coinSpeed,
+      despawnTimerSec: TEAM_BUDDIES_WEAPON_DESPAWN_SEC,
+      hp: 15,
+    });
+
+    // Elite or armed enemies also scatter a bonus silver coin
+    if (isElite && state.weaponId !== 'unarmed') {
+      const bonusAngle = -2.1;
+      drops.push({
+        kind: 'coin_silver',
+        label: 'Silver Coin +100 Pts',
+        scoreValue: 100,
+        offsetX: Math.cos(bonusAngle) * 0.7,
+        offsetZ: Math.sin(bonusAngle) * 0.7,
+        vx: Math.cos(bonusAngle) * 2.5,
+        vy: 5.9,
+        vz: Math.sin(bonusAngle) * 2.5,
+        despawnTimerSec: TEAM_BUDDIES_WEAPON_DESPAWN_SEC,
+        hp: 15,
+      });
+    }
+  }
+
+  // 3. Carried Overhead Crate (Peti yang Sedang Diangkat di Atas Kepala)
+  // Intact unless destroyed by a follow-up/chain explosion (`killedByChainExplosion`)
+  if (state.carryingCrate && state.carryingCrate !== 'none' && !state.killedByChainExplosion) {
+    const crateLabels: Record<WorldCrateKind, string> = {
+      red: 'Peti Biasa (Kuning/Oranye)',
+      super: 'Peti Senjata Khusus (Biru)',
+      legend: 'Peti Super Weapon (Ungu)',
+      medical: 'Peti Medis Palang Merah (Putih)',
+    };
+    const crateAngle = -0.85;
+    drops.push({
+      kind: 'crate',
+      label: crateLabels[state.carryingCrate],
+      crateKind: state.carryingCrate,
+      offsetX: Math.cos(crateAngle) * 0.75,
+      offsetZ: Math.sin(crateAngle) * 0.75,
+      vx: Math.cos(crateAngle) * 2.6,
+      vy: 6.2,
+      vz: Math.sin(crateAngle) * 2.6,
+      despawnTimerSec: 0, // Crates persist on map until stacked or destroyed
+      hp: state.carryingCrate === 'legend' ? 45 : state.carryingCrate === 'super' ? 35 : 25,
+    });
+  }
+
+  // 4. Secondary Weapon / Grenade (Granat Tangan, Cluster Bomb, atau Ranjau)
+  const secItem = state.secondaryItem ?? 'none';
+  const secCount = state.secondaryCount ?? 0;
+  if (secItem !== 'none' && secCount > 0 && !state.killedByChainExplosion) {
+    const secLabels: Record<Exclude<BuddySecondaryItemId, 'none'>, string> = {
+      hand_grenade: 'Hand Grenade',
+      cluster_bomb: 'Cluster Bomb',
+      land_mine: 'Land Mine',
+    };
+    const secAngle = 1.45;
+    drops.push({
+      kind: 'secondary',
+      label: `${secLabels[secItem]} x${secCount}`,
+      secondaryId: secItem,
+      secondaryCount: secCount,
+      offsetX: Math.cos(secAngle) * 0.65,
+      offsetZ: Math.sin(secAngle) * 0.65,
+      vx: Math.cos(secAngle) * 3.0,
+      vy: 6.1,
+      vz: Math.sin(secAngle) * 3.0,
+      despawnTimerSec: TEAM_BUDDIES_WEAPON_DESPAWN_SEC,
+      hp: 14,
+    });
+  }
+
+  // 5. Mission Object (Bom Waktu, Bendera Capture, atau Bombball)
+  const missionObj = state.missionItem ?? 'none';
+  if (missionObj !== 'none') {
+    const missionLabels: Record<Exclude<BuddyMissionItemId, 'none'>, string> = {
+      time_bomb: 'Time Bomb',
+      team_flag: 'Capture Flag',
+      bombball: 'Bombball',
+    };
+    const mAngle = -1.55;
+    drops.push({
+      kind: 'mission_item',
+      label: missionLabels[missionObj],
+      missionItemId: missionObj,
+      offsetX: Math.cos(mAngle) * 0.7,
+      offsetZ: Math.sin(mAngle) * 0.7,
+      vx: Math.cos(mAngle) * 2.4,
+      vy: 6.5,
+      vz: Math.sin(mAngle) * 2.4,
+      despawnTimerSec: 0, // Mission objectives do not despawn automatically
+      hp: 40,
+    });
+  }
+
+  return drops;
+}
+
+export interface DroppedItemDespawnState {
+  expired: boolean;
+  isBlinking: boolean;
+  visible: boolean;
+}
+
+/**
+ * Evaluates the Team Buddies (PS1) despawn timer & rapid blinking warning for dropped weapons/items:
+ * - Before the final `blinkWindowSec` (default 4.0s), the item stays solidly visible (`isBlinking = false, visible = true`).
+ * - During the final `blinkWindowSec` (`0 < remainingSec <= blinkWindowSec`), `isBlinking = true` and `visible`
+ *   alternates rapidly (accelerating from 6 Hz to 14 Hz as `remainingSec` approaches 0).
+ * - Once `remainingSec <= 0`, `expired = true` and the item despawns (`visible = false`).
+ */
+export function evaluateDroppedItemDespawnState(
+  remainingSec: number,
+  totalDespawnSec = TEAM_BUDDIES_WEAPON_DESPAWN_SEC,
+  blinkWindowSec = TEAM_BUDDIES_DESPAWN_BLINK_WINDOW_SEC,
+): DroppedItemDespawnState {
+  if (totalDespawnSec <= 0) {
+    return { expired: false, isBlinking: false, visible: true };
+  }
+  if (remainingSec <= 0) {
+    return { expired: true, isBlinking: false, visible: false };
+  }
+  if (remainingSec > blinkWindowSec) {
+    return { expired: false, isBlinking: false, visible: true };
+  }
+
+  // Normalize urgency in [0..1] where 0 = start of blink window, 1 = about to vanish
+  const urgency = clamp(1 - remainingSec / Math.max(0.1, blinkWindowSec), 0, 1);
+  // Frequency ramps up from 6 Hz to 14 Hz as item nears despawn
+  const freqHz = 6 + urgency * 8;
+  const phase = Math.sin(remainingSec * freqHz * Math.PI * 2);
+  return {
+    expired: false,
+    isBlinking: true,
+    visible: phase >= 0,
+  };
+}
+
+/**
+ * Team Buddies (PS1) Crate Destruction / Open Drop Rule:
+ * - White Medical Crate (`crateKind === 'medical'`): Drops Health Pack / Medkit (`kind === 'health'`, `+35 HP`).
+ * - Purple Special Crate (`crateKind === 'legend'`): Falls in the middle of the map mid-game and IMMEDIATELY
+ *   yields a Mass-Destruction Super Weapon (`Nuclear Launcher / Airstrike Marker / Ion Cannon`, `dropKind === 'weapon'`) when opened!
+ * - Regular/Blue Crates (`'red' | 'super'`): Never drop a Medkit; scatter an ammo pack (`dropKind === 'ammo'`).
+ */
+export function evaluateCrateDestructionDrop(
+  crateKind: WorldCrateKind,
+): {
+  dropKind: 'health' | 'ammo' | 'weapon';
+  label: string;
+  healAmount: number;
+  weaponId?: 'pistol' | 'rifle' | 'rocket';
+  remainingAmmo?: number;
+  isPurpleSuperWeapon?: boolean;
+} {
+  if (crateKind === 'medical') {
+    return {
+      dropKind: 'health',
+      label: 'Medkit +35 HP',
+      healAmount: 35,
+    };
+  }
+  if (crateKind === 'legend') {
+    return {
+      dropKind: 'weapon',
+      label: 'Nuclear Launcher / Ion Cannon (Super Weapon)',
+      healAmount: 0,
+      weaponId: 'rocket',
+      remainingAmmo: 12,
+      isPurpleSuperWeapon: true,
+    };
+  }
+  return {
+    dropKind: 'ammo',
+    label: 'Ammo +15',
+    healAmount: 0,
+  };
+}
+
+export interface DroppedItemSplashDamageResult {
+  hit: boolean;
+  damage: number;
+  nextHp: number;
+  destroyed: boolean;
+  knockbackVx: number;
+  knockbackVz: number;
+}
+
+/**
+ * Evaluates follow-up area/splash damage (`serangan area / splash damage susulan`) from Bazooka rockets,
+ * Tank shells, Skyshield airbursts, or chain-exploding barrels/crates against dropped weapons, pickups, and crates.
+ * If `nextHp <= 0`, the dropped weapon or crate is blown apart (`destroyed = true`).
+ */
+export function evaluateSplashDamageOnDroppedItem(
+  itemX: number,
+  itemZ: number,
+  blastX: number,
+  blastZ: number,
+  blastRadius: number,
+  maxBlastDamage: number,
+  currentHp: number,
+): DroppedItemSplashDamageResult {
+  const dx = itemX - blastX;
+  const dz = itemZ - blastZ;
+  const dist = Math.hypot(dx, dz);
+  if (dist > blastRadius || blastRadius <= 0.01) {
+    return {
+      hit: false,
+      damage: 0,
+      nextHp: currentHp,
+      destroyed: false,
+      knockbackVx: 0,
+      knockbackVz: 0,
+    };
+  }
+
+  const falloff = clamp(1 - dist / blastRadius, 0.15, 1.0);
+  const damage = Math.max(1, Math.round(maxBlastDamage * falloff));
+  const nextHp = Math.max(0, currentHp - damage);
+  const nx = dist > 0.001 ? dx / dist : 1;
+  const nz = dist > 0.001 ? dz / dist : 0;
+  const impulse = (6.5 + 8.5 * falloff);
+
+  return {
+    hit: true,
+    damage,
+    nextHp,
+    destroyed: nextHp <= 0,
+    knockbackVx: nx * impulse,
+    knockbackVz: nz * impulse,
+  };
+}
+
+// ============================================================================
+// TEAM BUDDIES (PS1) STACKING PAD CRAFTED WEAPON LIFECYCLE:
+// 1. Physics Pop-out to Pad Border (`Terpental ke Sekitar Pad`)
+// 2. AI Auto-Loot & Tier Upgrade (`Diambil Otomatis oleh AI Tim`)
+// 3. No Team-Lock / Enemy Stealable (`Rentan Dicuri Lawan`)
+// 4. 15–20s Despawn Timer with Blink Warning (`Berkedip dan Menghilang`, Vehicles/Buddies Permanent)
+// 5. Splash Damage Destruction (`Hancur Terkena Serangan Area`)
+// ============================================================================
+
+export const TEAM_BUDDIES_CRAFTED_WEAPON_DESPAWN_SEC = 18.0; // Within the 15–20s Team Buddies window
+
+export interface StackingPadWeaponPopOutTrajectory {
+  startX: number;
+  startZ: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  landingX: number;
+  landingZ: number;
+  landingDistFromPadCenter: number;
+}
+
+/**
+ * Computes the Team Buddies Physics Pop-out trajectory (`Terpental ke Sekitar Pad`) when crates are broken
+ * on a 2x2x2 Stacking Pad centered at `(padX, padZ)`:
+ * - The crafted weapon (or leftover weapon drop) does NOT stay in the middle of the Stacking Pad.
+ * - Instead, it launches from near the pad center (`r0 = 0.75m`) with an upward arc (`vy = 6.2 m/s`)
+ *   and horizontal velocity (`~4.8 m/s`) so that it lands right around the Stacking Pad perimeter border
+ *   (`landingDistFromPadCenter` in `[2.4m .. 3.4m]`), leaving the 2x2 pad surface (`[-1.62..+1.62]`) clear
+ *   for immediate crate re-stacking!
+ */
+export function computeStackingPadWeaponPopOutTrajectory(
+  padX: number,
+  padZ: number,
+  dropIndex = 0,
+  totalDrops = 1,
+  frontSign: 1 | -1 = 1,
+): StackingPadWeaponPopOutTrajectory {
+  // Spread multiple drops evenly around the front/side perimeter of the pad
+  const baseAngle = frontSign === 1 ? -Math.PI * 0.32 : Math.PI * 0.68;
+  const spreadStep = totalDrops > 1 ? (Math.PI * 1.35) / totalDrops : 0;
+  const angle = baseAngle + dropIndex * spreadStep;
+
+  const startRadius = 0.75;
+  const startX = padX + Math.cos(angle) * startRadius;
+  const startZ = padZ + Math.sin(angle) * startRadius;
+
+  // Under gravity = 22 m/s² andvy = 6.2 m/s, first-bounce flight time is ~0.56s;
+  // with horizontal speed = 4.6 m/s + brief ground slide, it settles at ~2.85m from pad center (right outside the 1.62m pad edge).
+  const horizSpeed = 4.6;
+  const vx = Math.cos(angle) * horizSpeed;
+  const vz = Math.sin(angle) * horizSpeed;
+  const vy = 6.2;
+
+  const effectiveTravelDist = 2.1; // startRadius (0.75) + 2.1 = 2.85m from pad center
+  const landingX = padX + Math.cos(angle) * (startRadius + effectiveTravelDist);
+  const landingZ = padZ + Math.sin(angle) * (startRadius + effectiveTravelDist);
+  const landingDistFromPadCenter = Math.hypot(landingX - padX, landingZ - padZ);
+
+  return {
+    startX,
+    startZ,
+    vx,
+    vy,
+    vz,
+    landingX,
+    landingZ,
+    landingDistFromPadCenter,
+  };
+}
+
+/**
+ * Returns the numeric tier rank (`0..4`) of a character's held weapon or a ground weapon pickup:
+ * - `0`: `'unarmed'` (Belum memegang senjata)
+ * - `1`: Tier 1 Light Weapon (`'pistol'`, Uzi, Shotgun, Pistol, Flamethrower Kecil)
+ * - `2`: Tier 1 Super / Tier 2 Medium Rifle (`'rifle'`, Super Shotgun, Plasma Gun, Assault Rifle, Sniper)
+ * - `3`: Tier 2/3 Heavy Explosive (`'rocket'` / `'bazooka'`, Bazooka, Laser Gun, Gatling, Homing Missile, Mortar)
+ * - `4`: Purple Special Mass-Destruction Super Weapon (`Nuclear Launcher`, `Ion Cannon`, `Airstrike Marker`, `Supazooka`)
+ */
+export function getBuddyWeaponTierRank(
+  weaponId: 'unarmed' | 'pistol' | 'rifle' | 'rocket' | 'bazooka',
+  weaponName = '',
+): number {
+  if (weaponId === 'unarmed') return 0;
+  const upper = weaponName.toUpperCase();
+  if (
+    upper.includes('NUCLEAR') ||
+    upper.includes('ION CANNON') ||
+    upper.includes('AIRSTRIKE') ||
+    upper.includes('SUPAZOOKA') ||
+    upper.includes('SUPER WEAPON')
+  ) {
+    return 4;
+  }
+  if (
+    weaponId === 'rocket' ||
+    weaponId === 'bazooka' ||
+    upper.includes('BAZOOKA') ||
+    upper.includes('HOMING') ||
+    upper.includes('GATLING') ||
+    upper.includes('MORTAR') ||
+    upper.includes('LASER GUN')
+  ) {
+    return 3;
+  }
+  if (
+    weaponId === 'rifle' ||
+    upper.includes('SUPER SHOTGUN') ||
+    upper.includes('PLASMA') ||
+    upper.includes('ASSAULT') ||
+    upper.includes('SNIPER')
+  ) {
+    return 2;
+  }
+  return 1;
+}
+
+/**
+ * Evaluates Team Buddies Ground Weapon Auto-Loot (`Diambil Otomatis oleh AI Tim`) and
+ * No Team-Lock / Enemy Stealing (`Rentan Dicuri Lawan`):
+ * - Ground weapons have NO `teamLock` (`unitTeam` can be `'blue'` or `'red'` regardless of who built the weapon!).
+ * - A unit (Friendly AI Buddy OR infiltrating Enemy Unit) will pick up the ground weapon if:
+ *   1. They are currently unarmed (`currentTier === 0`), OR
+ *   2. The weapon on the ground has a strictly higher tier than their current weapon (`groundTier > currentTier`), OR
+ *   3. They hold the same tier weapon and are critically low on ammo (`unitAmmo < 25`).
+ */
+export function canUnitLootGroundWeapon(
+  _unitTeam: 'blue' | 'red',
+  unitWeaponId: 'unarmed' | 'pistol' | 'rifle' | 'rocket' | 'bazooka',
+  unitWeaponName: string,
+  groundWeaponId: 'pistol' | 'rifle' | 'rocket' | 'bazooka',
+  groundWeaponName: string,
+  unitAmmo = 100,
+): {
+  canLoot: boolean;
+  isUpgrade: boolean;
+  teamLocked: false;
+  currentTier: number;
+  groundTier: number;
+} {
+  const currentTier = getBuddyWeaponTierRank(unitWeaponId, unitWeaponName);
+  const groundTier = getBuddyWeaponTierRank(groundWeaponId, groundWeaponName);
+  const isUpgrade = groundTier > currentTier;
+  const lowAmmoSameTier = groundTier === currentTier && unitAmmo < 25;
+  return {
+    canLoot: currentTier === 0 || isUpgrade || lowAmmoSameTier,
+    isUpgrade,
+    teamLocked: false,
+    currentTier,
+    groundTier,
+  };
+}
+
+/**
+ * Team Buddies Despawn Rule Comparison:
+ * - Crafted/dropped weapons & grenades (`'weapon' | 'grenade'`) have a 15–20s despawn timer (`TEAM_BUDDIES_CRAFTED_WEAPON_DESPAWN_SEC = 18.0s`),
+ *   blink rapidly at the end, and vanish permanently if uncollected (wasting the crates used).
+ * - Built Vehicles (`'light_vehicle' | 'truck' | 'tank' | 'plane'`) and built Buddy Units (`'buddy'`) NEVER despawn by time (`despawnTimerSec === 0`),
+ *   and are only destroyed when attacked until `hp <= 0`.
+ */
+export function doesCraftedEntityDespawnByTimer(
+  spawnType: PadEvaluationResult['spawnType'],
+): { despawnsByTime: boolean; despawnTimerSec: number } {
+  if (spawnType === 'weapon' || spawnType === 'grenade') {
+    return {
+      despawnsByTime: true,
+      despawnTimerSec: TEAM_BUDDIES_CRAFTED_WEAPON_DESPAWN_SEC,
+    };
+  }
+  return {
+    despawnsByTime: false,
+    despawnTimerSec: 0,
+  };
+}
+
+// ============================================================================
+// TEAM BUDDIES (PS1) DEATHMATCH (SKIRMISH / STANDAR) WIN CONDITIONS:
+// 1. Menghancurkan markas utama musuh (Base/HQ atau gerbang spawn mereka) hingga rata dengan tanah
+// 2. Menghabisi seluruh anggota tim lawan sampai mereka tidak bisa melakukan respawn lagi
+//    dan tidak punya peti untuk melahirkan Buddy baru di Stacking Pad
+// ============================================================================
+
+export type DeathmatchVictoryReason =
+  | 'none'
+  | 'base_destroyed'
+  | 'squad_wiped_no_respawn_or_crates';
+
+export interface TeamBuddiesDeathmatchTeamState {
+  team: 'blue' | 'red';
+  baseHp: number;
+  commanderBases: ReadonlyArray<{ destroyed: boolean; buildingHp: number }>;
+  aliveUnitCount: number;
+  respawnableUnitCount: number;
+  padSlotsList: ReadonlyArray<ReadonlyArray<CrateSlotType>>;
+  freeFieldCrateCount: number;
+}
+
+export interface TeamBuddiesDeathmatchResult {
+  isGameOver: boolean;
+  outcome: 'victory' | 'defeat' | null;
+  winningTeam: 'blue' | 'red' | null;
+  reason: DeathmatchVictoryReason;
+  reasonLabel: string;
+}
+
+/**
+ * Evaluates whether a dead unit (`!b.alive`) is allowed to respawn at its Commander's Base/Spawn Gate:
+ * - Extra AI Buddies crafted from Stacking Pad crates (`isStarterCommanderUnit === false`) NEVER respawn automatically when killed;
+ *   a new Buddy must be crafted again on the Stacking Pad (`1x1x2` or `2x1x2` vertical crates).
+ * - A Commander's primary starter unit (`isStarterCommanderUnit === true`) can respawn ONLY while their
+ *   Command Center / Spawn Gate (`!commanderBaseDestroyed && commanderBuildingHp > 0`) has not been flattened!
+ */
+export function canBuddyUnitRespawnAtBase(
+  isStarterCommanderUnit: boolean,
+  commanderBaseDestroyed: boolean,
+  commanderBuildingHp: number,
+): boolean {
+  if (!isStarterCommanderUnit) return false;
+  if (commanderBaseDestroyed || commanderBuildingHp <= 0) return false;
+  return true;
+}
+
+/**
+ * Checks whether a Stacking Pad (`slots`) currently holds enough crates to birth a new Buddy (`1x1x2` or `2x1x2` vertical stack,
+ * or at least 2 crates that can be struck into a Buddy).
+ */
+export function canPadSlotsBirthNewBuddy(slots: ReadonlyArray<CrateSlotType>): boolean {
+  const padEval = evaluateStackingPadRecipe(slots);
+  return padEval.spawnType === 'buddy' || padEval.totalCrates >= 2;
+}
+
+/**
+ * Evaluates whether a team in Team Buddies Deathmatch (Skirmish / Standar) has been completely eliminated:
+ * - Condition A (`'base_destroyed'`): Their Main Base / HQ (`baseHp <= 0`) or all 4 Commander Bases/Spawn Gates
+ *   (`commanderBases.every(b => b.destroyed || b.buildingHp <= 0)`) are flattened to the ground (`rata dengan tanah`).
+ * - Condition B (`'squad_wiped_no_respawn_or_crates'`): Every member of the team has been killed (`aliveUnitCount <= 0`),
+ *   none of them can respawn anymore (`respawnableUnitCount <= 0`), AND they cannot birth a new Buddy from crates
+ *   (either they have no pad with >=2 crates OR no surviving unit left to strike the pad / harvest crates).
+ */
+export function isTeamEliminatedInDeathmatch(
+  teamState: TeamBuddiesDeathmatchTeamState,
+): { eliminated: boolean; reason: DeathmatchVictoryReason } {
+  const allPlotsDestroyed =
+    teamState.commanderBases.length > 0 &&
+    teamState.commanderBases.every((b) => b.destroyed || b.buildingHp <= 0);
+
+  if (teamState.baseHp <= 0 || allPlotsDestroyed) {
+    return {
+      eliminated: true,
+      reason: 'base_destroyed',
+    };
+  }
+
+  const anyPadHasBuddyCrates = teamState.padSlotsList.some((slots) => canPadSlotsBirthNewBuddy(slots));
+  const canBirthNewBuddy =
+    teamState.aliveUnitCount > 0 && (anyPadHasBuddyCrates || teamState.freeFieldCrateCount >= 2);
+
+  if (teamState.aliveUnitCount <= 0 && teamState.respawnableUnitCount <= 0 && !canBirthNewBuddy) {
+    return {
+      eliminated: true,
+      reason: 'squad_wiped_no_respawn_or_crates',
+    };
+  }
+
+  return {
+    eliminated: false,
+    reason: 'none',
+  };
+}
+
+/**
+ * Evaluates the full Team Buddies (PS1) Deathmatch (Skirmish / Standar) Win/Defeat Condition
+ * from the perspective of the Blue Team (Player's team) vs Red Team (Enemy team).
+ */
+export function evaluateTeamBuddiesDeathmatchWinCondition(
+  blueState: TeamBuddiesDeathmatchTeamState,
+  redState: TeamBuddiesDeathmatchTeamState,
+): TeamBuddiesDeathmatchResult {
+  const redCheck = isTeamEliminatedInDeathmatch(redState);
+  if (redCheck.eliminated) {
+    return {
+      isGameOver: true,
+      outcome: 'victory',
+      winningTeam: 'blue',
+      reason: redCheck.reason,
+      reasonLabel:
+        redCheck.reason === 'base_destroyed'
+          ? 'MARKAS UTAMA MUSUH RATA DENGAN TANAH!'
+          : 'SELURUH PASUKAN LAWAN HABIS & TIDAK BISA MELAHIRKAN BUDDY BARU!',
+    };
+  }
+
+  const blueCheck = isTeamEliminatedInDeathmatch(blueState);
+  if (blueCheck.eliminated) {
+    return {
+      isGameOver: true,
+      outcome: 'defeat',
+      winningTeam: 'red',
+      reason: blueCheck.reason,
+      reasonLabel:
+        blueCheck.reason === 'base_destroyed'
+          ? 'MARKAS UTAMA TIM BIRU HANCUR RATA DENGAN TANAH!'
+          : 'SELURUH PASUKAN TIM BIRU GUGUR & TIDAK BISA RESPAWN LAGI!',
+    };
+  }
+
+  return {
+    isGameOver: false,
+    outcome: null,
+    winningTeam: null,
+    reason: 'none',
+    reasonLabel: '',
+  };
+}
+
+// ============================================================================
+// SELF-SERVICE TACTICAL KIOSK (1:1 KAI INDUSTRIAL MODEL SHEET NEXT TO PAD):
+// - Build Priority Selector -> Multi-Color 2x2x2 Hologram on Crate Stacking Pad
+// - Base Upgrade (Command Center + Iron Fence + Parking + Helipad) with Warzone Gold
+// - Buy Crates by Rarity with Warzone Gold -> Parachute Airdrop From Above Pad
+// ============================================================================
+
+export type KioskBuildPriorityCategory =
+  | 'weapons_light'
+  | 'weapons_heavy'
+  | 'buddy_units'
+  | 'vehicles_aircraft';
+
+export type KioskBuildPriorityRecipeId =
+  | 'pistol_uzi'
+  | 'assault_plasma'
+  | 'supazooka'
+  | 'bazooka'
+  | 'laser_gun'
+  | 'skyshield_turret'
+  | 'gatling_mortar'
+  | 'buddy_infantry'
+  | 'buddy_commando'
+  | 'buddy_ninja'
+  | 'buddy_super_wall'
+  | 'dump_truck'
+  | 'mini_tank'
+  | 'lyo_tank'
+  | 'tyrant_tank'
+  | 'lyo_plane';
+
+export type PadSlotHologramPattern = readonly [
+  CrateSlotType,
+  CrateSlotType,
+  CrateSlotType,
+  CrateSlotType,
+  CrateSlotType,
+  CrateSlotType,
+  CrateSlotType,
+  CrateSlotType,
+];
+
+export interface KioskBuildPriorityRecipeSpec {
+  id: KioskBuildPriorityRecipeId;
+  category: KioskBuildPriorityCategory;
+  name: string;
+  caliberOrSpec: string;
+  recipeSummary: string;
+  buildOrder: BuildOrderTarget;
+  targetCrates: number;
+  /** Exact 8-slot (bottom 0..3, top 4..7) color combination for the 3D Crate Pad Hologram */
+  slotHologramColors: PadSlotHologramPattern;
+  iconKind: 'pistol' | 'rifle' | 'bazooka' | 'turret' | 'buddy' | 'truck' | 'tank' | 'plane';
+}
+
+export const KIOSK_BUILD_PRIORITY_RECIPES: Record<
+  KioskBuildPriorityRecipeId,
+  KioskBuildPriorityRecipeSpec
+> = {
+  pistol_uzi: {
+    id: 'pistol_uzi',
+    category: 'weapons_light',
+    name: 'UZI / PISTOL T1',
+    caliberOrSpec: '9x19mm · Tier 1 Standard',
+    recipeSummary: '1x1x1 · 1 Peti Merah (Common)',
+    buildOrder: '1x1x1',
+    targetCrates: 1,
+    slotHologramColors: ['red', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
+    iconKind: 'pistol',
+  },
+  assault_plasma: {
+    id: 'assault_plasma',
+    category: 'weapons_light',
+    name: 'SUPER SHOTGUN / RIFLE',
+    caliberOrSpec: '5.56x45mm · Spread & Bounce',
+    recipeSummary: '1x1x1 · 1 Peti Biru (Rare)',
+    buildOrder: '1x1x1',
+    targetCrates: 1,
+    slotHologramColors: ['super', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
+    iconKind: 'rifle',
+  },
+  supazooka: {
+    id: 'supazooka',
+    category: 'weapons_light',
+    name: 'SUPAZOOKA / NUCLEAR',
+    caliberOrSpec: '84mm Heavy · Super Weapon',
+    recipeSummary: '1x1x1 · 1 Peti Emas (Legend)',
+    buildOrder: '1x1x1',
+    targetCrates: 1,
+    slotHologramColors: ['legend', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
+    iconKind: 'bazooka',
+  },
+  bazooka: {
+    id: 'bazooka',
+    category: 'weapons_light',
+    name: 'BAZOOKA / SNIPER T2',
+    caliberOrSpec: '66mm Anti-Armor · Tier 2',
+    recipeSummary: '2x1x1 · 2 Peti Merah (Common)',
+    buildOrder: '2x1x1',
+    targetCrates: 2,
+    slotHologramColors: ['red', 'red', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
+    iconKind: 'bazooka',
+  },
+  laser_gun: {
+    id: 'laser_gun',
+    category: 'weapons_light',
+    name: 'LASER GUN / RAILGUN',
+    caliberOrSpec: 'Directed Energy · Tier 2 Super',
+    recipeSummary: '2x1x1 · 1 Biru + 1 Merah',
+    buildOrder: '2x1x1',
+    targetCrates: 2,
+    slotHologramColors: ['super', 'red', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
+    iconKind: 'rifle',
+  },
+  skyshield_turret: {
+    id: 'skyshield_turret',
+    category: 'weapons_heavy',
+    name: 'SKYSHIELD 35MM TURRET',
+    caliberOrSpec: '35x228mm AHEAD · Pertahanan Base',
+    recipeSummary: '2x1x1 · 2 Peti Biru (Rare)',
+    buildOrder: '2x1x1',
+    targetCrates: 2,
+    slotHologramColors: ['super', 'super', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
+    iconKind: 'turret',
+  },
+  gatling_mortar: {
+    id: 'gatling_mortar',
+    category: 'weapons_heavy',
+    name: 'GATLING / HOMING MORTAR',
+    caliberOrSpec: '7.62x51mm Rotary · Tier 3 Berat',
+    recipeSummary: '2x2x1 · 2 Biru + 2 Merah',
+    buildOrder: '2x2x1',
+    targetCrates: 4,
+    slotHologramColors: ['super', 'super', 'red', 'red', 'empty', 'empty', 'empty', 'empty'],
+    iconKind: 'turret',
+  },
+  buddy_infantry: {
+    id: 'buddy_infantry',
+    category: 'buddy_units',
+    name: 'BUDDY INFANTRY / MEDIC',
+    caliberOrSpec: 'Unit Pasukan Reguler · 1x HP',
+    recipeSummary: '1x1x2 Tiang · 2 Peti Merah',
+    buildOrder: '1x1x2',
+    targetCrates: 2,
+    slotHologramColors: ['red', 'empty', 'empty', 'empty', 'red', 'empty', 'empty', 'empty'],
+    iconKind: 'buddy',
+  },
+  buddy_commando: {
+    id: 'buddy_commando',
+    category: 'buddy_units',
+    name: 'SUPER BUDDY COMMANDO',
+    caliberOrSpec: '2x HP & 2x Lari · Robo-Buddy',
+    recipeSummary: '1x1x2 Tiang · 1 Biru + 1 Merah',
+    buildOrder: '1x1x2',
+    targetCrates: 2,
+    slotHologramColors: ['super', 'empty', 'empty', 'empty', 'red', 'empty', 'empty', 'empty'],
+    iconKind: 'buddy',
+  },
+  buddy_ninja: {
+    id: 'buddy_ninja',
+    category: 'buddy_units',
+    name: 'NINJA / CYBORG ELITE',
+    caliberOrSpec: 'Katana Slicer · Anti-Tank Fist',
+    recipeSummary: '1x1x2 Tiang · 1 Emas + 1 Biru',
+    buildOrder: '1x1x2',
+    targetCrates: 2,
+    slotHologramColors: ['legend', 'empty', 'empty', 'empty', 'super', 'empty', 'empty', 'empty'],
+    iconKind: 'buddy',
+  },
+  buddy_super_wall: {
+    id: 'buddy_super_wall',
+    category: 'buddy_units',
+    name: 'SUPER BUDDIE (FLIGHT)',
+    caliberOrSpec: '260 HP · Terbang + Laser Eyes',
+    recipeSummary: '2x1x2 Dinding · 2 Biru + 2 Merah',
+    buildOrder: '2x1x2',
+    targetCrates: 4,
+    slotHologramColors: ['red', 'red', 'empty', 'empty', 'super', 'super', 'empty', 'empty'],
+    iconKind: 'buddy',
+  },
+  dump_truck: {
+    id: 'dump_truck',
+    category: 'vehicles_aircraft',
+    name: 'DUMP TRUCK HIDROLIK',
+    caliberOrSpec: 'Kapasitas 4 Peti · Unload Cepat',
+    recipeSummary: '2x2x1 Lantai · 4 Peti Merah',
+    buildOrder: '2x2x1',
+    targetCrates: 4,
+    slotHologramColors: ['red', 'red', 'red', 'red', 'empty', 'empty', 'empty', 'empty'],
+    iconKind: 'truck',
+  },
+  mini_tank: {
+    id: 'mini_tank',
+    category: 'vehicles_aircraft',
+    name: 'MINI-TANK / WALKER',
+    caliberOrSpec: '1 Kursi Cepat · Meriam Ringan',
+    recipeSummary: '2x1x2 Dinding · 4 Peti Merah',
+    buildOrder: '2x1x2',
+    targetCrates: 4,
+    slotHologramColors: ['red', 'red', 'empty', 'empty', 'red', 'red', 'empty', 'empty'],
+    iconKind: 'tank',
+  },
+  lyo_tank: {
+    id: 'lyo_tank',
+    category: 'vehicles_aircraft',
+    name: 'LYO HEAVY TANK 105MM',
+    caliberOrSpec: '2 Kursi · Meriam Utama 105mm',
+    recipeSummary: '2x2x2 Kubus · 8 Peti Merah',
+    buildOrder: '2x2x2',
+    targetCrates: 8,
+    slotHologramColors: ['red', 'red', 'red', 'red', 'red', 'red', 'red', 'red'],
+    iconKind: 'tank',
+  },
+  tyrant_tank: {
+    id: 'tyrant_tank',
+    category: 'vehicles_aircraft',
+    name: 'SUPER MAMMOTH TANK',
+    caliberOrSpec: '2.2x Armor Tebal · Heavy Cannon',
+    recipeSummary: '2x2x2 Kubus · 4 Merah + 4 Biru',
+    buildOrder: '2x2x2',
+    targetCrates: 8,
+    slotHologramColors: ['red', 'red', 'red', 'red', 'super', 'super', 'super', 'super'],
+    iconKind: 'tank',
+  },
+  lyo_plane: {
+    id: 'lyo_plane',
+    category: 'vehicles_aircraft',
+    name: 'LYO FIGHTER PLANE',
+    caliberOrSpec: 'Twin Minigun BRRRT · Auto-Helipad',
+    recipeSummary: '2x2x2 Kubus · 4 Merah + 2 Biru + 2 Emas',
+    buildOrder: '2x2x2',
+    targetCrates: 8,
+    slotHologramColors: ['red', 'red', 'red', 'red', 'super', 'super', 'legend', 'legend'],
+    iconKind: 'plane',
+  },
+};
+
+export function getHologramSlotHexColor(slotKind: CrateSlotType): number {
+  if (slotKind === 'legend') return 0xffd700; // Gold / Legend hologram
+  if (slotKind === 'super') return 0x00d2ff; // Cyan Blue / Rare hologram
+  if (slotKind === 'red') return 0xff4d3d; // Red-Orange / Common hologram
+  return 0xb8ff3c; // Default lime
+}
+
+/**
+ * Selects the best empty slot index (0..7) on the Stacking Pad for an incoming `crateKind`,
+ * matching the active multi-color hologram pattern (`slotHologramColors`) first so each crate
+ * lands in its color-coded hologram box!
+ * When `strictColorOnly` is true, returns `-1` if no empty hologram slot matches `crateKind`.
+ */
+export function chooseNextPadSlotIndexForHologram(
+  slots: ReadonlyArray<CrateSlotType>,
+  slotHologramColors: PadSlotHologramPattern | null,
+  crateKind: Exclude<CrateSlotType, 'empty'>,
+  fallbackBuildOrder: BuildOrderTarget = '1x1x2',
+  strictColorOnly = false,
+): number {
+  if (slotHologramColors) {
+    // 1. Prefer an empty slot whose hologram color matches `crateKind`
+    for (let i = 0; i < 8; i++) {
+      if ((slots[i] ?? 'empty') === 'empty' && slotHologramColors[i] === crateKind) {
+        return i;
+      }
+    }
+    if (strictColorOnly) {
+      return -1;
+    }
+    // 2. Otherwise fill the next empty slot that is active in the hologram pattern
+    for (let i = 0; i < 8; i++) {
+      if ((slots[i] ?? 'empty') === 'empty' && slotHologramColors[i] !== 'empty') {
+        return i;
+      }
+    }
+    return -1;
+  }
+  return chooseNextPadSlotIndex(slots, fallbackBuildOrder);
+}
+
+/**
+ * Computes the exact crate colors (`'red' | 'super' | 'legend'`) still needed to complete
+ * the active Stacking Pad hologram (`slotHologramColors`), both before and after subtracting
+ * crates already being carried in-flight by teammates belonging to the same pad.
+ */
+export function getRemainingNeededCrateKindsForHologram(
+  slots: ReadonlyArray<CrateSlotType>,
+  slotHologramColors: PadSlotHologramPattern | null,
+  inFlightCarriedCrates: ReadonlyArray<'red' | 'super' | 'legend'> = [],
+): {
+  unfilledSlotColors: Array<'red' | 'super' | 'legend'>;
+  neededAfterInFlight: Array<'red' | 'super' | 'legend'>;
+} {
+  if (!slotHologramColors) {
+    return { unfilledSlotColors: [], neededAfterInFlight: [] };
+  }
+  const unfilledSlotColors: Array<'red' | 'super' | 'legend'> = [];
+  for (let i = 0; i < 8; i++) {
+    const holoKind = slotHologramColors[i];
+    if ((slots[i] ?? 'empty') === 'empty' && holoKind && holoKind !== 'empty') {
+      unfilledSlotColors.push(holoKind);
+    }
+  }
+  const neededAfterInFlight = [...unfilledSlotColors];
+  for (const carried of inFlightCarriedCrates) {
+    const idx = neededAfterInFlight.indexOf(carried);
+    if (idx !== -1) {
+      neededAfterInFlight.splice(idx, 1);
+    }
+  }
+  return { unfilledSlotColors, neededAfterInFlight };
+}
+
+/**
+ * Evaluates whether the Stacking Pad hologram should be visible or hidden.
+ * - When `useCustomHologramRecipe` is `false` (no target selected or after a target build was fulfilled/crafted),
+ *   ALL hologram wireframes (`showPatternOutlineBox` and all 8 `slotGhostColors`) are hidden (`'empty'`).
+ * - When `useCustomHologramRecipe` is `true`, once all required hologram slots are filled (`unfilledCount === 0`),
+ *   `isFulfilled` becomes `true` and the hologram disappears (`showPatternOutlineBox = false` and all `slotGhostColors` are `'empty'`).
+ */
+export function evaluatePadHologramState(
+  isLocalPlayerPad: boolean,
+  useCustomHologramRecipe: boolean,
+  activePriorityRecipe: KioskBuildPriorityRecipeId,
+  slots: ReadonlyArray<CrateSlotType>,
+): {
+  isActive: boolean;
+  isFulfilled: boolean;
+  showPatternOutlineBox: boolean;
+  slotGhostColors: PadSlotHologramPattern;
+} {
+  const emptyPattern: PadSlotHologramPattern = [
+    'empty',
+    'empty',
+    'empty',
+    'empty',
+    'empty',
+    'empty',
+    'empty',
+    'empty',
+  ];
+  if (!isLocalPlayerPad || !useCustomHologramRecipe) {
+    return {
+      isActive: false,
+      isFulfilled: false,
+      showPatternOutlineBox: false,
+      slotGhostColors: emptyPattern,
+    };
+  }
+
+  const recipe = KIOSK_BUILD_PRIORITY_RECIPES[activePriorityRecipe];
+  if (!recipe) {
+    return {
+      isActive: false,
+      isFulfilled: false,
+      showPatternOutlineBox: false,
+      slotGhostColors: emptyPattern,
+    };
+  }
+
+  const slotGhostColors: CrateSlotType[] = [...emptyPattern];
+  let requiredCount = 0;
+  let unfilledCount = 0;
+
+  for (let i = 0; i < 8; i++) {
+    const reqColor = recipe.slotHologramColors[i];
+    if (reqColor !== 'empty') {
+      requiredCount++;
+      if ((slots[i] ?? 'empty') === 'empty') {
+        slotGhostColors[i] = reqColor;
+        unfilledCount++;
+      }
+    }
+  }
+
+  const isFulfilled = requiredCount > 0 && unfilledCount === 0;
+  return {
+    isActive: true,
+    isFulfilled,
+    showPatternOutlineBox: !isFulfilled && unfilledCount > 0,
+    slotGhostColors: isFulfilled ? emptyPattern : (slotGhostColors as unknown as PadSlotHologramPattern),
+  };
+}
+
+/**
+ * Smart, recipe-aware crate selector for AI Buddy harvesters:
+ * - NEVER selects `'medical'` crates (which cannot be placed on a Stacking Pad).
+ * - When a hologram recipe (`slotHologramColors`) is active on the owner's pad, strictly selects
+ *   ONLY grounded crates whose color matches the remaining unfilled hologram slots (`neededAfterInFlight`),
+ *   choosing the closest matching crate and never grabbing random wrong-colored crates!
+ */
+export function selectSmartCrateForAiHarvester<
+  TCrate extends {
+    x: number;
+    z: number;
+    kind: WorldCrateKind;
+    state: string;
+  },
+>(
+  buddyX: number,
+  buddyZ: number,
+  crates: ReadonlyArray<TCrate>,
+  slots: ReadonlyArray<CrateSlotType>,
+  slotHologramColors: PadSlotHologramPattern | null,
+  inFlightCarriedCrates: ReadonlyArray<'red' | 'super' | 'legend'> = [],
+  strictHologramMatch = true,
+): {
+  selectedCrate: TCrate | null;
+  distance: number | null;
+  neededColors: Array<'red' | 'super' | 'legend'>;
+  unfilledSlotColors: Array<'red' | 'super' | 'legend'>;
+} {
+  const { unfilledSlotColors, neededAfterInFlight } = getRemainingNeededCrateKindsForHologram(
+    slots,
+    slotHologramColors,
+    inFlightCarriedCrates,
+  );
+
+  // If a hologram recipe is active on the pad:
+  if (slotHologramColors) {
+    // If all hologram slots are already filled or teammates are already carrying the last needed crates, stop harvesting!
+    if (unfilledSlotColors.length === 0 || neededAfterInFlight.length === 0) {
+      return {
+        selectedCrate: null,
+        distance: null,
+        neededColors: neededAfterInFlight,
+        unfilledSlotColors,
+      };
+    }
+
+    let bestMatchingCrate: TCrate | null = null;
+    let bestMatchingDist = Infinity;
+    for (let i = 0; i < crates.length; i++) {
+      const c = crates[i];
+      if (c.state !== 'grounded' || c.kind === 'medical') continue;
+      if (!neededAfterInFlight.includes(c.kind)) continue;
+      const d = Math.hypot(c.x - buddyX, c.z - buddyZ);
+      if (d < bestMatchingDist) {
+        bestMatchingDist = d;
+        bestMatchingCrate = c;
+      }
+    }
+
+    if (bestMatchingCrate || strictHologramMatch) {
+      return {
+        selectedCrate: bestMatchingCrate,
+        distance: bestMatchingCrate ? bestMatchingDist : null,
+        neededColors: neededAfterInFlight,
+        unfilledSlotColors,
+      };
+    }
+  }
+
+  // Fallback for generic AI pads without a strict hologram recipe:
+  // Never pick up 'medical' crates, and prefer the closest crate matching the existing pad color (or 'red' for standard builds)
+  const existingPadColor = slots.find((s) => s !== 'empty') ?? null;
+  let bestFallbackCrate: TCrate | null = null;
+  let bestFallbackScore = Infinity;
+  let bestFallbackDist: number | null = null;
+
+  for (let i = 0; i < crates.length; i++) {
+    const c = crates[i];
+    if (c.state !== 'grounded' || c.kind === 'medical') continue;
+    const d = Math.hypot(c.x - buddyX, c.z - buddyZ);
+    // Prefer matching the color already on the pad so recipes stay pure instead of random mixed colors!
+    const colorPenalty =
+      existingPadColor !== null && c.kind !== existingPadColor ? 25.0 : 0.0;
+    const score = d + colorPenalty;
+    if (score < bestFallbackScore) {
+      bestFallbackScore = score;
+      bestFallbackDist = d;
+      bestFallbackCrate = c;
+    }
+  }
+
+  return {
+    selectedCrate: bestFallbackCrate,
+    distance: bestFallbackDist,
+    neededColors: neededAfterInFlight,
+    unfilledSlotColors,
+  };
+}
+
+export type KioskBaseGoldUpgradeId =
+  | 'upgrade_base_combo'
+  | 'upgrade_building_only'
+  | 'upgrade_fence_only'
+  | 'build_parking_gold'
+  | 'build_helipad_gold';
+
+export interface KioskBaseGoldUpgradeCostSpec {
+  id: KioskBaseGoldUpgradeId;
+  name: string;
+  subtitle: string;
+  costGold: number;
+  alreadyMaxed: boolean;
+}
+
+/**
+ * Computes expensive Warzone Gold costs (`harga upgrade base tentunya mahal`) for upgrading
+ * the Commander Base (Command Center + Iron Fence, or individual facilities) at the Kiosk Machine.
+ */
+export function getCommanderBaseGoldUpgradeSpecs(
+  base: IndividualCommanderBaseState,
+): Record<KioskBaseGoldUpgradeId, KioskBaseGoldUpgradeCostSpec> {
+  const bLv = base.buildingLevel;
+  const fLv = base.fenceLevel;
+  const bothMax =
+    bLv >= 3 &&
+    fLv >= 3 &&
+    base.buildingHp >= base.buildingMaxHp &&
+    base.fenceHp >= base.fenceMaxHp;
+
+  const comboCost = bLv === 1 || fLv === 1 ? 1200 : bLv === 2 || fLv === 2 ? 2500 : 800;
+  const buildingCost = bLv === 1 ? 750 : bLv === 2 ? 1500 : 500;
+  const fenceCost = fLv === 1 ? 600 : fLv === 2 ? 1200 : 400;
+
+  return {
+    upgrade_base_combo: {
+      id: 'upgrade_base_combo',
+      name:
+        bLv < 3 || fLv < 3
+          ? `UPGRADE BASE PAKET (HQ + PAGAR LV.${Math.min(3, Math.max(bLv, fLv) + 1)})`
+          : 'REPARASI PENUH BASE LV.3 MAX',
+      subtitle:
+        bLv < 3 || fLv < 3
+          ? 'Command Center + Pagar Besi Naik Level Sekaligus'
+          : 'Pulihkan 100% HP Command Center & Pagar',
+      costGold: comboCost,
+      alreadyMaxed: bothMax,
+    },
+    upgrade_building_only: {
+      id: 'upgrade_building_only',
+      name:
+        bLv < 3
+          ? `UPGRADE COMMAND CENTER KE LV.${bLv + 1}`
+          : 'REPARASI COMMAND CENTER LV.3',
+      subtitle:
+        bLv < 3
+          ? `HP Markas ${base.buildingMaxHp} -> ${INDIVIDUAL_BASE_LEVEL_SPECS.buildingMaxHpByLevel[bLv as 1 | 2]} HP`
+          : `HP Saat Ini: ${base.buildingHp}/${base.buildingMaxHp}`,
+      costGold: buildingCost,
+      alreadyMaxed: bLv >= 3 && base.buildingHp >= base.buildingMaxHp,
+    },
+    upgrade_fence_only: {
+      id: 'upgrade_fence_only',
+      name: fLv < 3 ? `UPGRADE PAGAR BESI KE LV.${fLv + 1}` : 'REPARASI PAGAR BESI LV.3',
+      subtitle:
+        fLv < 3
+          ? `Total HP Pagar ${base.fenceMaxHp} -> ${INDIVIDUAL_BASE_LEVEL_SPECS.fenceTotalMaxHpByLevel[fLv as 1 | 2]} HP`
+          : `HP Pagar Saat Ini: ${base.fenceHp}/${base.fenceMaxHp}`,
+      costGold: fenceCost,
+      alreadyMaxed: fLv >= 3 && base.fenceHp >= base.fenceMaxHp,
+    },
+    build_parking_gold: {
+      id: 'build_parking_gold',
+      name: 'BANGUN PARKIRAN KENDARAAN',
+      subtitle: 'Kanopi Baja + Slot Parkir Tank & Dump Truck di Samping Helipad',
+      costGold: 800,
+      alreadyMaxed: base.hasParkingBay,
+    },
+    build_helipad_gold: {
+      id: 'build_helipad_gold',
+      name: 'BANGUN HELIPAD (H)',
+      subtitle: 'Landasan Helipad & Pesawat Tempur Lyo Plane',
+      costGold: 1100,
+      alreadyMaxed: base.hasHelipad,
+    },
+  };
+}
+
+export function applyCommanderBaseGoldUpgrade(
+  base: IndividualCommanderBaseState,
+  upgradeId: KioskBaseGoldUpgradeId,
+  currentGold: number,
+): { upgraded: boolean; nextGold: number; spentGold: number; message: string } {
+  if (base.destroyed) {
+    return {
+      upgraded: false,
+      nextGold: currentGold,
+      spentGold: 0,
+      message: 'Markas telah hancur rata dengan tanah!',
+    };
+  }
+  const specs = getCommanderBaseGoldUpgradeSpecs(base);
+  const spec = specs[upgradeId];
+  if (!spec || spec.alreadyMaxed) {
+    return {
+      upgraded: false,
+      nextGold: currentGold,
+      spentGold: 0,
+      message: 'Fasilitas ini sudah mencapai Level Maksimal!',
+    };
+  }
+  if (currentGold < spec.costGold) {
+    return {
+      upgraded: false,
+      nextGold: currentGold,
+      spentGold: 0,
+      message: `Gold tidak cukup! Butuh ${spec.costGold} GOLD (Kumpulkan Gold di Warzone).`,
+    };
+  }
+
+  const nextGold = currentGold - spec.costGold;
+
+  if (upgradeId === 'upgrade_base_combo') {
+    if (base.buildingLevel < 3) {
+      const nextBLv = (base.buildingLevel + 1) as 2 | 3;
+      base.buildingLevel = nextBLv;
+      base.buildingMaxHp = INDIVIDUAL_BASE_LEVEL_SPECS.buildingMaxHpByLevel[nextBLv - 1];
+    }
+    base.buildingHp = base.buildingMaxHp;
+
+    if (base.fenceLevel < 3) {
+      const nextFLv = (base.fenceLevel + 1) as 2 | 3;
+      base.fenceLevel = nextFLv;
+      base.fenceMaxHp = INDIVIDUAL_BASE_LEVEL_SPECS.fenceTotalMaxHpByLevel[nextFLv - 1];
+    }
+    base.fenceHp = base.fenceMaxHp;
+
+    return {
+      upgraded: true,
+      nextGold,
+      spentGold: spec.costGold,
+      message: `BASE DI-UPGRADE! Command Center Lv.${base.buildingLevel} & Pagar Lv.${base.fenceLevel}!`,
+    };
+  }
+
+  if (upgradeId === 'upgrade_building_only') {
+    if (base.buildingLevel < 3) {
+      const nextBLv = (base.buildingLevel + 1) as 2 | 3;
+      base.buildingLevel = nextBLv;
+      base.buildingMaxHp = INDIVIDUAL_BASE_LEVEL_SPECS.buildingMaxHpByLevel[nextBLv - 1];
+    }
+    base.buildingHp = base.buildingMaxHp;
+    return {
+      upgraded: true,
+      nextGold,
+      spentGold: spec.costGold,
+      message: `${INDIVIDUAL_BASE_LEVEL_SPECS.buildingNameByLevel[base.buildingLevel - 1]} (${base.buildingMaxHp} HP)!`,
+    };
+  }
+
+  if (upgradeId === 'upgrade_fence_only') {
+    if (base.fenceLevel < 3) {
+      const nextFLv = (base.fenceLevel + 1) as 2 | 3;
+      base.fenceLevel = nextFLv;
+      base.fenceMaxHp = INDIVIDUAL_BASE_LEVEL_SPECS.fenceTotalMaxHpByLevel[nextFLv - 1];
+    }
+    base.fenceHp = base.fenceMaxHp;
+    return {
+      upgraded: true,
+      nextGold,
+      spentGold: spec.costGold,
+      message: `${INDIVIDUAL_BASE_LEVEL_SPECS.fenceNameByLevel[base.fenceLevel - 1]} (${base.fenceMaxHp} HP)!`,
+    };
+  }
+
+  if (upgradeId === 'build_parking_gold') {
+    base.hasParkingBay = true;
+    return {
+      upgraded: true,
+      nextGold,
+      spentGold: spec.costGold,
+      message: 'Parkiran Kendaraan Selesai Dibangun!',
+    };
+  }
+
+  if (upgradeId === 'build_helipad_gold') {
+    base.hasHelipad = true;
+    return {
+      upgraded: true,
+      nextGold,
+      spentGold: spec.costGold,
+      message: 'Helipad (H) Selesai Dibangun!',
+    };
+  }
+
+  return { upgraded: false, nextGold: currentGold, spentGold: 0, message: '' };
+}
+
+export interface KioskCrateAirdropShopItem {
+  kind: WorldCrateKind;
+  name: string;
+  rarityLabel: string;
+  description: string;
+  costGold: number;
+  accentHex: string;
+}
+
+export const KIOSK_CRATE_AIRDROP_SHOP: Record<WorldCrateKind, KioskCrateAirdropShopItem> = {
+  red: {
+    kind: 'red',
+    name: 'PETI STANDAR (COMMON)',
+    rarityLabel: 'COMMON · KUNING/MERAH',
+    description: 'Airdrop 1 Peti Standar dari langit tepat di dekat Crate Pad markasmu.',
+    costGold: 150,
+    accentHex: '#ff4d3d',
+  },
+  super: {
+    kind: 'super',
+    name: 'PETI TECH BIRU (RARE)',
+    rarityLabel: 'RARE · UPGRADE TECH',
+    description: 'Airdrop 1 Peti Biru (Super/Tech) untuk merakit senjata & kendaraan versi Super.',
+    costGold: 350,
+    accentHex: '#00d2ff',
+  },
+  legend: {
+    kind: 'legend',
+    name: 'PETI SPESIAL (LEGEND)',
+    rarityLabel: 'LEGEND · SUPER WEAPON / JET',
+    description: 'Airdrop 1 Peti Emas/Spesial untuk merakit Pesawat Tempur, Ninja, atau Super Weapon.',
+    costGold: 750,
+    accentHex: '#ffd700',
+  },
+  medical: {
+    kind: 'medical',
+    name: 'PETI MEDIS (PALANG MERAH)',
+    rarityLabel: 'MEDICAL · PEMULIH DARAH',
+    description: 'Airdrop 1 Peti Putih Medis dari udara (pecahkan untuk mendapatkan Medkit +35 HP).',
+    costGold: 200,
+    accentHex: '#4ade80',
+  },
+};
+
+export function purchaseCrateAirdropWithGold(
+  crateKind: WorldCrateKind,
+  currentGold: number,
+): {
+  purchased: boolean;
+  nextGold: number;
+  spentGold: number;
+  airdropCrateKind: WorldCrateKind | null;
+  message: string;
+} {
+  const item = KIOSK_CRATE_AIRDROP_SHOP[crateKind];
+  if (!item) {
+    return {
+      purchased: false,
+      nextGold: currentGold,
+      spentGold: 0,
+      airdropCrateKind: null,
+      message: 'Jenis peti tidak ditemukan.',
+    };
+  }
+  if (currentGold < item.costGold) {
+    return {
+      purchased: false,
+      nextGold: currentGold,
+      spentGold: 0,
+      airdropCrateKind: null,
+      message: `Gold tidak cukup! Butuh ${item.costGold} GOLD untuk Airdrop ${item.name}.`,
+    };
+  }
+  return {
+    purchased: true,
+    nextGold: currentGold - item.costGold,
+    spentGold: item.costGold,
+    airdropCrateKind: crateKind,
+    message: `AIRDROP DIKIRIM! ${item.name} terjun dari langit ke markasmu!`,
+  };
+}
+
+// ============================================================================
+// COMMAND CENTER RADAR COVERAGE & MINIMAP CALIBRATION
+// ============================================================================
+
+/** Half-extent (in meters) of the calibrated square radar map [-125, +125] x [-125, +125]. */
+export const RADAR_WORLD_HALF_EXTENT = 125.0;
+
+export interface CommandCenterRadarSpec {
+  level: 1 | 2 | 3;
+  /** Scan radius (in meters) radiating from the Blue Base Command Center complex */
+  baseRadarRadius: number;
+  /** Local personal scan radius (in meters) around the active Player character/vehicle */
+  playerVisionRadius: number;
+  /** True at Level 3 when satellite radar unlocks 100% of the arena */
+  fullMapUnlocked: boolean;
+  /** Short HUD badge label */
+  label: string;
+}
+
+export function evaluateCommandCenterRadarSpec(buildingLevel: number): CommandCenterRadarSpec {
+  const lv: 1 | 2 | 3 = buildingLevel >= 3 ? 3 : buildingLevel === 2 ? 2 : 1;
+  if (lv === 3) {
+    return {
+      level: 3,
+      baseRadarRadius: 280.0,
+      playerVisionRadius: 65.0,
+      fullMapUnlocked: true,
+      label: 'RADAR LV.3 · MAX',
+    };
+  }
+  if (lv === 2) {
+    return {
+      level: 2,
+      baseRadarRadius: 152.0,
+      playerVisionRadius: 44.0,
+      fullMapUnlocked: false,
+      label: 'RADAR LV.2 · 152m',
+    };
+  }
+  return {
+    level: 1,
+    baseRadarRadius: 92.0,
+    playerVisionRadius: 32.0,
+    fullMapUnlocked: false,
+    label: 'RADAR LV.1 · 92m',
+  };
+}
+
+export function worldCoordToRadarPercent(
+  worldX: number,
+  worldZ: number,
+  halfExtent: number = RADAR_WORLD_HALF_EXTENT,
+): { leftPct: number; topPct: number } {
+  const span = halfExtent * 2.0;
+  const leftPct = Math.max(3, Math.min(97, ((worldX + halfExtent) / span) * 100));
+  const topPct = Math.max(3, Math.min(97, ((worldZ + halfExtent) / span) * 100));
+  return { leftPct, topPct };
+}
+
+export function isPointVisibleOnCommandCenterRadar(
+  targetX: number,
+  targetZ: number,
+  isFriendlyOrSelf: boolean,
+  buildingLevel: number,
+  baseCenterX: number,
+  baseCenterZ: number,
+  playerX: number,
+  playerZ: number,
+): boolean {
+  if (isFriendlyOrSelf) return true;
+  const spec = evaluateCommandCenterRadarSpec(buildingLevel);
+  if (spec.fullMapUnlocked) return true;
+  const distFromBase = Math.hypot(targetX - baseCenterX, targetZ - baseCenterZ);
+  if (distFromBase <= spec.baseRadarRadius) return true;
+  const distFromPlayer = Math.hypot(targetX - playerX, targetZ - playerZ);
+  return distFromPlayer <= spec.playerVisionRadius;
+}
+
+
+
+
+
