@@ -3495,8 +3495,9 @@ export function evaluateBuiltBuddySmartAiDecision(
     };
   }
 
-  // 6. Immediate self-defense if an enemy is very close (<= 11m)
-  if (input.nearestEnemyDist !== null && input.nearestEnemyDist <= 11.0) {
+  // 6. Immediate ranged engagement if armed (<= 22m) or close self-defense if unarmed (<= 11m)
+  const selfDefenseEngageRadius = input.weaponId !== 'unarmed' ? 22.0 : 11.0;
+  if (input.nearestEnemyDist !== null && input.nearestEnemyDist <= selfDefenseEngageRadius) {
     return {
       action: 'ATTACK_ENEMY',
       recommendedBuildOrder,
@@ -6464,23 +6465,27 @@ export function computeStackingPadWeaponPopOutTrajectory(
   totalDrops = 1,
   frontSign: 1 | -1 = 1,
 ): StackingPadWeaponPopOutTrajectory {
-  // Spread multiple drops evenly around the front/side perimeter of the pad
-  const baseAngle = frontSign === 1 ? -Math.PI * 0.32 : Math.PI * 0.68;
-  const spreadStep = totalDrops > 1 ? (Math.PI * 1.35) / totalDrops : 0;
-  const angle = baseAngle + dropIndex * spreadStep;
+  // Aim inward toward the center of the Commander Base courtyard (`berada di tengah base`)
+  // instead of outward toward the right perimeter fence (`padX = plotCenterX + sign * 7.3`):
+  // - For Blue (`frontSign = 1`), the base center is in the `-X` direction (`angle ≈ Math.PI - 0.15`).
+  // - For Red (`frontSign = -1`), the base center is in the `+X` direction (`angle ≈ -0.15`).
+  const inwardCenterAngle = frontSign === 1 ? Math.PI - 0.15 : -0.15;
+  const fanSpan = 0.72;
+  const angleOffset =
+    totalDrops > 1 ? (dropIndex - (totalDrops - 1) * 0.5) * (fanSpan / Math.max(1, totalDrops - 1)) : 0;
+  const angle = inwardCenterAngle + angleOffset;
 
   const startRadius = 0.75;
   const startX = padX + Math.cos(angle) * startRadius;
   const startZ = padZ + Math.sin(angle) * startRadius;
 
-  // Under gravity = 22 m/s² andvy = 6.2 m/s, first-bounce flight time is ~0.56s;
-  // with horizontal speed = 4.6 m/s + brief ground slide, it settles at ~2.85m from pad center (right outside the 1.62m pad edge).
-  const horizSpeed = 4.6;
+  // Pop gently inward toward the middle of the base so the weapon never flies over the perimeter fence
+  const horizSpeed = 3.5;
   const vx = Math.cos(angle) * horizSpeed;
   const vz = Math.sin(angle) * horizSpeed;
-  const vy = 6.2;
+  const vy = 6.0;
 
-  const effectiveTravelDist = 2.1; // startRadius (0.75) + 2.1 = 2.85m from pad center
+  const effectiveTravelDist = 2.1; // startRadius (0.75) + 2.1 = 2.85m inward from pad center toward base center
   const landingX = padX + Math.cos(angle) * (startRadius + effectiveTravelDist);
   const landingZ = padZ + Math.sin(angle) * (startRadius + effectiveTravelDist);
   const landingDistFromPadCenter = Math.hypot(landingX - padX, landingZ - padZ);
@@ -9693,6 +9698,617 @@ export function evaluateTankClimbableObstacleElevation(
     isClimbing: climbY > 0.02,
   };
 }
+
+// ============================================================================
+// AI RANGED COMBAT STANDOFF INTELLIGENCE (SHOOT FROM DISTANCE INSTEAD OF CHASING)
+// ============================================================================
+
+export interface AiRangedCombatStandoffInput {
+  aiX: number;
+  aiZ: number;
+  enemyX: number;
+  enemyZ: number;
+  weaponId: 'unarmed' | 'pistol' | 'rifle' | 'rocket' | 'bazooka' | 'laser' | 'gatling';
+  ammo: number;
+  strafeSign?: 1 | -1;
+}
+
+export interface AiRangedCombatStandoffResult {
+  isRangedWeapon: boolean;
+  distToEnemy: number;
+  maxFireRangeMeters: number;
+  preferredStandoffMinMeters: number;
+  preferredStandoffMaxMeters: number;
+  canShootNow: boolean;
+  movementMode: 'advance_to_range' | 'hold_and_strafe' | 'retreat_kite' | 'melee_chase';
+  goalX: number;
+  goalZ: number;
+  aimYaw: number;
+}
+
+/**
+ * Evaluates AI ranged combat standoff positioning and long-range firing behavior:
+ * - Armed AI (`weaponId !== 'unarmed'` and `ammo > 0`) shoots directly from long range (`21m..28m`)
+ *   instead of blindly running into melee range (`0.6m`).
+ * - Inside `[preferredStandoffMinMeters .. preferredStandoffMaxMeters]`, the AI stops charging forward
+ *   and holds a tactical lateral strafe at long range while aiming directly at the target.
+ * - If the enemy rushes closer than `preferredStandoffMinMeters`, the AI kites backward while firing.
+ */
+export function evaluateAiRangedCombatStandoffBehavior(
+  input: AiRangedCombatStandoffInput,
+): AiRangedCombatStandoffResult {
+  const dxToEnemy = input.enemyX - input.aiX;
+  const dzToEnemy = input.enemyZ - input.aiZ;
+  const distToEnemy = Math.hypot(dxToEnemy, dzToEnemy);
+  const aimYaw = distToEnemy > 0.001 ? Math.atan2(-dzToEnemy, dxToEnemy) : 0;
+
+  if (input.weaponId === 'unarmed' || input.ammo <= 0) {
+    return {
+      isRangedWeapon: false,
+      distToEnemy,
+      maxFireRangeMeters: 2.35,
+      preferredStandoffMinMeters: 0,
+      preferredStandoffMaxMeters: 1.6,
+      canShootNow: distToEnemy <= 2.35,
+      movementMode: 'melee_chase',
+      goalX: input.enemyX,
+      goalZ: input.enemyZ,
+      aimYaw,
+    };
+  }
+
+  const isHeavyRanged =
+    input.weaponId === 'bazooka' || input.weaponId === 'rocket' || input.weaponId === 'laser';
+  const isMediumRanged = input.weaponId === 'rifle' || input.weaponId === 'gatling';
+
+  const maxFireRangeMeters = isHeavyRanged ? 28.0 : isMediumRanged ? 25.0 : 21.0;
+  const preferredStandoffMinMeters = isHeavyRanged ? 12.5 : isMediumRanged ? 10.5 : 8.5;
+  const preferredStandoffMaxMeters = isHeavyRanged ? 22.0 : isMediumRanged ? 19.0 : 16.0;
+  const canShootNow = distToEnemy <= maxFireRangeMeters;
+
+  const safeDist = Math.max(0.001, distToEnemy);
+  // Unit vector pointing from enemy back toward AI
+  const awayX = -dxToEnemy / safeDist;
+  const awayZ = -dzToEnemy / safeDist;
+  const strafeSign = input.strafeSign ?? 1;
+  // Lateral strafe tangent perpendicular to line of sight
+  const tangentX = -awayZ * strafeSign;
+  const tangentZ = awayX * strafeSign;
+
+  if (distToEnemy > preferredStandoffMaxMeters) {
+    const targetBandRadius = (preferredStandoffMinMeters + preferredStandoffMaxMeters) * 0.5;
+    return {
+      isRangedWeapon: true,
+      distToEnemy,
+      maxFireRangeMeters,
+      preferredStandoffMinMeters,
+      preferredStandoffMaxMeters,
+      canShootNow,
+      movementMode: 'advance_to_range',
+      goalX: input.enemyX + awayX * targetBandRadius,
+      goalZ: input.enemyZ + awayZ * targetBandRadius,
+      aimYaw,
+    };
+  }
+
+  if (distToEnemy < preferredStandoffMinMeters) {
+    return {
+      isRangedWeapon: true,
+      distToEnemy,
+      maxFireRangeMeters,
+      preferredStandoffMinMeters,
+      preferredStandoffMaxMeters,
+      canShootNow,
+      movementMode: 'retreat_kite',
+      goalX: input.enemyX + awayX * preferredStandoffMinMeters + tangentX * 2.0,
+      goalZ: input.enemyZ + awayZ * preferredStandoffMinMeters + tangentZ * 2.0,
+      aimYaw,
+    };
+  }
+
+  return {
+    isRangedWeapon: true,
+    distToEnemy,
+    maxFireRangeMeters,
+    preferredStandoffMinMeters,
+    preferredStandoffMaxMeters,
+    canShootNow,
+    movementMode: 'hold_and_strafe',
+    goalX: input.aiX + tangentX * 2.2,
+    goalZ: input.aiZ + tangentZ * 2.2,
+    aimYaw,
+  };
+}
+
+// ============================================================================
+// 5-SLOT TACTICAL LOADOUT: MAX 3 HANDHELD WEAPONS + 2 TACTICAL ITEMS (GRENADE & LAND MINE)
+// + REAL-TIME AMMO BADGES + CLICK-TO-SWAP DROPPED WEAPONS
+// ============================================================================
+
+export const MAX_HANDHELD_WEAPON_SLOTS = 3;
+export const MAX_TACTICAL_ITEM_SLOTS = 2;
+
+export type HandheldWeaponSlotId = 'pistol' | 'rifle' | 'bazooka' | 'laser' | 'gatling';
+export type TacticalSecondarySlotId = 'hand_grenade' | 'land_mine';
+
+export interface CarriedHandheldWeaponSlot {
+  slotId: HandheldWeaponSlotId;
+  label: string;
+  weaponName: string;
+  ammo: number;
+  maxAmmo: number;
+}
+
+export interface HudWeaponOrTacticalBadge {
+  id: string;
+  kind: 'handheld' | 'tactical';
+  slotId: HandheldWeaponSlotId | TacticalSecondarySlotId;
+  label: string;
+  /** Number displayed inside the dark badge next to the weapon/item name = ammo count (`jumlah peluru`) */
+  ammoCount: number;
+  isActive: boolean;
+  actionEvent: string;
+}
+
+export interface BuddyTacticalLoadoutState {
+  handheldWeapons: CarriedHandheldWeaponSlot[];
+  activeWeaponSlotId: HandheldWeaponSlotId | 'unarmed';
+  grenadeCount: number;
+  landMineCount: number;
+  clusterBombCount: number;
+}
+
+export function resolveHandheldWeaponSlotSpec(weaponIdOrName: string): {
+  slotId: HandheldWeaponSlotId;
+  label: string;
+  weaponName: string;
+  defaultAmmo: number;
+  maxAmmo: number;
+} {
+  const upper = (weaponIdOrName || '').toUpperCase();
+  if (
+    weaponIdOrName === 'gatling' ||
+    upper.includes('GATLING') ||
+    upper.includes('TITAN-6') ||
+    upper.includes('ROTARY')
+  ) {
+    return {
+      slotId: 'gatling',
+      label: 'GATLING',
+      weaponName: 'TITAN-6 Rotary Gatling',
+      defaultAmmo: 180,
+      maxAmmo: 360,
+    };
+  }
+  if (
+    weaponIdOrName === 'laser' ||
+    upper.includes('LASER') ||
+    upper.includes('PHOTON') ||
+    upper.includes('LG-88') ||
+    upper.includes('ION CANNON')
+  ) {
+    return {
+      slotId: 'laser',
+      label: 'LASER',
+      weaponName: 'LG-88 Photon Lance',
+      defaultAmmo: 120,
+      maxAmmo: 240,
+    };
+  }
+  if (
+    weaponIdOrName === 'bazooka' ||
+    weaponIdOrName === 'rocket' ||
+    upper.includes('BAZOOKA') ||
+    upper.includes('SUPAZOOKA') ||
+    upper.includes('ROCKET') ||
+    upper.includes('NUCLEAR') ||
+    upper.includes('HOMING') ||
+    upper.includes('MORTAR')
+  ) {
+    return {
+      slotId: 'bazooka',
+      label: 'BAZOOKA',
+      weaponName:
+        weaponIdOrName && weaponIdOrName !== 'bazooka' && weaponIdOrName !== 'rocket'
+          ? weaponIdOrName
+          : 'LyoRocketLauncher',
+      defaultAmmo: 18,
+      maxAmmo: 60,
+    };
+  }
+  if (
+    weaponIdOrName === 'rifle' ||
+    upper.includes('RIFLE') ||
+    upper.includes('SHOTGUN') ||
+    upper.includes('PLASMA') ||
+    upper.includes('MACHINE') ||
+    upper.includes('SNIPER')
+  ) {
+    return {
+      slotId: 'rifle',
+      label: 'RIFLE',
+      weaponName:
+        weaponIdOrName && weaponIdOrName !== 'rifle' ? weaponIdOrName : 'LyoAssaultRifle',
+      defaultAmmo: 90,
+      maxAmmo: 240,
+    };
+  }
+  return {
+    slotId: 'pistol',
+    label: 'PISTOL',
+    weaponName: weaponIdOrName && weaponIdOrName !== 'pistol' ? weaponIdOrName : 'LyoPistol',
+    defaultAmmo: 48,
+    maxAmmo: 180,
+  };
+}
+
+export function createInitialBuddyTacticalLoadout(
+  initialWeaponId: HandheldWeaponSlotId | 'unarmed' = 'pistol',
+  initialAmmo?: number,
+  initialSecondaryItem: BuddySecondaryItemId = 'none',
+  initialSecondaryCount = 0,
+): BuddyTacticalLoadoutState {
+  const handheldWeapons: CarriedHandheldWeaponSlot[] = [];
+  if (initialWeaponId !== 'unarmed') {
+    const spec = resolveHandheldWeaponSlotSpec(initialWeaponId);
+    const startAmmo = Math.max(1, initialAmmo ?? spec.defaultAmmo);
+    handheldWeapons.push({
+      slotId: spec.slotId,
+      label: spec.label,
+      weaponName: spec.weaponName,
+      ammo: Math.min(spec.maxAmmo, startAmmo),
+      maxAmmo: spec.maxAmmo,
+    });
+  }
+  return {
+    handheldWeapons,
+    activeWeaponSlotId: handheldWeapons.length > 0 ? handheldWeapons[0].slotId : 'unarmed',
+    grenadeCount: initialSecondaryItem === 'hand_grenade' ? Math.max(0, initialSecondaryCount) : 0,
+    landMineCount: initialSecondaryItem === 'land_mine' ? Math.max(0, initialSecondaryCount) : 0,
+    clusterBombCount:
+      initialSecondaryItem === 'cluster_bomb' ? Math.max(0, initialSecondaryCount) : 0,
+  };
+}
+
+/**
+ * Equips, adds, or swaps a ground weapon into the character's 3-slot handheld weapon inventory:
+ * - If the character already owns that weapon slot type (`slotId`), adds its `droppedAmmo` to the slot.
+ * - Else if the character carries fewer than 3 handheld weapons (`< MAX_HANDHELD_WEAPON_SLOTS`), adds it into a free slot and equips it.
+ * - Else (`=== 3` handheld weapons), swaps out the currently active weapon (or slot 2) and returns `droppedPreviousWeapon` so the old weapon drops onto the ground!
+ */
+export function equipOrSwapDroppedWeaponInLoadout(
+  loadout: BuddyTacticalLoadoutState,
+  droppedWeaponNameOrId: string,
+  droppedAmmo?: number,
+): {
+  updatedLoadout: BuddyTacticalLoadoutState;
+  action: 'refilled' | 'added' | 'swapped';
+  droppedPreviousWeapon: {
+    slotId: HandheldWeaponSlotId;
+    weaponName: string;
+    remainingAmmo: number;
+  } | null;
+} {
+  const spec = resolveHandheldWeaponSlotSpec(droppedWeaponNameOrId);
+  const incomingAmmo = Math.max(1, droppedAmmo ?? spec.defaultAmmo);
+  const nextHandheld = loadout.handheldWeapons.map((w) => ({ ...w }));
+
+  const existingIdx = nextHandheld.findIndex((w) => w.slotId === spec.slotId);
+  if (existingIdx !== -1) {
+    const existing = nextHandheld[existingIdx];
+    existing.ammo = Math.min(existing.maxAmmo, existing.ammo + incomingAmmo);
+    if (
+      getBuddyWeaponTierRank(spec.slotId, droppedWeaponNameOrId) >=
+      getBuddyWeaponTierRank(existing.slotId, existing.weaponName)
+    ) {
+      existing.weaponName = spec.weaponName;
+    }
+    return {
+      updatedLoadout: {
+        ...loadout,
+        handheldWeapons: nextHandheld,
+        activeWeaponSlotId: existing.slotId,
+      },
+      action: 'refilled',
+      droppedPreviousWeapon: null,
+    };
+  }
+
+  const newSlot: CarriedHandheldWeaponSlot = {
+    slotId: spec.slotId,
+    label: spec.label,
+    weaponName: spec.weaponName,
+    ammo: Math.min(spec.maxAmmo, incomingAmmo),
+    maxAmmo: spec.maxAmmo,
+  };
+
+  if (nextHandheld.length < MAX_HANDHELD_WEAPON_SLOTS) {
+    nextHandheld.push(newSlot);
+    return {
+      updatedLoadout: {
+        ...loadout,
+        handheldWeapons: nextHandheld,
+        activeWeaponSlotId: newSlot.slotId,
+      },
+      action: 'added',
+      droppedPreviousWeapon: null,
+    };
+  }
+
+  // Already carrying 3 handheld weapons -> swap out the currently active slot (or last slot if unarmed)
+  let replaceIdx = nextHandheld.findIndex((w) => w.slotId === loadout.activeWeaponSlotId);
+  if (replaceIdx === -1) replaceIdx = nextHandheld.length - 1;
+  const replaced = nextHandheld[replaceIdx];
+  nextHandheld[replaceIdx] = newSlot;
+
+  return {
+    updatedLoadout: {
+      ...loadout,
+      handheldWeapons: nextHandheld,
+      activeWeaponSlotId: newSlot.slotId,
+    },
+    action: 'swapped',
+    droppedPreviousWeapon: {
+      slotId: replaced.slotId,
+      weaponName: replaced.weaponName,
+      remainingAmmo: replaced.ammo,
+    },
+  };
+}
+
+export function selectHandheldWeaponInLoadout(
+  loadout: BuddyTacticalLoadoutState,
+  requestedSlotId: HandheldWeaponSlotId | 'unarmed',
+): BuddyTacticalLoadoutState {
+  if (requestedSlotId === 'unarmed') {
+    return {
+      ...loadout,
+      activeWeaponSlotId: 'unarmed',
+    };
+  }
+  const owned = loadout.handheldWeapons.find((w) => w.slotId === requestedSlotId && w.ammo > 0);
+  if (!owned) {
+    // Cannot equip a weapon that the player does not possess!
+    return loadout;
+  }
+  return {
+    ...loadout,
+    activeWeaponSlotId: owned.slotId,
+  };
+}
+
+export function consumeActiveWeaponAmmoOnShot(
+  loadout: BuddyTacticalLoadoutState,
+): BuddyTacticalLoadoutState {
+  if (loadout.activeWeaponSlotId === 'unarmed') return loadout;
+  const nextHandheld: CarriedHandheldWeaponSlot[] = [];
+  let activeStillHasAmmo = false;
+
+  for (const w of loadout.handheldWeapons) {
+    if (w.slotId === loadout.activeWeaponSlotId) {
+      const nextAmmo = Math.max(0, w.ammo - 1);
+      if (nextAmmo > 0) {
+        nextHandheld.push({ ...w, ammo: nextAmmo });
+        activeStillHasAmmo = true;
+      }
+    } else if (w.ammo > 0) {
+      nextHandheld.push({ ...w });
+    }
+  }
+
+  const nextActiveId: HandheldWeaponSlotId | 'unarmed' = activeStillHasAmmo
+    ? loadout.activeWeaponSlotId
+    : nextHandheld.length > 0
+      ? nextHandheld[0].slotId
+      : 'unarmed';
+
+  return {
+    ...loadout,
+    handheldWeapons: nextHandheld,
+    activeWeaponSlotId: nextActiveId,
+  };
+}
+
+/**
+ * Refills ammo across all carried handheld weapons when the player:
+ * 1. Defeats an enemy (`'enemy_kill'`)
+ * 2. Destroys a crate (`'crate_destroy'`)
+ * 3. Collects a Supply Drop or Ammo Pack (`'supply_drop'` | `'ammo_pickup'`)
+ */
+export function refillLoadoutAmmoFromSource(
+  loadout: BuddyTacticalLoadoutState,
+  source: 'enemy_kill' | 'crate_destroy' | 'supply_drop' | 'ammo_pickup',
+  customAmount?: number,
+): BuddyTacticalLoadoutState {
+  const stdAdd =
+    customAmount ??
+    (source === 'supply_drop'
+      ? 60
+      : source === 'ammo_pickup'
+        ? 40
+        : source === 'enemy_kill'
+          ? 24
+          : 20);
+  const heavyAdd =
+    source === 'supply_drop'
+      ? 12
+      : source === 'ammo_pickup'
+        ? 8
+        : source === 'enemy_kill'
+          ? 6
+          : 5;
+
+  if (loadout.handheldWeapons.length === 0) {
+    // If the player had 0 weapons, grant a Pistol with fresh ammo!
+    const pistolSpec = resolveHandheldWeaponSlotSpec('pistol');
+    return {
+      ...loadout,
+      handheldWeapons: [
+        {
+          slotId: 'pistol',
+          label: pistolSpec.label,
+          weaponName: pistolSpec.weaponName,
+          ammo: Math.min(pistolSpec.maxAmmo, stdAdd),
+          maxAmmo: pistolSpec.maxAmmo,
+        },
+      ],
+      activeWeaponSlotId: 'pistol',
+    };
+  }
+
+  const nextHandheld = loadout.handheldWeapons.map((w) => {
+    const delta = w.slotId === 'bazooka' ? heavyAdd : stdAdd;
+    return {
+      ...w,
+      ammo: Math.min(w.maxAmmo, w.ammo + delta),
+    };
+  });
+
+  const nextActiveId =
+    loadout.activeWeaponSlotId === 'unarmed' && nextHandheld.length > 0
+      ? nextHandheld[0].slotId
+      : loadout.activeWeaponSlotId;
+
+  return {
+    ...loadout,
+    handheldWeapons: nextHandheld,
+    activeWeaponSlotId: nextActiveId,
+  };
+}
+
+export function addTacticalSecondaryToLoadout(
+  loadout: BuddyTacticalLoadoutState,
+  itemId: Exclude<BuddySecondaryItemId, 'none'>,
+  count = 1,
+): BuddyTacticalLoadoutState {
+  const add = Math.max(1, count);
+  if (itemId === 'hand_grenade') {
+    return {
+      ...loadout,
+      grenadeCount: Math.min(9, loadout.grenadeCount + add),
+    };
+  }
+  if (itemId === 'land_mine') {
+    return {
+      ...loadout,
+      landMineCount: Math.min(9, loadout.landMineCount + add),
+    };
+  }
+  return {
+    ...loadout,
+    clusterBombCount: Math.min(9, loadout.clusterBombCount + add),
+  };
+}
+
+export function consumeTacticalSecondaryInLoadout(
+  loadout: BuddyTacticalLoadoutState,
+  itemId: Exclude<BuddySecondaryItemId, 'none'>,
+): { updatedLoadout: BuddyTacticalLoadoutState; consumed: boolean } {
+  if (itemId === 'hand_grenade') {
+    if (loadout.grenadeCount <= 0) return { updatedLoadout: loadout, consumed: false };
+    return {
+      updatedLoadout: { ...loadout, grenadeCount: loadout.grenadeCount - 1 },
+      consumed: true,
+    };
+  }
+  if (itemId === 'land_mine') {
+    if (loadout.landMineCount <= 0) return { updatedLoadout: loadout, consumed: false };
+    return {
+      updatedLoadout: { ...loadout, landMineCount: loadout.landMineCount - 1 },
+      consumed: true,
+    };
+  }
+  if (loadout.clusterBombCount <= 0) return { updatedLoadout: loadout, consumed: false };
+  return {
+    updatedLoadout: { ...loadout, clusterBombCount: loadout.clusterBombCount - 1 },
+    consumed: true,
+  };
+}
+
+/**
+ * Returns the bottom HUD badges for ONLY the weapons (max 3) and secondary tactical items (max 2: Hand Grenade & Land Mine)
+ * that the player currently possesses (`ammo > 0` / `count > 0`).
+ * Each badge's `ammoCount` is displayed in the `[N]` badge next to the weapon/item name.
+ */
+export function getVisibleHudWeaponAndTacticalBadges(
+  loadout: BuddyTacticalLoadoutState,
+): HudWeaponOrTacticalBadge[] {
+  const badges: HudWeaponOrTacticalBadge[] = [];
+
+  for (const w of loadout.handheldWeapons.slice(0, MAX_HANDHELD_WEAPON_SLOTS)) {
+    if (w.ammo <= 0) continue;
+    const actionEvent =
+      w.slotId === 'gatling'
+        ? 'selectWeaponGatling'
+        : w.slotId === 'laser'
+          ? 'selectWeaponLaser'
+          : w.slotId === 'bazooka'
+            ? 'selectWeaponBazooka'
+            : w.slotId === 'rifle'
+              ? 'selectWeaponRifle'
+              : 'selectWeaponPistol';
+    badges.push({
+      id: `weapon_${w.slotId}`,
+      kind: 'handheld',
+      slotId: w.slotId,
+      label: w.label,
+      ammoCount: w.ammo,
+      isActive: loadout.activeWeaponSlotId === w.slotId,
+      actionEvent,
+    });
+  }
+
+  if (loadout.grenadeCount > 0) {
+    badges.push({
+      id: 'tactical_hand_grenade',
+      kind: 'tactical',
+      slotId: 'hand_grenade',
+      label: 'GRANAT',
+      ammoCount: loadout.grenadeCount,
+      isActive: false,
+      actionEvent: 'useHandGrenade',
+    });
+  }
+
+  if (loadout.landMineCount > 0) {
+    badges.push({
+      id: 'tactical_land_mine',
+      kind: 'tactical',
+      slotId: 'land_mine',
+      label: 'LAND MINE',
+      ammoCount: loadout.landMineCount,
+      isActive: false,
+      actionEvent: 'useLandMine',
+    });
+  }
+
+  return badges;
+}
+
+// ============================================================================
+// RANDOM WARZONE EXPLOSIVE BARREL AIRDROP SCHEDULER
+// ============================================================================
+
+export const WARZONE_EXPLOSIVE_BARREL_DROP_INTERVAL_SEC = 8.0;
+export const MAX_ACTIVE_WARZONE_EXPLOSIVE_BARRELS = 16;
+
+export function stepWarzoneExplosiveBarrelDropTimer(
+  currentTimerSec: number,
+  activeWarzoneBarrelCount: number,
+  dt: number,
+  intervalSec = WARZONE_EXPLOSIVE_BARREL_DROP_INTERVAL_SEC,
+  maxActiveBarrels = MAX_ACTIVE_WARZONE_EXPLOSIVE_BARRELS,
+): { nextTimerSec: number; shouldDropBarrel: boolean } {
+  if (activeWarzoneBarrelCount >= maxActiveBarrels) {
+    return { nextTimerSec: 0, shouldDropBarrel: false };
+  }
+  const nextTimerSec = currentTimerSec + Math.max(0, dt);
+  if (nextTimerSec >= intervalSec) {
+    return { nextTimerSec: 0, shouldDropBarrel: true };
+  }
+  return { nextTimerSec, shouldDropBarrel: false };
+}
+
 
 
 

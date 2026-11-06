@@ -13,6 +13,8 @@ import {
   BuddyMissionItemId,
   ColliderCategory,
   CollisionMaterialTag,
+  BuddyTacticalLoadoutState,
+  HudWeaponOrTacticalBadge,
 } from './buddiesBlitzRules';
 import {
   RobloxBuddyRig,
@@ -222,6 +224,8 @@ export interface HudSnapshot {
   hasDeployedNuclearLauncher: boolean;
   // Dynamic Supply Drop Event Banner
   supplyDropBanner?: string | null;
+  // Owned Handheld Weapons (max 3) & Secondary Tactical Items (max 2: Hand Grenade & Land Mine) with real-time Ammo counts
+  hudWeaponBadges?: HudWeaponOrTacticalBadge[];
 }
 
 export interface BuddiesBlitzArenaProps {
@@ -332,6 +336,11 @@ export interface ActiveMapPropPhysics {
   jiggleTimer: number;
   jiggleDirX: number;
   jiggleDirZ: number;
+  isWarzoneDropBarrel?: boolean;
+  fallingFromSky?: boolean;
+  y?: number;
+  vy?: number;
+  parachuteMesh?: THREE.Mesh;
 }
 
 export interface DebrisChunk3D {
@@ -444,6 +453,7 @@ export interface BuddyUnit {
   carryingCrate: 'none' | WorldCrateKind;
   secondaryItem: BuddySecondaryItemId;
   secondaryCount: number;
+  tacticalLoadout: BuddyTacticalLoadoutState;
   missionItem: BuddyMissionItemId;
   walkCycle: number;
   shootCooldown: number;

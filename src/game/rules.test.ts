@@ -148,6 +148,20 @@ import {
   PLAYER_INVINCIBILITY_BLINK_HZ,
   stepPlayerInvincibilityState,
   applyPlayerDamageWithInvincibilityAndKnockback,
+  evaluateAiRangedCombatStandoffBehavior,
+  MAX_HANDHELD_WEAPON_SLOTS,
+  MAX_TACTICAL_ITEM_SLOTS,
+  createInitialBuddyTacticalLoadout,
+  equipOrSwapDroppedWeaponInLoadout,
+  selectHandheldWeaponInLoadout,
+  consumeActiveWeaponAmmoOnShot,
+  refillLoadoutAmmoFromSource,
+  addTacticalSecondaryToLoadout,
+  consumeTacticalSecondaryInLoadout,
+  getVisibleHudWeaponAndTacticalBadges,
+  WARZONE_EXPLOSIVE_BARREL_DROP_INTERVAL_SEC,
+  MAX_ACTIVE_WARZONE_EXPLOSIVE_BARRELS,
+  stepWarzoneExplosiveBarrelDropTimer,
 } from './buddiesBlitzRules';
 import { evaluateRoadNetworkSdf } from './planetCurvature';
 import {
@@ -3108,6 +3122,138 @@ test('Unified 1.32m crate size, 0.1s Jump Input Buffer, and Player Invincibility
   assert.equal(blinkTimer, 0);
   assert.equal(stepPlayerInvincibilityState(0, 0.016).spriteVisible, true);
 });
+
+test('AI Ranged Combat Standoff, 5-Slot Tactical Loadout (3 Handheld + 2 Tactical, Ammo Badge, Click-to-Swap, Refill), Base Center Pad Drop, and Warzone Explosive Barrel Drops', () => {
+  // 1. AI Ranged Combat Intelligence: shoots directly from long range instead of chasing into melee contact
+  const rangedHold = evaluateAiRangedCombatStandoffBehavior({
+    aiX: 0,
+    aiZ: 0,
+    enemyX: 14.5,
+    enemyZ: 0,
+    weaponId: 'rifle',
+    ammo: 90,
+    strafeSign: 1,
+  });
+  assert.equal(rangedHold.canShootNow, true, 'Armed AI at 14.5m must fire directly from afar');
+  assert.equal(rangedHold.movementMode, 'hold_and_strafe', 'Armed AI at optimal range holds & strafes instead of chasing');
+
+  const rangedKite = evaluateAiRangedCombatStandoffBehavior({
+    aiX: 0,
+    aiZ: 0,
+    enemyX: 4.8,
+    enemyZ: 0,
+    weaponId: 'rocket',
+    ammo: 18,
+    strafeSign: -1,
+  });
+  assert.equal(rangedKite.canShootNow, true, 'Armed AI at 4.8m still fires');
+  assert.equal(rangedKite.movementMode, 'retreat_kite', 'Armed AI too close retreats/kites back to standoff distance');
+  assert.ok(rangedKite.goalX < 0, 'Goal X must be behind the AI (away from the enemy at +4.8)');
+
+  const unarmedMelee = evaluateAiRangedCombatStandoffBehavior({
+    aiX: 0,
+    aiZ: 0,
+    enemyX: 12.0,
+    enemyZ: 0,
+    weaponId: 'unarmed',
+    ammo: 0,
+    strafeSign: 1,
+  });
+  assert.equal(unarmedMelee.canShootNow, false);
+  assert.equal(unarmedMelee.movementMode, 'melee_chase');
+
+  // 2. Dynamic 5-Slot Tactical Loadout (3 Handheld Weapons + 2 Tactical Secondary Items: Hand Grenade & Land Mine)
+  assert.equal(MAX_HANDHELD_WEAPON_SLOTS, 3);
+  assert.equal(MAX_TACTICAL_ITEM_SLOTS, 2);
+
+  // Starting with only Pistol (60 ammo) -> ONLY Pistol appears in bottom HUD (Rifle/Bazooka hidden when not owned!)
+  let loadout = createInitialBuddyTacticalLoadout('pistol', 60, 'none', 0);
+  let badges = getVisibleHudWeaponAndTacticalBadges(loadout);
+  assert.equal(badges.length, 1, 'Unowned weapons must NOT appear in bottom HUD');
+  assert.equal(badges[0].label, 'PISTOL');
+  assert.equal(badges[0].ammoCount, 60, 'Badge number must show ammo count, not static slot number');
+  assert.equal(badges[0].isActive, true);
+
+  // Attempting to select unowned Bazooka does nothing
+  loadout = selectHandheldWeaponInLoadout(loadout, 'bazooka');
+  assert.equal(loadout.activeWeaponSlotId, 'pistol');
+
+  // Equip Rifle and Bazooka (up to 3 handheld weapons) + Hand Grenade and Land Mine (2 tactical items)
+  loadout = equipOrSwapDroppedWeaponInLoadout(loadout, 'Assault Rifle', 75).updatedLoadout;
+  loadout = equipOrSwapDroppedWeaponInLoadout(loadout, 'Bazooka', 16).updatedLoadout;
+  loadout = addTacticalSecondaryToLoadout(loadout, 'hand_grenade', 3);
+  loadout = addTacticalSecondaryToLoadout(loadout, 'land_mine', 2);
+
+  badges = getVisibleHudWeaponAndTacticalBadges(loadout);
+  assert.equal(badges.length, 5, 'Should display 3 carried handheld weapons + 2 tactical secondary items');
+  assert.deepEqual(
+    badges.map((b) => [b.label, b.ammoCount]),
+    [
+      ['PISTOL', 60],
+      ['RIFLE', 75],
+      ['BAZOOKA', 16],
+      ['GRANAT', 3],
+      ['LAND MINE', 2],
+    ],
+  );
+
+  // Clicking/swapping a 4th weapon (Laser) when 3 handheld slots are full swaps out the active weapon (Bazooka) and returns it to drop on the ground
+  const swapRes = equipOrSwapDroppedWeaponInLoadout(loadout, 'Laser Beam', 50);
+  assert.equal(swapRes.action, 'swapped');
+  assert.equal(swapRes.droppedPreviousWeapon?.slotId, 'bazooka');
+  assert.equal(swapRes.droppedPreviousWeapon?.remainingAmmo, 16);
+  loadout = swapRes.updatedLoadout;
+  assert.equal(loadout.handheldWeapons.length, 3, 'Handheld weapon slots capped at 3');
+  assert.equal(loadout.activeWeaponSlotId, 'laser');
+
+  // Consuming ammo and refilling from enemy kill, crate destroy, and supply drop
+  loadout = consumeActiveWeaponAmmoOnShot(loadout);
+  assert.equal(loadout.handheldWeapons.find((w) => w.slotId === 'laser')?.ammo, 49);
+
+  loadout = refillLoadoutAmmoFromSource(loadout, 'enemy_kill');
+  assert.equal(loadout.handheldWeapons.find((w) => w.slotId === 'laser')?.ammo, 73);
+  loadout = refillLoadoutAmmoFromSource(loadout, 'crate_destroy');
+  assert.equal(loadout.handheldWeapons.find((w) => w.slotId === 'laser')?.ammo, 93);
+  loadout = refillLoadoutAmmoFromSource(loadout, 'supply_drop');
+  assert.equal(loadout.handheldWeapons.find((w) => w.slotId === 'laser')?.ammo, 153);
+
+  // Consuming tactical secondary items (Granat & Land Mine)
+  const useGrenade = consumeTacticalSecondaryInLoadout(loadout, 'hand_grenade');
+  assert.equal(useGrenade.consumed, true);
+  assert.equal(useGrenade.updatedLoadout.grenadeCount, 2);
+
+  const useMine = consumeTacticalSecondaryInLoadout(useGrenade.updatedLoadout, 'land_mine');
+  assert.equal(useMine.consumed, true);
+  assert.equal(useMine.updatedLoadout.landMineCount, 1);
+
+  // 3. Base Crate Pad Pop-Out Inward to Base Center (never flying over the right perimeter fence)
+  // Blue base: plotCenterX = -42, padX = -37.2, right fence is at -32.4. Pop-out must go in -X toward plotCenterX!
+  const bluePadPop = computeStackingPadWeaponPopOutTrajectory(-37.2, 83.8, 0, 1, 1);
+  assert.ok(bluePadPop.vx < 0, 'Blue pad weapon pop-out must launch inward (-X) toward the center of the base');
+  assert.ok(
+    bluePadPop.landingX < -37.2 && bluePadPop.landingX > -42.0,
+    `Blue pad weapon must land in the middle of the base courtyard, got landingX=${bluePadPop.landingX}`,
+  );
+
+  // Red base: plotCenterX = 42, padX = 37.2, left fence is at 32.4. Pop-out must go in +X toward plotCenterX!
+  const redPadPop = computeStackingPadWeaponPopOutTrajectory(37.2, -83.8, 0, 1, -1);
+  assert.ok(redPadPop.vx > 0, 'Red pad weapon pop-out must launch inward (+X) toward the center of the base');
+  assert.ok(
+    redPadPop.landingX > 37.2 && redPadPop.landingX < 42.0,
+    `Red pad weapon must land in the middle of the base courtyard, got landingX=${redPadPop.landingX}`,
+  );
+
+  // 4. Random Warzone Explosive Barrel Drop Scheduler
+  assert.equal(WARZONE_EXPLOSIVE_BARREL_DROP_INTERVAL_SEC, 8.0);
+  assert.equal(MAX_ACTIVE_WARZONE_EXPLOSIVE_BARRELS, 16);
+  const step1 = stepWarzoneExplosiveBarrelDropTimer(5.0, 6, 2.0);
+  assert.equal(step1.shouldDropBarrel, false);
+  assert.equal(step1.nextTimerSec, 7.0);
+  const step2 = stepWarzoneExplosiveBarrelDropTimer(step1.nextTimerSec, 6, 1.5);
+  assert.equal(step2.shouldDropBarrel, true);
+  assert.equal(step2.nextTimerSec, 0);
+});
+
 
 
 

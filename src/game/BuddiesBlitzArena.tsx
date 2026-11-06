@@ -135,6 +135,22 @@ import {
   evaluateLyoTankShotRecoilPose,
   isTankClimbableProp,
   evaluateTankClimbableObstacleElevation,
+  evaluateAiRangedCombatStandoffBehavior,
+  MAX_HANDHELD_WEAPON_SLOTS,
+  HandheldWeaponSlotId,
+  TacticalSecondarySlotId,
+  resolveHandheldWeaponSlotSpec,
+  createInitialBuddyTacticalLoadout,
+  equipOrSwapDroppedWeaponInLoadout,
+  selectHandheldWeaponInLoadout,
+  consumeActiveWeaponAmmoOnShot,
+  refillLoadoutAmmoFromSource,
+  addTacticalSecondaryToLoadout,
+  consumeTacticalSecondaryInLoadout,
+  getVisibleHudWeaponAndTacticalBadges,
+  WARZONE_EXPLOSIVE_BARREL_DROP_INTERVAL_SEC,
+  MAX_ACTIVE_WARZONE_EXPLOSIVE_BARRELS,
+  stepWarzoneExplosiveBarrelDropTimer,
 } from './buddiesBlitzRules';
 import {
   evaluateOuterEmbankmentSdf,
@@ -1339,6 +1355,13 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
           ? 'land_mine'
           : 'hand_grenade';
       const initialSecondaryCount = initialSecondaryItem === 'none' ? 0 : 2;
+      const initialAmmo = initialWeaponId === 'unarmed' ? 0 : initialWeaponId === 'bazooka' ? 18 : 120;
+      const tacticalLoadout = createInitialBuddyTacticalLoadout(
+        initialWeaponId,
+        initialAmmo,
+        initialSecondaryItem,
+        initialSecondaryCount,
+      );
       updateCharacterWeaponStance(rig, initialWeaponId, 0, false, false, 0, 0);
 
       return {
@@ -1380,10 +1403,11 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
         punchTimer: 0,
         punchHand: 'right',
         kickTimer: 0,
-        ammo: initialWeaponId === 'unarmed' ? 0 : initialWeaponId === 'bazooka' ? 18 : 120,
+        ammo: initialAmmo,
         carryingCrate: 'none',
         secondaryItem: initialSecondaryItem,
         secondaryCount: initialSecondaryCount,
+        tacticalLoadout,
         missionItem: 'none',
         walkCycle: 0,
         shootCooldown: 0,
@@ -1832,6 +1856,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
     let kioskStatusMessage: string | null = null;
     let kioskStatusTimer = 0;
     let warzoneGoldSpawnTimer = 0;
+    let warzoneExplosiveBarrelSpawnTimer = 0;
     let supplyDropSchedule: SupplyDropScheduleState = createInitialSupplyDropScheduleState();
     let supplyDropBeaconLingeringTimer = 0;
     let teamCommand: TeamCommandMode = 'HARVEST';
@@ -2198,14 +2223,150 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
       });
     };
 
+    const syncUnitFieldsFromLoadout = (u: BuddyUnit) => {
+      const ld = u.tacticalLoadout;
+      if (ld.activeWeaponSlotId === 'unarmed' || ld.handheldWeapons.length === 0) {
+        u.weaponId = 'unarmed';
+        u.weaponName = 'Tangan Kosong (Tinju)';
+        u.ammo = 0;
+      } else {
+        const activeSlot =
+          ld.handheldWeapons.find((w) => w.slotId === ld.activeWeaponSlotId && w.ammo > 0) ??
+          ld.handheldWeapons.find((w) => w.ammo > 0);
+        if (activeSlot) {
+          ld.activeWeaponSlotId = activeSlot.slotId;
+          u.weaponId = activeSlot.slotId;
+          u.weaponName = activeSlot.weaponName;
+          u.ammo = activeSlot.ammo;
+        } else {
+          ld.activeWeaponSlotId = 'unarmed';
+          u.weaponId = 'unarmed';
+          u.weaponName = 'Tangan Kosong (Tinju)';
+          u.ammo = 0;
+        }
+      }
+      if (ld.clusterBombCount > 0) {
+        u.secondaryItem = 'cluster_bomb';
+        u.secondaryCount = ld.clusterBombCount;
+      } else if (ld.grenadeCount > 0) {
+        u.secondaryItem = 'hand_grenade';
+        u.secondaryCount = ld.grenadeCount;
+      } else if (ld.landMineCount > 0) {
+        u.secondaryItem = 'land_mine';
+        u.secondaryCount = ld.landMineCount;
+      } else {
+        u.secondaryItem = 'none';
+        u.secondaryCount = 0;
+      }
+    };
+
+    const spawnWarzoneExplosiveBarrel = (x: number, z: number, startGrounded = false) => {
+      const wx = wrapPlanetCoord(x);
+      const wz = wrapPlanetCoord(z);
+      const propId = nextEntityId++;
+      const rotY = Math.random() * Math.PI * 2;
+      const baseH = getPropBaseHeight('explosive_barrel');
+
+      let wrapper: THREE.Group | null = null;
+      if (loadedLyoAssets?.explosiveBarrelGltf) {
+        wrapper = spawnRealLyoPropFromGlb(
+          realPropsGroup,
+          loadedLyoAssets.explosiveBarrelGltf,
+          wx,
+          wz,
+          rotY,
+          baseH,
+          windUniforms,
+          isSoftwareGl,
+        );
+      }
+      if (!wrapper) {
+        wrapper = new THREE.Group();
+        addOutlinedPart(
+          wrapper,
+          new THREE.CylinderGeometry(0.46, 0.46, 1.18, 12),
+          new THREE.MeshToonMaterial({ color: '#e11d48' }),
+          [0, 0.59, 0],
+        );
+        addOutlinedPart(
+          wrapper,
+          new THREE.CylinderGeometry(0.48, 0.48, 0.22, 12),
+          matYellow,
+          [0, 0.62, 0],
+        );
+        wrapper.position.set(wx, getTerrainElevation(wx, wz), wz);
+        wrapper.rotation.y = rotY;
+        realPropsGroup.add(wrapper);
+      }
+
+      const startAlt = startGrounded ? 0 : 18.5;
+      wrapper.userData.propId = propId;
+      wrapper.userData.worldX = wx;
+      wrapper.userData.worldZ = wz;
+      wrapper.userData.baseRotY = rotY;
+      wrapper.userData.dropAltitudeY = startAlt;
+
+      const parachuteMesh = new THREE.Mesh(
+        new THREE.ConeGeometry(1.15, 0.72, 10, 1, true),
+        new THREE.MeshToonMaterial({ color: '#ff3b30', side: THREE.DoubleSide }),
+      );
+      parachuteMesh.position.y = 2.05;
+      parachuteMesh.rotation.x = Math.PI;
+      parachuteMesh.visible = !startGrounded;
+      wrapper.add(parachuteMesh);
+
+      const colSpec = getPropCollisionSpec('explosive_barrel', 1.0);
+      activeMapProps.push({
+        id: propId,
+        kind: 'explosive_barrel',
+        wrapper,
+        x: wx,
+        z: wz,
+        vx: 0,
+        vz: 0,
+        rotY,
+        rotVelY: 0,
+        scale: 1.0,
+        category: colSpec.category,
+        materialTag: colSpec.materialTag,
+        radius: colSpec.radius,
+        heightY: 1.5,
+        mass: colSpec.mass,
+        restitution: colSpec.restitution,
+        destructible: colSpec.destructible,
+        hp: colSpec.maxHp,
+        maxHp: colSpec.maxHp,
+        shootImpulse: colSpec.shootImpulse,
+        canJiggleOnHit: colSpec.canJiggleOnHit,
+        alive: true,
+        jiggleTimer: 0,
+        jiggleDirX: 0,
+        jiggleDirZ: 1,
+        isWarzoneDropBarrel: true,
+        fallingFromSky: !startGrounded,
+        y: getTerrainElevation(wx, wz) + startAlt,
+        vy: startGrounded ? 0 : -8.5,
+        parachuteMesh,
+      });
+    };
+
     /**
      * Team Buddies (PS1) Battlefield Death Item Drop Handler:
      * - Drops held Primary Weapon with its exact `remainingAmmo` (bouncing onto the ground)
-     * - Drops Gold / Silver Coins when an enemy is killed
+     * - Drops Gold / Silver Coins + Ammo Refill Pack when an enemy is killed
+     * - Refills player's carried weapon ammo upon enemy defeat
      * - Throws any carried overhead Crate, Secondary Grenade/Bomb/Mine, or Mission Object intact onto the ground
      * - NEVER drops a Medkit from a corpse (`Tidak Ada Drop Medkit dari Mayat`)!
      */
     const handleBuddyDeathDrops = (victim: BuddyUnit, killedByChainExplosion = false) => {
+      if (victim.team === 'red' && playerUnit && playerUnit.alive) {
+        playerUnit.tacticalLoadout = refillLoadoutAmmoFromSource(
+          playerUnit.tacticalLoadout,
+          'enemy_kill',
+        );
+        syncUnitFieldsFromLoadout(playerUnit);
+      }
+
       const drops = evaluateTeamBuddiesDeathDrops({
         weaponId:
           victim.weaponId === 'bazooka'
@@ -2261,6 +2422,75 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
           });
         }
       }
+
+      if (victim.team === 'red' && !killedByChainExplosion) {
+        spawnWorldPickup(
+          'ammo',
+          'AMMO PACK (+40 PELURU)',
+          wrapPlanetCoord(victim.x + (Math.random() - 0.5) * 1.4),
+          wrapPlanetCoord(victim.z + (Math.random() - 0.5) * 1.4),
+          {
+            vx: (Math.random() - 0.5) * 2.8,
+            vy: 4.8,
+            vz: (Math.random() - 0.5) * 2.8,
+            remainingAmmo: 40,
+          },
+        );
+        if (Math.random() < 0.55) {
+          const dropGrenade = Math.random() < 0.55;
+          spawnWorldPickup(
+            'secondary',
+            dropGrenade ? 'HG-04 Frag Grenade' : 'TM-89 Land Mine',
+            wrapPlanetCoord(victim.x + (Math.random() - 0.5) * 1.6),
+            wrapPlanetCoord(victim.z + (Math.random() - 0.5) * 1.6),
+            {
+              secondaryId: dropGrenade ? 'hand_grenade' : 'land_mine',
+              secondaryCount: 2,
+              vx: (Math.random() - 0.5) * 2.8,
+              vy: 4.9,
+              vz: (Math.random() - 0.5) * 2.8,
+            },
+          );
+        }
+      }
+    };
+
+    const rewardPlayerOnCrateDestroyed = (cx: number, cz: number) => {
+      if (playerUnit && playerUnit.alive) {
+        playerUnit.tacticalLoadout = refillLoadoutAmmoFromSource(
+          playerUnit.tacticalLoadout,
+          'crate_destroy',
+        );
+        syncUnitFieldsFromLoadout(playerUnit);
+      }
+      spawnWorldPickup(
+        'ammo',
+        'AMMO PACK (+40 PELURU)',
+        wrapPlanetCoord(cx + (Math.random() - 0.5) * 1.1),
+        wrapPlanetCoord(cz + (Math.random() - 0.5) * 1.1),
+        {
+          vx: (Math.random() - 0.5) * 2.6,
+          vy: 4.8,
+          vz: (Math.random() - 0.5) * 2.6,
+          remainingAmmo: 40,
+        },
+      );
+      if (Math.random() < 0.45) {
+        const dropGrenade = Math.random() < 0.55;
+        spawnWorldPickup(
+          'secondary',
+          dropGrenade ? 'HG-04 Frag Grenade' : 'TM-89 Land Mine',
+          wrapPlanetCoord(cx + (Math.random() - 0.5) * 1.3),
+          wrapPlanetCoord(cz + (Math.random() - 0.5) * 1.3),
+          {
+            secondaryId: dropGrenade ? 'hand_grenade' : 'land_mine',
+            secondaryCount: 2,
+            vx: (Math.random() - 0.5) * 2.8,
+            vy: 5.0,
+            vz: (Math.random() - 0.5) * 2.8,
+          },
+        );
+      }
     };
 
     // Player Buddy (Commander 0 / P1) + Dynamic Mode Switching (SANDBOX = NO NPCs, EDITOR = NO NPCs, MATCH = 4v4 WITH AI)
@@ -2300,7 +2530,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
               pad.padX - 3.6,
               pad.padZ - 2.8,
               cmdId,
-              cmdId % 2 === 0,
+              false,
             ),
           );
         }
@@ -2321,7 +2551,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
               pad.padX + 3.6,
               pad.padZ + 2.8,
               cmdId,
-              cmdId % 2 === 0,
+              false,
             ),
           );
         }
@@ -2340,6 +2570,13 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
       buddyUnits.length = 0;
       tanks.forEach((t) => scene.remove(t.root));
       tanks.length = 0;
+      for (let bi = activeMapProps.length - 1; bi >= 0; bi--) {
+        if (activeMapProps[bi].isWarzoneDropBarrel) {
+          realPropsGroup.remove(activeMapProps[bi].wrapper);
+          activeMapProps.splice(bi, 1);
+        }
+      }
+      warzoneExplosiveBarrelSpawnTimer = 0;
       collisionCooldownMap.clear();
 
       // 1. Clean Zero-Prebuilt Start: All 4 Stacking Pads per Base start at 0/8 crates, and 4v4 Matchmaking starts with 2 Human + 2 AI per team
@@ -2443,6 +2680,11 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
             { scoreValue: isGold ? 250 : 100, vy: 3.5 },
           );
         }
+        // Spawn initial chaotic Warzone Explosive Barrels (some grounded, some parachuting down!)
+        for (let bi = 0; bi < 5; bi++) {
+          const barrelSpot = pickRandomWarzoneDropCoord();
+          spawnWarzoneExplosiveBarrel(barrelSpot.x, barrelSpot.z, bi < 2);
+        }
       }
 
       trees.forEach((t) => {
@@ -2455,6 +2697,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
 
       // Reset any pushed or shattered map props back to their saved layout positions
       for (const mp of activeMapProps) {
+        if (mp.isWarzoneDropBarrel) continue;
         const orig = currentMapLayout.props.find((p) => p.id === mp.id);
         if (orig) {
           mp.x = orig.x;
@@ -3679,11 +3922,20 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
         customBlueRecipe === 'cluster_bomb'
       ) {
         if (playerUnit && playerUnit.alive) {
-          playerUnit.secondaryItem = customBlueRecipe;
-          playerUnit.secondaryCount = Math.min(
-            9,
-            (playerUnit.secondaryItem === customBlueRecipe ? playerUnit.secondaryCount : 0) + 3,
-          );
+          if (customBlueRecipe === 'hand_grenade' || customBlueRecipe === 'land_mine') {
+            playerUnit.tacticalLoadout = addTacticalSecondaryToLoadout(
+              playerUnit.tacticalLoadout,
+              customBlueRecipe,
+              3,
+            );
+            syncUnitFieldsFromLoadout(playerUnit);
+          } else {
+            playerUnit.secondaryItem = customBlueRecipe;
+            playerUnit.secondaryCount = Math.min(
+              9,
+              (playerUnit.secondaryItem === customBlueRecipe ? playerUnit.secondaryCount : 0) + 3,
+            );
+          }
         }
         const popSec = computeStackingPadWeaponPopOutTrajectory(
           padMeshObj.padX,
@@ -3899,9 +4151,13 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
               ob.maxHp = Math.max(ob.maxHp, 200);
             }
             ob.hp = ob.maxHp;
-            ob.weaponId = padEval.isSuper ? 'bazooka' : 'rifle';
-            ob.weaponName = padEval.isSuper ? 'LyoRocketLauncher' : 'LyoAssaultRifle';
-            ob.ammo = 240;
+            const upgWeaponName = padEval.isSuper ? 'LyoRocketLauncher' : 'LyoAssaultRifle';
+            ob.tacticalLoadout = equipOrSwapDroppedWeaponInLoadout(
+              ob.tacticalLoadout,
+              upgWeaponName,
+              240,
+            ).updatedLoadout;
+            syncUnitFieldsFromLoadout(ob);
           });
           if (isBlue) score += 180;
         }
@@ -4119,6 +4375,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
             remainingAmmo: crateDrop.remainingAmmo,
             vy: crateDrop.isPurpleSuperWeapon ? 6.8 : 5.4,
           });
+          rewardPlayerOnCrateDestroyed(c.x, c.z);
           scene.remove(c.mesh);
           worldCrates.splice(ci, 1);
         } else {
@@ -4791,20 +5048,25 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
     const handleSelectTacticalWeapon = (weaponId: LyoWeaponId) => {
       if (!playerUnit || !playerUnit.alive) return;
       soundEngine.playUiClick();
-      playerUnit.weaponId = weaponId;
-      playerUnit.weaponName =
-        weaponId === 'unarmed'
-          ? 'Tangan Kosong (Tinju)'
-          : weaponId === 'gatling'
-          ? 'TITAN-6 Rotary Gatling'
-          : weaponId === 'laser'
-          ? 'LG-88 Photon Lance'
-          : weaponId === 'bazooka'
-          ? 'LyoRocketLauncher'
-          : weaponId === 'rifle'
-          ? 'LyoAssaultRifle'
-          : 'LyoPistol';
-      playerUnit.weaponRecoil = weaponId === 'unarmed' ? 0 : 0.38;
+      if (weaponId === 'unarmed') {
+        playerUnit.tacticalLoadout = selectHandheldWeaponInLoadout(
+          playerUnit.tacticalLoadout,
+          'unarmed',
+        );
+      } else {
+        const ownsWeapon = playerUnit.tacticalLoadout.handheldWeapons.some(
+          (w) => w.slotId === weaponId,
+        );
+        if (!ownsWeapon) {
+          return;
+        }
+        playerUnit.tacticalLoadout = selectHandheldWeaponInLoadout(
+          playerUnit.tacticalLoadout,
+          weaponId as HandheldWeaponSlotId,
+        );
+      }
+      syncUnitFieldsFromLoadout(playerUnit);
+      playerUnit.weaponRecoil = playerUnit.weaponId === 'unarmed' ? 0 : 0.38;
       updateCharacterWeaponStance(
         playerUnit.rig,
         playerUnit.weaponId,
@@ -4818,6 +5080,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
         playerUnit.kickTimer,
         playerUnit.jumpOffset,
       );
+      emitHudImmediately();
     };
 
     // =========================================================================
@@ -4916,53 +5179,31 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
       kioskStatusTimer = 3.5;
     };
 
-    const handleUseSecondaryOrdnance = () => {
-      const secId = playerUnit?.secondaryItem ?? 'none';
-      const isInPlane = Boolean(mountedTank && mountedTank.vehicleKind === 'plane');
+    const handleUseTacticalSecondaryItem = (preferredKind?: TacticalSecondarySlotId) => {
+      if (!playerUnit || !playerUnit.alive) return;
+      const chosenKind: TacticalSecondarySlotId | 'none' =
+        preferredKind &&
+        ((preferredKind === 'hand_grenade' && playerUnit.tacticalLoadout.grenadeCount > 0) ||
+          (preferredKind === 'land_mine' && playerUnit.tacticalLoadout.landMineCount > 0))
+          ? preferredKind
+          : playerUnit.tacticalLoadout.grenadeCount > 0
+            ? 'hand_grenade'
+            : playerUnit.tacticalLoadout.landMineCount > 0
+              ? 'land_mine'
+              : 'none';
 
-      // If piloting the Lyo Plane, pressing [X] drops the CB-24 Cluster Bomb (if unlocked / equipped)
-      if (isInPlane && mountedTank) {
-        const bLv = blueCommanderBases[0]?.buildingLevel ?? 1;
-        const clusterAccess = evaluateClusterBombAccess(bLv, true);
-        if (!clusterAccess.allowedToBuild) {
-          soundEngine.playHit();
-          kioskStatusMessage = clusterAccess.statusMessage;
-          kioskStatusTimer = 4.5;
-          return;
-        }
-        dropClusterBombFromPlane(mountedTank);
-        if (playerUnit.secondaryItem === 'cluster_bomb' && playerUnit.secondaryCount > 0) {
-          playerUnit.secondaryCount = Math.max(0, playerUnit.secondaryCount - 1);
-        }
-        return;
-      }
+      if (chosenKind === 'none') return;
 
-      if (!playerUnit || !playerUnit.alive || secId === 'none' || playerUnit.secondaryCount <= 0) {
-        return;
-      }
-
-      // STRICT RULE: CB-24 Cluster Bomb can ONLY be used by the Lyo Fighter Plane!
-      if (secId === 'cluster_bomb') {
-        soundEngine.playHit();
-        playerUnit.saluteTimer = 2.8;
-        playerUnit.saluteSign.updateText(
-          'KHUSUS PESAWAT TEMPUR!',
-          'CLUSTER BOMB HANYA BISA DIJATUHKAN DARI PESAWAT [G]!',
-          '#ff9f0a',
-          1,
-        );
-        playerUnit.saluteSign.sprite.visible = true;
-        kioskStatusMessage =
-          'KHUSUS PESAWAT! Naik ke Pesawat Tempur (Lyo Plane) [G] untuk menjatuhkan CB-24 Cluster Bomb!';
-        kioskStatusTimer = 4.5;
-        return;
-      }
+      const cons = consumeTacticalSecondaryInLoadout(playerUnit.tacticalLoadout, chosenKind);
+      if (!cons.consumed) return;
+      playerUnit.tacticalLoadout = cons.updatedLoadout;
+      syncUnitFieldsFromLoadout(playerUnit);
 
       const fwdX = Math.cos(playerUnit.yaw);
       const fwdZ = -Math.sin(playerUnit.yaw);
       const groundY = getTerrainElevation(playerUnit.x, playerUnit.z);
 
-      if (secId === 'hand_grenade') {
+      if (chosenKind === 'hand_grenade') {
         soundEngine.playPickup();
         const mesh = buildTeamBuddiesDropPickupMesh(
           'secondary',
@@ -4986,9 +5227,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
           fuseTimer: 1.65,
           isGrounded: false,
         });
-        playerUnit.secondaryCount = Math.max(0, playerUnit.secondaryCount - 1);
-        if (playerUnit.secondaryCount <= 0) playerUnit.secondaryItem = 'none';
-      } else if (secId === 'land_mine') {
+      } else if (chosenKind === 'land_mine') {
         soundEngine.playPickup();
         const mesh = buildTeamBuddiesDropPickupMesh(
           'secondary',
@@ -5015,9 +5254,57 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
           fuseTimer: 18.0,
           isGrounded: true,
         });
-        playerUnit.secondaryCount = Math.max(0, playerUnit.secondaryCount - 1);
-        if (playerUnit.secondaryCount <= 0) playerUnit.secondaryItem = 'none';
       }
+      emitHudImmediately();
+    };
+
+    const handleUseSecondaryOrdnance = () => {
+      const secId = playerUnit?.secondaryItem ?? 'none';
+      const isInPlane = Boolean(mountedTank && mountedTank.vehicleKind === 'plane');
+
+      // If piloting the Lyo Plane, pressing [X] drops the CB-24 Cluster Bomb (if unlocked / equipped)
+      if (isInPlane && mountedTank) {
+        const bLv = blueCommanderBases[0]?.buildingLevel ?? 1;
+        const clusterAccess = evaluateClusterBombAccess(bLv, true);
+        if (!clusterAccess.allowedToBuild) {
+          soundEngine.playHit();
+          kioskStatusMessage = clusterAccess.statusMessage;
+          kioskStatusTimer = 4.5;
+          return;
+        }
+        dropClusterBombFromPlane(mountedTank);
+        if (playerUnit.secondaryItem === 'cluster_bomb' && playerUnit.secondaryCount > 0) {
+          playerUnit.secondaryCount = Math.max(0, playerUnit.secondaryCount - 1);
+        }
+        return;
+      }
+
+      if (!playerUnit || !playerUnit.alive) {
+        return;
+      }
+
+      // STRICT RULE: CB-24 Cluster Bomb can ONLY be used by the Lyo Fighter Plane!
+      if (
+        secId === 'cluster_bomb' &&
+        playerUnit.tacticalLoadout.grenadeCount <= 0 &&
+        playerUnit.tacticalLoadout.landMineCount <= 0
+      ) {
+        soundEngine.playHit();
+        playerUnit.saluteTimer = 2.8;
+        playerUnit.saluteSign.updateText(
+          'KHUSUS PESAWAT TEMPUR!',
+          'CLUSTER BOMB HANYA BISA DIJATUHKAN DARI PESAWAT [G]!',
+          '#ff9f0a',
+          1,
+        );
+        playerUnit.saluteSign.sprite.visible = true;
+        kioskStatusMessage =
+          'KHUSUS PESAWAT! Naik ke Pesawat Tempur (Lyo Plane) [G] untuk menjatuhkan CB-24 Cluster Bomb!';
+        kioskStatusTimer = 4.5;
+        return;
+      }
+
+      handleUseTacticalSecondaryItem();
     };
 
     const handleSandboxUnlockBaseLv3 = () => {
@@ -5501,14 +5788,41 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
         handleSwapBuddy();
       } else if (e.code === 'Digit1' || e.code === 'Numpad1') {
         e.preventDefault();
-        handleSelectTacticalWeapon(playerUnit.weaponId === 'pistol' ? 'unarmed' : 'pistol');
+        const slot0 = playerUnit.tacticalLoadout.handheldWeapons[0];
+        if (slot0) {
+          handleSelectTacticalWeapon(playerUnit.weaponId === slot0.slotId ? 'unarmed' : slot0.slotId);
+        } else {
+          handleSelectTacticalWeapon('pistol');
+        }
       } else if (e.code === 'Digit2' || e.code === 'Numpad2') {
         e.preventDefault();
-        handleSelectTacticalWeapon(playerUnit.weaponId === 'rifle' ? 'unarmed' : 'rifle');
+        const slot1 = playerUnit.tacticalLoadout.handheldWeapons[1];
+        if (slot1) {
+          handleSelectTacticalWeapon(playerUnit.weaponId === slot1.slotId ? 'unarmed' : slot1.slotId);
+        } else {
+          handleSelectTacticalWeapon('rifle');
+        }
       } else if (e.code === 'Digit3' || e.code === 'Numpad3') {
         e.preventDefault();
-        handleSelectTacticalWeapon(playerUnit.weaponId === 'bazooka' ? 'unarmed' : 'bazooka');
-      } else if (e.code === 'Digit4' || e.code === 'Numpad4' || e.code === 'Digit0' || e.code === 'Backquote') {
+        const slot2 = playerUnit.tacticalLoadout.handheldWeapons[2];
+        if (slot2) {
+          handleSelectTacticalWeapon(playerUnit.weaponId === slot2.slotId ? 'unarmed' : slot2.slotId);
+        } else {
+          handleSelectTacticalWeapon('bazooka');
+        }
+      } else if (e.code === 'Digit4' || e.code === 'Numpad4') {
+        e.preventDefault();
+        if (playerUnit.tacticalLoadout.grenadeCount > 0) {
+          handleUseTacticalSecondaryItem('hand_grenade');
+        } else {
+          handleSelectTacticalWeapon('unarmed');
+        }
+      } else if (e.code === 'Digit5' || e.code === 'Numpad5') {
+        e.preventDefault();
+        if (playerUnit.tacticalLoadout.landMineCount > 0) {
+          handleUseTacticalSecondaryItem('land_mine');
+        }
+      } else if (e.code === 'Digit0' || e.code === 'Backquote') {
         e.preventDefault();
         handleSelectTacticalWeapon('unarmed');
       }
@@ -5634,6 +5948,71 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
             return;
           }
         }
+
+        // Click-to-Swap Dropped Weapon ("dan juga bisa swap senjata dengan cara mengklik senjata yang drop itu"):
+        // Clicking directly on a dropped weapon in the 3D world equips or swaps it into the player's 3-slot handheld inventory!
+        if (!mountedTank && playerUnit && playerUnit.alive) {
+          raycaster.ray.intersectPlane(groundPlane, aimWorldPoint);
+          let clickedWeaponIdx = -1;
+          let bestClickScore = 1.65;
+          const scratchPickupPt = new THREE.Vector3();
+          for (let pi = 0; pi < worldPickups.length; pi++) {
+            const pk = worldPickups[pi];
+            if (pk.kind !== 'weapon' || pk.collected) continue;
+            const distToPlayer = getPlanetShortestDistance(playerUnit.x, playerUnit.z, pk.x, pk.z);
+            if (distToPlayer > 16.0) continue;
+            scratchPickupPt.set(pk.x, pk.y, pk.z);
+            const rayDist = raycaster.ray.distanceToPoint(scratchPickupPt);
+            const groundDist = getPlanetShortestDistance(aimWorldPoint.x, aimWorldPoint.z, pk.x, pk.z);
+            const clickDist = Math.min(rayDist, groundDist);
+            if (clickDist <= bestClickScore) {
+              bestClickScore = clickDist;
+              clickedWeaponIdx = pi;
+            }
+          }
+          if (clickedWeaponIdx !== -1) {
+            const pk = worldPickups[clickedWeaponIdx];
+            const swapRes = equipOrSwapDroppedWeaponInLoadout(
+              playerUnit.tacticalLoadout,
+              pk.weaponName,
+              pk.remainingAmmo,
+            );
+            playerUnit.tacticalLoadout = swapRes.updatedLoadout;
+            syncUnitFieldsFromLoadout(playerUnit);
+            playerUnit.weaponRecoil = 0.38;
+            soundEngine.playPickup();
+            spawnBurstParticles(pk.x, pk.y, pk.z, 10);
+            if (swapRes.action === 'swapped' && swapRes.droppedPreviousWeapon) {
+              const prev = swapRes.droppedPreviousWeapon;
+              const prevWid: 'pistol' | 'rifle' | 'rocket' =
+                prev.slotId === 'bazooka'
+                  ? 'rocket'
+                  : prev.slotId === 'pistol'
+                    ? 'pistol'
+                    : 'rifle';
+              spawnWorldPickup('weapon', prev.weaponName, pk.x, pk.z, {
+                weaponId: prevWid,
+                remainingAmmo: prev.remainingAmmo,
+                vx: (Math.random() - 0.5) * 2.2,
+                vy: 4.2,
+                vz: (Math.random() - 0.5) * 2.2,
+                despawnTimerSec: TEAM_BUDDIES_CRAFTED_WEAPON_DESPAWN_SEC,
+              });
+            }
+            playerUnit.saluteTimer = 1.65;
+            playerUnit.saluteSign.updateText(
+              swapRes.action === 'swapped' ? 'SWAP SENJATA!' : 'AMBIL SENJATA!',
+              `${playerUnit.weaponName.toUpperCase()} (${playerUnit.ammo})`,
+              '#b8ff3c',
+              1,
+            );
+            playerUnit.saluteSign.sprite.visible = true;
+            scene.remove(pk.mesh);
+            worldPickups.splice(clickedWeaponIdx, 1);
+            emitHudImmediately();
+            return;
+          }
+        }
         isPointerDown = true;
       } else if (e.button === 2) {
         handlePlayerPickupOrThrowCrate();
@@ -5688,6 +6067,10 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
       else if (act === 'selectWeaponPistol') handleSelectTacticalWeapon('pistol');
       else if (act === 'selectWeaponRifle') handleSelectTacticalWeapon('rifle');
       else if (act === 'selectWeaponBazooka') handleSelectTacticalWeapon('bazooka');
+      else if (act === 'selectWeaponLaser') handleSelectTacticalWeapon('laser');
+      else if (act === 'selectWeaponGatling') handleSelectTacticalWeapon('gatling');
+      else if (act === 'useHandGrenade') handleUseTacticalSecondaryItem('hand_grenade');
+      else if (act === 'useLandMine') handleUseTacticalSecondaryItem('land_mine');
       else if (act === 'hotJoinPlayer') handleHotJoinPlayer();
       else if (act === 'sandboxDropRedCrate') handleSandboxQuickDropCrate('red');
       else if (act === 'sandboxDropSuperCrate') handleSandboxQuickDropCrate('super');
@@ -5699,8 +6082,13 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
       else if (act === 'sandboxUnlockBaseLv3') handleSandboxUnlockBaseLv3();
       else if (act === 'sandboxEquipLaserGun') {
         if (mountedTank) handleToggleMountTank();
+        playerUnit.tacticalLoadout = equipOrSwapDroppedWeaponInLoadout(
+          playerUnit.tacticalLoadout,
+          'LG-88 Photon Lance',
+          200,
+        ).updatedLoadout;
+        syncUnitFieldsFromLoadout(playerUnit);
         handleSelectTacticalWeapon('laser');
-        playerUnit.ammo = 200;
         const fwdX = Math.cos(playerUnit.yaw);
         const fwdZ = -Math.sin(playerUnit.yaw);
         const pY = getTerrainElevation(playerUnit.x, playerUnit.z) + 1.48;
@@ -5727,8 +6115,13 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
         );
       } else if (act === 'sandboxEquipGatlingGun') {
         if (mountedTank) handleToggleMountTank();
+        playerUnit.tacticalLoadout = equipOrSwapDroppedWeaponInLoadout(
+          playerUnit.tacticalLoadout,
+          'TITAN-6 Rotary Gatling',
+          300,
+        ).updatedLoadout;
+        syncUnitFieldsFromLoadout(playerUnit);
         handleSelectTacticalWeapon('gatling');
-        playerUnit.ammo = 300;
         const fwdX = Math.cos(playerUnit.yaw);
         const fwdZ = -Math.sin(playerUnit.yaw);
         const rightX = Math.sin(playerUnit.yaw);
@@ -5751,14 +6144,22 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
         );
       } else if (act === 'sandboxGiveHandGrenade') {
         if (mountedTank) handleToggleMountTank();
-        playerUnit.secondaryItem = 'hand_grenade';
-        playerUnit.secondaryCount = 5;
-        handleUseSecondaryOrdnance();
+        playerUnit.tacticalLoadout = addTacticalSecondaryToLoadout(
+          playerUnit.tacticalLoadout,
+          'hand_grenade',
+          5,
+        );
+        syncUnitFieldsFromLoadout(playerUnit);
+        handleUseTacticalSecondaryItem('hand_grenade');
       } else if (act === 'sandboxGiveLandMine') {
         if (mountedTank) handleToggleMountTank();
-        playerUnit.secondaryItem = 'land_mine';
-        playerUnit.secondaryCount = 5;
-        handleUseSecondaryOrdnance();
+        playerUnit.tacticalLoadout = addTacticalSecondaryToLoadout(
+          playerUnit.tacticalLoadout,
+          'land_mine',
+          5,
+        );
+        syncUnitFieldsFromLoadout(playerUnit);
+        handleUseTacticalSecondaryItem('land_mine');
       } else if (act === 'sandboxSpawnPlaneWithClusterBomb') {
         handleSandboxUnlockBaseLv3();
         playerUnit.secondaryItem = 'cluster_bomb';
@@ -6092,6 +6493,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                 vy: 6.4,
               });
             }
+            rewardPlayerOnCrateDestroyed(c.x, c.z);
             scene.remove(c.mesh);
             worldCrates.splice(ci, 1);
           }
@@ -7339,6 +7741,23 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
             );
           }
 
+          // Random Warzone Explosive Barrel Parachute Drops ("agar lebih chaos buat juga explostion barrel yang drop random di warzone")
+          const activeWarzoneBarrelCount = activeMapProps.filter(
+            (mp) => mp.alive && mp.kind === 'explosive_barrel' && mp.isWarzoneDropBarrel,
+          ).length;
+          const barrelDropStep = stepWarzoneExplosiveBarrelDropTimer(
+            warzoneExplosiveBarrelSpawnTimer,
+            activeWarzoneBarrelCount,
+            dt,
+            WARZONE_EXPLOSIVE_BARREL_DROP_INTERVAL_SEC,
+            MAX_ACTIVE_WARZONE_EXPLOSIVE_BARRELS,
+          );
+          warzoneExplosiveBarrelSpawnTimer = barrelDropStep.nextTimerSec;
+          if (barrelDropStep.shouldDropBarrel) {
+            const spot = pickRandomWarzoneDropCoord();
+            spawnWarzoneExplosiveBarrel(spot.x, spot.z, false);
+          }
+
           // Dynamic Supply Drop Event (Alternating Central Oasis & Harbor Dock every 45–70s, with 15s countdown!)
           const supplyStep = stepSupplyDropSchedule(supplyDropSchedule, dt);
           supplyDropSchedule = supplyStep.state;
@@ -7350,6 +7769,46 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
             supplyDropBeaconLingeringTimer = 10.0;
             // 1. Spawn 1 Indestructible Special Metallic Crate (65% Silver Metallic / 35% Shiny Gold Metallic)
             spawnWorldCrate(payload.metallicCrateKind, payload.x, payload.z, false);
+
+            // 1b. Refill Player Ammo on Supply Drop Event + Spawn 3 Supply Ammo Packs & Tactical Grenade/Land Mine Packs!
+            if (playerUnit && playerUnit.alive) {
+              playerUnit.tacticalLoadout = refillLoadoutAmmoFromSource(
+                playerUnit.tacticalLoadout,
+                'supply_drop',
+              );
+              syncUnitFieldsFromLoadout(playerUnit);
+            }
+            for (let ai = 0; ai < 3; ai++) {
+              const angle = (ai / 3) * Math.PI * 2 + 0.35;
+              const rad = 1.7 + Math.random() * 1.3;
+              const ax = wrapPlanetCoord(payload.x + Math.cos(angle) * rad);
+              const az = wrapPlanetCoord(payload.z + Math.sin(angle) * rad);
+              spawnWorldPickup('ammo', 'SUPPLY AMMO (+60 PELURU)', ax, az, {
+                remainingAmmo: 60,
+                vx: Math.cos(angle) * 2.4,
+                vy: 5.5,
+                vz: Math.sin(angle) * 2.4,
+              });
+            }
+            for (const secKind of ['hand_grenade', 'land_mine'] as const) {
+              const angle = secKind === 'hand_grenade' ? 0.95 : 2.55;
+              const rad = 2.0;
+              const sx = wrapPlanetCoord(payload.x + Math.cos(angle) * rad);
+              const sz = wrapPlanetCoord(payload.z + Math.sin(angle) * rad);
+              spawnWorldPickup(
+                'secondary',
+                secKind === 'hand_grenade' ? 'HG-04 Frag Grenade' : 'TM-89 Land Mine',
+                sx,
+                sz,
+                {
+                  secondaryId: secKind,
+                  secondaryCount: 3,
+                  vx: Math.cos(angle) * 2.5,
+                  vy: 5.4,
+                  vz: Math.sin(angle) * 2.5,
+                },
+              );
+            }
 
             // 2. Spawn 5-8 Large Gold Coins (@ +150 G) around the Supply Drop landing site
             for (let gi = 0; gi < payload.goldCoinCount; gi++) {
@@ -7658,9 +8117,24 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
             }
           }
 
-          // Update Pushable & Jiggling Map Props (wheelbarrow, traffic_cone, barricade, recycle_bin, etc.)
+          // Update Pushable & Jiggling Map Props (wheelbarrow, traffic_cone, barricade, recycle_bin, warzone explosive barrels, etc.)
           for (const mp of activeMapProps) {
             if (!mp.alive) continue;
+            if (mp.fallingFromSky) {
+              const groundY = getTerrainElevation(mp.x, mp.z);
+              mp.y = (mp.y ?? groundY + 18.0) - 5.6 * dt;
+              mp.rotY = Math.sin(timeSec * 2.6 + mp.id) * 0.16;
+              mp.wrapper.userData.baseRotY = mp.rotY;
+              if (mp.y <= groundY) {
+                mp.y = groundY;
+                mp.fallingFromSky = false;
+                mp.wrapper.userData.fallOffsetY = 0;
+                if (mp.parachuteMesh) mp.parachuteMesh.visible = false;
+                spawnBurstParticles(mp.x, groundY + 0.45, mp.z, 8);
+              } else {
+                mp.wrapper.userData.fallOffsetY = mp.y - groundY;
+              }
+            }
             if (mp.category === 'pushable' || mp.category === 'breakable') {
               const spd = Math.hypot(mp.vx, mp.vz);
               if (spd > 0.02 || Math.abs(mp.rotVelY) > 0.02) {
@@ -8547,11 +9021,10 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                   }
                   shakeTrauma = Math.min(1, shakeTrauma + 0.04);
                 }
-                playerUnit.ammo = Math.max(0, playerUnit.ammo - 1);
-                if (playerUnit.ammo <= 0) {
-                  playerUnit.weaponId = 'unarmed';
-                  playerUnit.weaponName = 'Tangan Kosong (Tinju)';
-                }
+                playerUnit.tacticalLoadout = consumeActiveWeaponAmmoOnShot(
+                  playerUnit.tacticalLoadout,
+                );
+                syncUnitFieldsFromLoadout(playerUnit);
               }
             }
           }
@@ -8787,30 +9260,12 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                   for (let pi = worldPickups.length - 1; pi >= 0; pi--) {
                     const pk = worldPickups[pi];
                     if (pk.kind === 'weapon' && getPlanetShortestDistance(pk.x, pk.z, b.x, b.z) < 2.1) {
-                      b.weaponName = pk.weaponName;
-                      b.weaponId =
-                        pk.weaponName.includes('Gatling') ||
-                        pk.weaponName.includes('TITAN-6') ||
-                        pk.weaponName.includes('Rotary')
-                          ? 'gatling'
-                          : pk.weaponName.includes('Laser') ||
-                              pk.weaponName.includes('Photon') ||
-                              pk.weaponName.includes('Railgun')
-                            ? 'laser'
-                            : pk.weaponName.includes('Bazooka') ||
-                                pk.weaponName.includes('Supazooka') ||
-                                pk.weaponName.includes('Rocket') ||
-                                pk.weaponName.includes('Nuclear') ||
-                                pk.weaponName.includes('Ion') ||
-                                pk.weaponName.includes('Homing')
-                              ? 'bazooka'
-                              : pk.weaponName.includes('Rifle') ||
-                                  pk.weaponName.includes('Shotgun') ||
-                                  pk.weaponName.includes('Plasma') ||
-                                  pk.weaponName.includes('Machine')
-                                ? 'rifle'
-                                : 'pistol';
-                      b.ammo = pk.remainingAmmo ?? 120;
+                      b.tacticalLoadout = equipOrSwapDroppedWeaponInLoadout(
+                        b.tacticalLoadout,
+                        pk.weaponName,
+                        pk.remainingAmmo ?? 120,
+                      ).updatedLoadout;
+                      syncUnitFieldsFromLoadout(b);
                       scene.remove(pk.mesh);
                       worldPickups.splice(pi, 1);
                       break;
@@ -9025,7 +9480,11 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                     b.walkCycle += dt * moveSpd * 1.6;
                   }
                 }
-              } else if (aiDecision.action === 'DEFEND_OWNER_PAD') {
+              }
+
+              let activeRangedStandoff: ReturnType<typeof evaluateAiRangedCombatStandoffBehavior> | null =
+                null;
+              if (aiDecision.action === 'DEFEND_OWNER_PAD') {
                 const ownerPlot =
                   b.team === 'blue' ? blueCommanderBases[ownerIdx] : redCommanderBases[ownerIdx];
                 const defendCoords = getCommanderDefendStationCoords(
@@ -9042,11 +9501,38 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                 aiDecision.action !== 'HARVEST_CRATE' &&
                 aiDecision.action !== 'EQUIP_GROUND_WEAPON' &&
                 aiDecision.action !== 'HEAL_WOUNDED_ALLY' &&
-                aiDecision.action !== 'MOUNT_VEHICLE'
+                aiDecision.action !== 'MOUNT_VEHICLE' &&
+                aiDecision.action !== 'FOLLOW_COMMANDER'
               ) {
-                // ATTACK_ENEMY
-                goalX = nearestEnemy ? nearestEnemy.x : enemyHqX;
-                goalZ = nearestEnemy ? nearestEnemy.z : enemyHqZ;
+                // ATTACK_ENEMY: Armed AI holds/strafes/kites at long standoff range and shoots directly from afar!
+                if (nearestEnemy) {
+                  const enemyDist = getPlanetShortestDistance(
+                    b.x,
+                    b.z,
+                    nearestEnemy.x,
+                    nearestEnemy.z,
+                  );
+                  const strafeSign: 1 | -1 =
+                    (b.id % 2 === 0 ? 1 : -1) *
+                      (Math.sin(timeSec * 1.45 + b.id * 1.7) >= 0 ? 1 : -1) >
+                    0
+                      ? 1
+                      : -1;
+                  activeRangedStandoff = evaluateAiRangedCombatStandoffBehavior({
+                    aiX: b.x,
+                    aiZ: b.z,
+                    enemyX: nearestEnemy.x,
+                    enemyZ: nearestEnemy.z,
+                    weaponId: b.weaponId,
+                    ammo: b.ammo,
+                    strafeSign,
+                  });
+                  goalX = wrapPlanetCoord(activeRangedStandoff.goalX);
+                  goalZ = wrapPlanetCoord(activeRangedStandoff.goalZ);
+                } else {
+                  goalX = enemyHqX;
+                  goalZ = enemyHqZ;
+                }
               }
 
               if (!isAutonomousFollowerMode) {
@@ -9058,17 +9544,29 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                   false,
                   spec.canFly,
                 );
-                if (steer.distToGoal > 0.6 && b.saluteTimer <= 1.1) {
-                  b.vx = steer.dirX * aiSpeed;
-                  b.vz = steer.dirZ * aiSpeed;
+                const moveScale =
+                  activeRangedStandoff &&
+                  (activeRangedStandoff.movementMode === 'hold_and_strafe' ||
+                    activeRangedStandoff.movementMode === 'retreat_kite')
+                    ? 0.72
+                    : 1.0;
+                if (steer.distToGoal > 0.55 && b.saluteTimer <= 1.1) {
+                  b.vx = steer.dirX * aiSpeed * moveScale;
+                  b.vz = steer.dirZ * aiSpeed * moveScale;
                   b.x = wrapPlanetCoord(b.x + b.vx * dt);
                   b.z = wrapPlanetCoord(b.z + b.vz * dt);
                   resolveMoverWorldCollisions(b, `ai_buddy_${b.id}`, false, 0.70, 2.0, timeSec, false);
-                  b.yaw = Math.atan2(-b.vz, b.vx);
-                  b.walkCycle += dt * aiSpeed * 1.6;
+                  b.yaw =
+                    activeRangedStandoff && activeRangedStandoff.canShootNow
+                      ? activeRangedStandoff.aimYaw
+                      : Math.atan2(-b.vz, b.vx);
+                  b.walkCycle += dt * aiSpeed * moveScale * 1.6;
                 } else {
                   b.vx = 0;
                   b.vz = 0;
+                  if (activeRangedStandoff && activeRangedStandoff.canShootNow) {
+                    b.yaw = activeRangedStandoff.aimYaw;
+                  }
                 }
               }
 
@@ -9076,7 +9574,15 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
               if ((b.carryingCrate === 'none' || isAutonomousFollowerMode) && b.shootCooldown <= 0) {
                 let targetX: number | null = null;
                 let targetZ: number | null = null;
-                let minEnemyDist = b.weaponId === 'unarmed' ? 2.35 : 15.5;
+                const maxWeaponFireRange =
+                  b.weaponId === 'unarmed'
+                    ? 2.35
+                    : b.weaponId === 'bazooka' || b.weaponId === 'laser'
+                      ? 28.0
+                      : b.weaponId === 'rifle' || b.weaponId === 'gatling'
+                        ? 25.0
+                        : 21.0;
+                let minEnemyDist = maxWeaponFireRange;
 
                 for (const other of buddyUnits) {
                   if (
@@ -9103,27 +9609,40 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                   if (b.weaponId === 'unarmed') {
                     performBuddyMeleeAttack(b, Math.random() < 0.35 ? 'kick' : 'punch');
                   } else {
-                    b.shootCooldown = 1.05 + Math.random() * 0.35;
+                    b.shootCooldown =
+                      b.weaponId === 'gatling'
+                        ? 0.16 + Math.random() * 0.06
+                        : b.weaponId === 'rifle'
+                          ? 0.36 + Math.random() * 0.12
+                          : b.weaponId === 'laser'
+                            ? 0.52 + Math.random() * 0.15
+                            : b.weaponId === 'bazooka'
+                              ? 0.92 + Math.random() * 0.22
+                              : 0.48 + Math.random() * 0.16;
+                    b.weaponRecoil = 0.36;
                     scratchSpawnDir.set(sdx, 0, sdz).normalize();
                     const bGroundY = getTerrainElevation(b.x, b.z);
                     scratchSpawnOrigin.set(
-                      wrapPlanetCoord(b.x + scratchSpawnDir.x * 1.1),
-                      bGroundY + 1.1,
-                      wrapPlanetCoord(b.z + scratchSpawnDir.z * 1.1),
+                      wrapPlanetCoord(b.x + scratchSpawnDir.x * 1.15),
+                      bGroundY + 1.25,
+                      wrapPlanetCoord(b.z + scratchSpawnDir.z * 1.15),
+                    );
+                    lyoExplosionSystem.spawnLyoMuzzleFlash(
+                      scratchSpawnOrigin,
+                      scratchSpawnDir,
+                      b.weaponId === 'bazooka' ? 0.65 : 0.42,
+                      b.weaponId === 'bazooka' ? 'bazooka' : 'rifle',
                     );
                     fireProjectile(
                       b.team === 'blue',
                       b.weaponName,
                       scratchSpawnOrigin,
                       scratchSpawnDir,
-                      26,
-                      b.weaponId === 'bazooka' ? 14 : 6,
+                      b.weaponId === 'laser' ? 68 : b.weaponId === 'gatling' ? 58 : b.weaponId === 'rifle' ? 48 : 42,
+                      b.weaponId === 'bazooka' ? 14 : b.weaponId === 'laser' ? 12 : 7,
                     );
-                    b.ammo = Math.max(0, b.ammo - 1);
-                    if (b.ammo <= 0) {
-                      b.weaponId = 'unarmed';
-                      b.weaponName = 'Tangan Kosong (Tinju)';
-                    }
+                    b.tacticalLoadout = consumeActiveWeaponAmmoOnShot(b.tacticalLoadout);
+                    syncUnitFieldsFromLoadout(b);
                   }
                 }
               }
@@ -9420,6 +9939,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                       vy: 6.4,
                     });
                   }
+                  rewardPlayerOnCrateDestroyed(c.x, c.z);
                   scene.remove(c.mesh);
                   worldCrates.splice(ci, 1);
                 }
@@ -9820,6 +10340,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                     remainingAmmo: crateDrop.remainingAmmo,
                     vy: crateDrop.isPurpleSuperWeapon ? 6.8 : 5.4,
                   });
+                  rewardPlayerOnCrateDestroyed(c.x, c.z);
                   scene.remove(c.mesh);
                   worldCrates.splice(ci, 1);
                 } else {
@@ -10036,9 +10557,8 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                       if (canRespawnPlayer) {
                         b.alive = true;
                         b.hp = b.maxHp;
-                        b.weaponId = 'unarmed';
-                        b.weaponName = 'Tangan Kosong (Tinju)';
-                        b.ammo = 0;
+                        b.tacticalLoadout = createInitialBuddyTacticalLoadout('unarmed', 0);
+                        syncUnitFieldsFromLoadout(b);
                         b.x = blueBase.padX - 3.8;
                         b.z = blueBase.padZ - 0.5;
                         b.root.visible = true;
@@ -10066,22 +10586,46 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
             pk.bobPhase += dt * 3.5;
             pk.mesh.rotation.y += dt * 2.2;
 
-            // 1. Ballistic Bounce Physics (`terpental dan jatuh ke tanah`)
+            // 1. Ballistic Bounce Physics (`terpental dan jatuh ke tanah`) + Base Courtyard Fence Clamping (`berada di tengah base`)
             const groundY = getTerrainElevation(pk.x, pk.z) + 0.75;
             if (Math.abs(pk.vx) > 0.02 || Math.abs(pk.vz) > 0.02 || pk.y > groundY + 0.02 || pk.vy !== 0) {
+              const prevPkX = pk.x;
+              const prevPkZ = pk.z;
               pk.x = wrapPlanetCoord(pk.x + pk.vx * dt);
               pk.z = wrapPlanetCoord(pk.z + pk.vz * dt);
               pk.y += pk.vy * dt;
               pk.vy -= 22.0 * dt;
+              const airDamp = Math.exp(-3.2 * dt);
+              pk.vx *= airDamp;
+              pk.vz *= airDamp;
+
+              // Ensure pad-crafted pickups stay inside the Commander Base courtyard and never fly outside the perimeter fence!
+              for (const plot of [...blueCommanderBases, ...redCommanderBases]) {
+                if (
+                  Math.abs(prevPkX - plot.plotCenterX) <= 10.2 &&
+                  Math.abs(prevPkZ - plot.plotCenterZ) <= 10.2
+                ) {
+                  if (Math.abs(pk.x - plot.plotCenterX) > 8.6) {
+                    pk.x = plot.plotCenterX + Math.sign(pk.x - plot.plotCenterX) * 8.6;
+                    pk.vx *= -0.35;
+                  }
+                  if (Math.abs(pk.z - plot.plotCenterZ) > 8.6) {
+                    pk.z = plot.plotCenterZ + Math.sign(pk.z - plot.plotCenterZ) * 8.6;
+                    pk.vz *= -0.35;
+                  }
+                  break;
+                }
+              }
+
               const nextGroundY = getTerrainElevation(pk.x, pk.z) + 0.75;
               if (pk.y <= nextGroundY) {
                 pk.y = nextGroundY;
                 if (pk.vy < -1.8) {
-                  pk.vy = -pk.vy * 0.38;
+                  pk.vy = -pk.vy * 0.35;
                 } else {
                   pk.vy = 0;
                 }
-                const damp = Math.exp(-6.5 * dt);
+                const damp = Math.exp(-7.5 * dt);
                 pk.vx *= damp;
                 pk.vz *= damp;
               }
@@ -10129,18 +10673,18 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                   : 'pistol';
             let collectorUnit: BuddyUnit | null = null;
             if (getPlanetShortestDistance(pk.x, pk.z, collectorX, collectorZ) < 2.1) {
-              if (
-                pk.kind !== 'weapon' ||
-                canUnitLootGroundWeapon(
-                  playerUnit.team,
-                  playerUnit.weaponId,
-                  playerUnit.weaponName,
-                  pkWidForLoot,
-                  pk.weaponName,
-                  playerUnit.ammo,
-                ).canLoot
-              ) {
+              if (pk.kind !== 'weapon') {
                 collectorUnit = playerUnit;
+              } else {
+                const resolvedSlot = resolveHandheldWeaponSlotSpec(pk.weaponName);
+                const alreadyOwnsSlot = playerUnit.tacticalLoadout.handheldWeapons.some(
+                  (w) => w.slotId === resolvedSlot.slotId,
+                );
+                const hasFreeHandheldSlot =
+                  playerUnit.tacticalLoadout.handheldWeapons.length < MAX_HANDHELD_WEAPON_SLOTS;
+                if (alreadyOwnsSlot || hasFreeHandheldSlot) {
+                  collectorUnit = playerUnit;
+                }
               }
             }
             if (!collectorUnit) {
@@ -10177,7 +10721,11 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                 const healVal = pk.healAmount ?? 35;
                 collectorUnit.hp = Math.min(collectorUnit.maxHp, collectorUnit.hp + healVal);
               } else if (pk.kind === 'ammo') {
-                collectorUnit.ammo += 30;
+                collectorUnit.tacticalLoadout = refillLoadoutAmmoFromSource(
+                  collectorUnit.tacticalLoadout,
+                  'ammo_pickup',
+                );
+                syncUnitFieldsFromLoadout(collectorUnit);
               } else if (pk.kind === 'coin_gold' || pk.kind === 'coin_silver') {
                 const pts = pk.scoreValue ?? (pk.kind === 'coin_gold' ? 250 : 100);
                 if (collectorUnit.team === 'blue') {
@@ -10193,33 +10741,29 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                 );
                 collectorUnit.saluteSign.sprite.visible = true;
               } else if (pk.kind === 'secondary' && pk.secondaryId) {
-                collectorUnit.secondaryItem = pk.secondaryId;
-                collectorUnit.secondaryCount = (collectorUnit.secondaryCount || 0) + (pk.secondaryCount ?? 1);
+                if (pk.secondaryId === 'hand_grenade' || pk.secondaryId === 'land_mine') {
+                  collectorUnit.tacticalLoadout = addTacticalSecondaryToLoadout(
+                    collectorUnit.tacticalLoadout,
+                    pk.secondaryId,
+                    pk.secondaryCount ?? 2,
+                  );
+                  syncUnitFieldsFromLoadout(collectorUnit);
+                } else {
+                  collectorUnit.secondaryItem = pk.secondaryId;
+                  collectorUnit.secondaryCount =
+                    (collectorUnit.secondaryCount || 0) + (pk.secondaryCount ?? 1);
+                }
               } else if (pk.kind === 'mission_item' && pk.missionItemId) {
                 collectorUnit.missionItem = pk.missionItemId;
               } else if (pk.kind === 'weapon') {
-                collectorUnit.weaponName = pk.weaponName;
-                collectorUnit.weaponId =
-                  pk.weaponName.includes('Gatling') ||
-                  pk.weaponName.includes('TITAN-6') ||
-                  pk.weaponName.includes('Rotary')
-                    ? 'gatling'
-                    : pk.weaponName.includes('Laser') ||
-                        pk.weaponName.includes('Photon') ||
-                        pk.weaponName.includes('LG-88')
-                      ? 'laser'
-                      : pk.weaponName.includes('Bazooka') ||
-                          pk.weaponName.includes('Supazooka') ||
-                          pk.weaponName.includes('Rocket')
-                        ? 'bazooka'
-                        : pk.weaponName.includes('Rifle') ||
-                            pk.weaponName.includes('Shotgun') ||
-                            pk.weaponName.includes('Machine')
-                          ? 'rifle'
-                          : 'pistol';
+                const eqRes = equipOrSwapDroppedWeaponInLoadout(
+                  collectorUnit.tacticalLoadout,
+                  pk.weaponName,
+                  pk.remainingAmmo ?? 120,
+                );
+                collectorUnit.tacticalLoadout = eqRes.updatedLoadout;
+                syncUnitFieldsFromLoadout(collectorUnit);
                 collectorUnit.weaponRecoil = 0.38;
-                // Preserves exact remaining ammo from the fallen character (or 120 if freshly crafted on pad)
-                collectorUnit.ammo = pk.remainingAmmo ?? 120;
               } else if (pk.kind === 'powerup') {
                 collectorUnit.hp = collectorUnit.maxHp;
                 if (collectorUnit.team === 'blue') score += 120;
@@ -10336,6 +10880,16 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                 b.hp = Math.max(0, b.hp - Math.round(maxDmg * (1 - (d / blastRad) * 0.5)));
                 b.hitFlashTimer = 0.2;
                 spawnTargetFireParticles(b.x, getTerrainElevation(b.x, b.z) + 0.8, b.z, 8, 0.45);
+                if (b.hp <= 0) {
+                  b.alive = false;
+                  b.respawnTimer = 6.0;
+                  b.root.visible = false;
+                  handleBuddyDeathDrops(b, false);
+                  enemiesDefeated++;
+                  score += 150;
+                  gold += 150;
+                  checkMatchDeathmatchWinCondition();
+                }
               }
             }
             for (const tv of tanks) {
@@ -11177,24 +11731,26 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
         }
       }
 
-      // Align all Real GLB Props (including Pushable Wheelbarrow, Cones, Barricades & Jiggle Tilt)
+      // Align all Real GLB Props (including Pushable Wheelbarrow, Cones, Barricades, Falling Warzone Barrels & Jiggle Tilt)
       for (let i = 0; i < realPropsGroup.children.length; i++) {
         const propWrapper = realPropsGroup.children[i];
         if (!propWrapper.visible) continue;
         const wx = (propWrapper.userData.worldX as number) ?? propWrapper.position.x;
         const wz = (propWrapper.userData.worldZ as number) ?? propWrapper.position.z;
         const baseRotY = (propWrapper.userData.baseRotY as number) ?? 0;
+        const fallOffsetY = (propWrapper.userData.fallOffsetY as number) ?? 0;
         const movedOrUnaligned =
           needFullStaticAlign ||
           propWrapper.userData.__alignedX !== wx ||
           propWrapper.userData.__alignedZ !== wz ||
           propWrapper.userData.__alignedRotY !== baseRotY ||
+          propWrapper.userData.__alignedFallY !== fallOffsetY ||
           propWrapper.userData.__wasJigglingProp;
         if (movedOrUnaligned) {
           applyPlanetCurvatureToObject(
             propWrapper,
             wx,
-            getTerrainElevation(wx, wz),
+            getTerrainElevation(wx, wz) + fallOffsetY,
             wz,
             planetPivotX,
             planetPivotZ,
@@ -11204,6 +11760,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
           propWrapper.userData.__alignedX = wx;
           propWrapper.userData.__alignedZ = wz;
           propWrapper.userData.__alignedRotY = baseRotY;
+          propWrapper.userData.__alignedFallY = fallOffsetY;
           propWrapper.userData.__wasJigglingProp = false;
         }
       }
@@ -12140,6 +12697,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
             : 'Meriam Tank 105mm'
           : playerUnit.weaponName,
         ammo: playerUnit.ammo,
+        hudWeaponBadges: getVisibleHudWeaponAndTacticalBadges(playerUnit.tacticalLoadout),
         carryingCrate: playerUnit.carryingCrate,
         tankStoredCrates: mountedTank ? mountedTank.storedCrates.length : 0,
         padSlots: [...bluePadSlots],

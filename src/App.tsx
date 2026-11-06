@@ -92,6 +92,7 @@ const INITIAL_HUD: HudSnapshot = {
   nuclearStrikePhase: 'idle',
   nuclearTargetCoords: { x: 0, z: 18 },
   hasDeployedNuclearLauncher: false,
+  hudWeaponBadges: [],
 };
 
 const PRESET_ORDER: LightingPresetKey[] = ['day', 'dusk', 'night', 'dawn'];
@@ -1629,60 +1630,28 @@ export default function App() {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  {[
-                    {
-                      slotKey: '1',
-                      label: 'Pistol',
-                      action: 'selectWeaponPistol',
-                      dataAttr: 'pistol',
-                      isActive:
-                        hud.equippedWeapon === 'LyoPistol' ||
-                        hud.equippedWeapon.includes('Pistol') ||
-                        hud.equippedWeapon.includes('Uzi'),
-                    },
-                    {
-                      slotKey: '2',
-                      label: 'Rifle',
-                      action: 'selectWeaponRifle',
-                      dataAttr: 'rifle',
-                      isActive:
-                        hud.equippedWeapon === 'LyoAssaultRifle' ||
-                        hud.equippedWeapon.includes('Rifle') ||
-                        hud.equippedWeapon.includes('Shotgun') ||
-                        hud.equippedWeapon.includes('Gatling'),
-                    },
-                    {
-                      slotKey: '3',
-                      label: 'Bazooka',
-                      action: 'selectWeaponBazooka',
-                      dataAttr: 'bazooka',
-                      isActive:
-                        hud.equippedWeapon === 'LyoRocketLauncher' ||
-                        hud.equippedWeapon.includes('Bazooka') ||
-                        hud.equippedWeapon.includes('Supazooka') ||
-                        hud.equippedWeapon.includes('Nuclear') ||
-                        hud.equippedWeapon.includes('Homing'),
-                    },
-                  ].map((w) => (
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {(hud.hudWeaponBadges ?? []).map((w) => (
                     <button
-                      key={w.slotKey}
+                      key={w.id}
                       type="button"
                       tabIndex={-1}
-                      data-weapon-btn={w.dataAttr}
+                      data-weapon-btn={w.slotId}
                       onClick={(e) => {
                         e.currentTarget.blur();
-                        dispatchBuddyAction(w.action);
+                        dispatchBuddyAction(w.actionEvent);
                       }}
                       className={`-skew-x-12 px-3.5 py-2 font-black text-xs sm:text-sm uppercase tracking-wider border-3 border-[#1a1a1a] transition-all cursor-pointer ${
                         w.isActive
                           ? 'bg-[#b8ff3c] text-[#1a1a1a] ring-2 ring-white -translate-y-1 shadow-[4px_5px_0_#1a1a1a]'
-                          : 'bg-white/95 hover:bg-[#fec83e] text-[#1a1a1a] shadow-[3px_3px_0_#1a1a1a]'
+                          : w.kind === 'tactical'
+                            ? 'bg-[#fef08a] hover:bg-[#facc15] text-[#1a1a1a] shadow-[3px_3px_0_#1a1a1a]'
+                            : 'bg-white/95 hover:bg-[#fec83e] text-[#1a1a1a] shadow-[3px_3px_0_#1a1a1a]'
                       }`}
                     >
                       <span className="skew-x-12 flex items-center gap-1.5">
                         <span className="px-1.5 py-0.5 bg-[#1a1a1a] text-white text-[10px] font-black">
-                          [{w.slotKey}]
+                          [{w.ammoCount}]
                         </span>
                         <span>{w.label}</span>
                       </span>
