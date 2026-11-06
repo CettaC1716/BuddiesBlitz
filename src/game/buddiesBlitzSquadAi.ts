@@ -19,6 +19,7 @@ import {
   CrateSlotType,
   WorldCrateKind,
   IndividualCommanderBaseState,
+  isTankClimbableProp,
 } from './buddiesBlitzRules';
 import {
   evaluateOuterEmbankmentSdf,
@@ -105,24 +106,29 @@ export function buildArenaNavGrids(params: {
     rasterizeCircleObstacleToNavGrid(vehicleGrid, tr.x, tr.z, trunkR, vehiclePad * 0.75);
   }
 
-  // 4. Rasterize Solid Map Props
+  // 4. Rasterize Solid Map Props (tracked tanks can climb low rocks & stacked pipes <= 1.68m!)
   for (let i = 0; i < activeMapProps.length; i++) {
     const mp = activeMapProps[i];
     if (!mp.alive || mp.category !== 'solid') continue;
+    const tankCanClimb = isTankClimbableProp(mp.kind, mp.scale);
     if (mp.halfX !== undefined && mp.halfZ !== undefined) {
       rasterizeObbObstacleToNavGrid(footGrid, mp.x, mp.z, mp.halfX, mp.halfZ, mp.rotY, footPad);
-      rasterizeObbObstacleToNavGrid(
-        vehicleGrid,
-        mp.x,
-        mp.z,
-        mp.halfX,
-        mp.halfZ,
-        mp.rotY,
-        vehiclePad * 0.8,
-      );
+      if (!tankCanClimb) {
+        rasterizeObbObstacleToNavGrid(
+          vehicleGrid,
+          mp.x,
+          mp.z,
+          mp.halfX,
+          mp.halfZ,
+          mp.rotY,
+          vehiclePad * 0.8,
+        );
+      }
     } else {
       rasterizeCircleObstacleToNavGrid(footGrid, mp.x, mp.z, mp.radius, footPad * 0.8);
-      rasterizeCircleObstacleToNavGrid(vehicleGrid, mp.x, mp.z, mp.radius, vehiclePad * 0.75);
+      if (!tankCanClimb) {
+        rasterizeCircleObstacleToNavGrid(vehicleGrid, mp.x, mp.z, mp.radius, vehiclePad * 0.75);
+      }
     }
   }
 

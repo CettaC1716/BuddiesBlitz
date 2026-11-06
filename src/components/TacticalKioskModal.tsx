@@ -31,6 +31,7 @@ type KioskCardIllustrationId =
   | 'vx20_bazooka'
   | 'skyshield_turret'
   | 'st01_minitank'
+  | 'ht88_dump_truck'
   | 'af9_plane'
   | 'street_rookie'
   | 't800_cyborg'
@@ -210,6 +211,7 @@ const KIOSK_SPRITE_IMAGE_PATHS: Record<KioskCardIllustrationId, string> = {
   vx20_bazooka: '/assets/kiosk/vx20_bazooka.png',
   skyshield_turret: '/assets/kiosk/skyshield_turret.png',
   st01_minitank: '/assets/kiosk/st01_minitank.png',
+  ht88_dump_truck: '/assets/kiosk/ht88_dump_truck.png',
   af9_plane: '/assets/kiosk/af9_plane.png',
   street_rookie: '/assets/kiosk/street_rookie.png',
   t800_cyborg: '/assets/kiosk/t800_cyborg.png',
@@ -399,7 +401,16 @@ export const TacticalKioskModal: React.FC<TacticalKioskModalProps> = ({
           illustration: 'st01_minitank',
           actionKind: 'recipe',
           recipeId: 'lyo_tank',
-          inspectDetail: '105mm Chibi Battle Tank · Hologram Pad: 4x Peti Merah (2x2x1)',
+          inspectDetail: '105mm Chibi Battle Tank · Hologram Pad: 4x Peti Merah (2x1x2)',
+        },
+        {
+          id: 'ht88_dump_truck',
+          title: 'HT-88 HEAVY DUMP TRUCK',
+          tagLine: '[GROUND // CARGO // TIER 3]',
+          illustration: 'ht88_dump_truck',
+          actionKind: 'recipe',
+          recipeId: 'dump_truck',
+          inspectDetail: '4-Crate Hydraulic Dump Vessel · Hologram Pad: 4x Peti Merah (2x2x1)',
         },
         {
           id: 'af9_plane',

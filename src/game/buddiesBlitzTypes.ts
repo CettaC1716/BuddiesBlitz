@@ -429,6 +429,8 @@ export interface BuddyUnit {
   vz: number;
   jumpOffset: number;
   isGrounded: boolean;
+  jumpBufferTimer?: number;
+  invincibilityTimer?: number;
   yaw: number;
   hp: number;
   maxHp: number;

@@ -32,7 +32,13 @@ import {
   canLoadCrateIntoDumpTruck,
   evaluateDumpTruckHydraulicCycle,
   stepDumpTruckWheeledPhysics,
+  UNIFIED_WORLD_CRATE_SIZE,
+  JUMP_BUFFER_DURATION_SEC,
   stepBuddyJumpPhysics,
+  stepBuddyJumpPhysicsWithBuffer,
+  PLAYER_INVINCIBILITY_DURATION_SEC,
+  stepPlayerInvincibilityState,
+  applyPlayerDamageWithInvincibilityAndKnockback,
   evaluateBuddyMeleeStrike,
   MAX_CHARACTERS_PER_COMMANDER,
   COMMANDERS_PER_TEAM,
@@ -126,6 +132,9 @@ import {
   formatBuddyRoleUiLabel,
   stepFollowerSmoothYaw,
   evaluateAutonomousFollowerEscortStep,
+  evaluateLyoTankShotRecoilPose,
+  isTankClimbableProp,
+  evaluateTankClimbableObstacleElevation,
 } from './buddiesBlitzRules';
 import {
   evaluateOuterEmbankmentSdf,
@@ -761,17 +770,38 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
 
       const slotMeshes: THREE.Group[] = [];
       const ghostSlotMeshes: THREE.Mesh[] = [];
-      const slotGeo = new THREE.BoxGeometry(1.38, 1.38, 1.38);
-      const ghostSlotGeo = new THREE.BoxGeometry(1.32, 1.32, 1.32);
-      const ghostCoreGeo = new THREE.BoxGeometry(1.24, 1.24, 1.24);
+      const slotGeo = new THREE.BoxGeometry(
+        UNIFIED_WORLD_CRATE_SIZE,
+        UNIFIED_WORLD_CRATE_SIZE,
+        UNIFIED_WORLD_CRATE_SIZE,
+      );
+      const ghostSlotGeo = new THREE.BoxGeometry(
+        UNIFIED_WORLD_CRATE_SIZE,
+        UNIFIED_WORLD_CRATE_SIZE,
+        UNIFIED_WORLD_CRATE_SIZE,
+      );
+      const ghostCoreGeo = new THREE.BoxGeometry(
+        UNIFIED_WORLD_CRATE_SIZE - 0.08,
+        UNIFIED_WORLD_CRATE_SIZE - 0.08,
+        UNIFIED_WORLD_CRATE_SIZE - 0.08,
+      );
 
       for (let i = 0; i < 8; i++) {
         const layer = i < 4 ? 0 : 1;
         const [tx, tz] = tileOffsets[i % 4];
+        const slotY = 0.93 + layer * UNIFIED_WORLD_CRATE_SIZE;
         const slotGrp = new THREE.Group();
-        slotGrp.position.set(tx, 0.92 + layer * 1.42, tz);
+        slotGrp.position.set(tx, slotY, tz);
         slotGrp.visible = false;
         addOutlinedPart(slotGrp, slotGeo, matRedCrate, [0, 0, 0], [0, 0, 0], 1.07, true);
+        populateRealLyoCrateBoxFromGlb(
+          slotGrp,
+          'red',
+          loadedLyoAssets,
+          windUniforms,
+          isSoftwareGl,
+          UNIFIED_WORLD_CRATE_SIZE,
+        );
         padGroup.add(slotGrp);
         slotMeshes.push(slotGrp);
 
@@ -790,7 +820,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
           depthWrite: false,
         });
         const gm = new THREE.Mesh(ghostSlotGeo, slotWireMat);
-        gm.position.set(tx, 0.92 + layer * 1.42, tz);
+        gm.position.set(tx, slotY, tz);
         gm.visible = false;
         const coreMesh = new THREE.Mesh(ghostCoreGeo, slotCoreMat);
         gm.add(coreMesh);
@@ -1253,16 +1283,29 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
       } = rig;
       headMesh.userData.defaultMat = headMesh.material;
 
-      // Overhead Carried 3D Crate (visible when carrying a crate above the head!)
+      // Overhead Carried 3D Crate (visible when carrying a crate above the head; inverse-scaled by 1/1.16 so world size is 1:1 UNIFIED_WORLD_CRATE_SIZE!)
       const overheadCrateGroup = new THREE.Group();
-      overheadCrateGroup.position.set(0, 2.46, 0);
+      overheadCrateGroup.position.set(0, 2.58, 0);
+      overheadCrateGroup.scale.setScalar(1 / 1.16);
       overheadCrateGroup.visible = false;
       bodyGroup.add(overheadCrateGroup);
       const overheadCrateBox = addOutlinedPart(
         overheadCrateGroup,
-        new THREE.BoxGeometry(0.82, 0.82, 0.82),
+        new THREE.BoxGeometry(
+          UNIFIED_WORLD_CRATE_SIZE,
+          UNIFIED_WORLD_CRATE_SIZE,
+          UNIFIED_WORLD_CRATE_SIZE,
+        ),
         matRedCrate,
         [0, 0, 0],
+      );
+      populateRealLyoCrateBoxFromGlb(
+        overheadCrateGroup,
+        'red',
+        loadedLyoAssets,
+        windUniforms,
+        isSoftwareGl,
+        UNIFIED_WORLD_CRATE_SIZE,
       );
 
       // Overhead AI Salute Sign (pops up above AI Buddy head when [V] command is issued!)
@@ -1326,6 +1369,8 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
         vz: 0,
         jumpOffset: 0,
         isGrounded: true,
+        jumpBufferTimer: 0,
+        invincibilityTimer: 0,
         yaw: team === 'blue' ? Math.PI / 2 : -Math.PI / 2,
         hp: 30,
         maxHp: 30,
@@ -1578,15 +1623,10 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
       const turretGroup = new THREE.Group();
       bodyGroup.add(turretGroup);
 
-      // Driver Avatar inside the Dump Truck Cab (visible when mounted)
+      // Hidden Driver Container inside the HT-88 Dump Truck Cab (driver is never visible inside the enclosed cab so the head never clips through the roof)
       const riderGroup = new THREE.Group();
       riderGroup.visible = false;
       turretGroup.add(riderGroup);
-      const truckDriverAvatar = new THREE.Group();
-      truckDriverAvatar.rotation.y = Math.PI / 2;
-      truckDriverAvatar.scale.setScalar(0.78);
-      riderGroup.add(truckDriverAvatar);
-      buildProceduralRobloxBuddyAvatar(truckDriverAvatar, team, windUniforms, isSoftwareGl, true);
 
       const barrelGroup = new THREE.Group();
       turretGroup.add(barrelGroup);
@@ -1598,17 +1638,15 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
       muzzleFlash.visible = false;
       barrelGroup.add(muzzleFlash);
 
-      if (loadedLyoAssets) {
-        populateRealLyoDumpTruckFromGlb(
-          bodyGroup,
-          turretGroup,
-          riderGroup,
-          loadedLyoAssets,
-          windUniforms,
-          isSoftwareGl,
-        );
-        syncLyoDumpTruckCargoVisuals(bodyGroup, []);
-      }
+      populateRealLyoDumpTruckFromGlb(
+        bodyGroup,
+        turretGroup,
+        riderGroup,
+        loadedLyoAssets,
+        windUniforms,
+        isSoftwareGl,
+      );
+      syncLyoDumpTruckCargoVisuals(bodyGroup, []);
 
       return {
         id: nextEntityId++,
@@ -1707,7 +1745,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
             assets,
             windUniforms,
             isSoftwareGl,
-            1.28,
+            UNIFIED_WORLD_CRATE_SIZE,
           );
         });
         buddyUnits.forEach((b) => {
@@ -1718,7 +1756,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
               assets,
               windUniforms,
               isSoftwareGl,
-              0.84,
+              UNIFIED_WORLD_CRATE_SIZE,
             );
           }
         });
@@ -1880,14 +1918,14 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
           }
         } else {
           slotGrp.visible = true;
-          if (loadedLyoAssets && slotGrp.userData.lyoBoxKind !== s) {
+          if (slotGrp.userData.lyoBoxKind !== s) {
             populateRealLyoCrateBoxFromGlb(
               slotGrp,
               s,
               loadedLyoAssets,
               windUniforms,
               isSoftwareGl,
-              1.38,
+              UNIFIED_WORLD_CRATE_SIZE,
             );
           }
           ghostMesh.visible = false;
@@ -2007,12 +2045,15 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
       x: number,
       z: number,
       startGrounded = false,
-    ) => {
+      forceSpawn = startGrounded,
+    ): WorldCrate | null => {
       const isSpecialMetallic = kind === 'silver_metallic' || kind === 'gold_metallic';
-      if (!isSpecialMetallic && worldCrates.length >= 38) return;
+      if (!isSpecialMetallic && !forceSpawn && !startGrounded && worldCrates.length >= 38) {
+        return null;
+      }
       const wx = wrapPlanetCoord(x);
       const wz = wrapPlanetCoord(z);
-      const groundY = getTerrainElevation(wx, wz) + 0.65;
+      const groundY = getTerrainElevation(wx, wz) + 0.66;
       const g = new THREE.Group();
       const startY = startGrounded ? groundY : groundY + 16 + Math.random() * 4;
       g.position.set(wx, startY, wz);
@@ -2023,20 +2064,22 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
 
       addOutlinedPart(
         boxVisualGroup,
-        new THREE.BoxGeometry(1.25, 1.25, 1.25),
+        new THREE.BoxGeometry(
+          UNIFIED_WORLD_CRATE_SIZE,
+          UNIFIED_WORLD_CRATE_SIZE,
+          UNIFIED_WORLD_CRATE_SIZE,
+        ),
         getCrateFallbackMaterial(kind),
         [0, 0, 0],
       );
-      if (loadedLyoAssets) {
-        populateRealLyoCrateBoxFromGlb(
-          boxVisualGroup,
-          kind,
-          loadedLyoAssets,
-          windUniforms,
-          isSoftwareGl,
-          1.28,
-        );
-      }
+      populateRealLyoCrateBoxFromGlb(
+        boxVisualGroup,
+        kind,
+        loadedLyoAssets,
+        windUniforms,
+        isSoftwareGl,
+        UNIFIED_WORLD_CRATE_SIZE,
+      );
 
       // White Parachute dome while falling
       const chuteGeo = new THREE.SphereGeometry(1.15, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2);
@@ -2045,7 +2088,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
       parachuteMesh.visible = !startGrounded;
       g.add(parachuteMesh);
 
-      worldCrates.push({
+      const createdCrate: WorldCrate = {
         id: nextEntityId++,
         kind,
         indestructible: isSpecialMetallic,
@@ -2064,7 +2107,9 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
         state: startGrounded ? 'grounded' : 'falling',
         carrierId: null,
         squashTimer: 0,
-      });
+      };
+      worldCrates.push(createdCrate);
+      return createdCrate;
     };
 
     interface SpawnWorldPickupOptions {
@@ -3402,23 +3447,32 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
           }
         }
 
-        // Otherwise throw crate forward onto the ground with momentum
-        const launchX = wrapPlanetCoord(playerUnit.x + fwdX * 1.45);
-        const launchZ = wrapPlanetCoord(playerUnit.z + fwdZ * 1.45);
-        spawnWorldCrate(carriedKind, launchX, launchZ, true);
-        const thrownCrate = worldCrates[worldCrates.length - 1];
+        // Otherwise throw crate forward onto the ground with momentum (never lost to worldCrates cap or wall clipping)
+        let launchX = wrapPlanetCoord(playerUnit.x + fwdX * 0.95);
+        let launchZ = wrapPlanetCoord(playerUnit.z + fwdZ * 0.95);
+        const throwCheckObbs = getStaticWorldStructures();
+        for (let oi = 0; oi < throwCheckObbs.length; oi++) {
+          const obb = throwCheckObbs[oi];
+          if (pointInObb2D(launchX, launchZ, obb.x, obb.z, obb.halfX, obb.halfZ, obb.rotY, 0.72)) {
+            launchX = playerUnit.x;
+            launchZ = playerUnit.z;
+            break;
+          }
+        }
+        const thrownCrate = spawnWorldCrate(carriedKind, launchX, launchZ, true, true);
         if (thrownCrate) {
-          const groundY = getTerrainElevation(launchX, launchZ) + 0.65;
+          const groundY = getTerrainElevation(launchX, launchZ) + 0.66;
           thrownCrate.y = groundY + 1.15;
-          thrownCrate.mesh.position.y = thrownCrate.y;
+          thrownCrate.mesh.position.set(launchX, thrownCrate.y, launchZ);
           thrownCrate.rotY = playerUnit.yaw;
           thrownCrate.mesh.rotation.y = thrownCrate.rotY;
-          thrownCrate.vx = fwdX * 11.2 + playerUnit.vx * 0.35;
-          thrownCrate.vz = fwdZ * 11.2 + playerUnit.vz * 0.35;
+          thrownCrate.vx = fwdX * 10.6 + playerUnit.vx * 0.35;
+          thrownCrate.vz = fwdZ * 10.6 + playerUnit.vz * 0.35;
           thrownCrate.vy = 4.2;
           thrownCrate.rotVelY = (Math.random() - 0.5) * 2.4;
           thrownCrate.squashTimer = 0;
           thrownCrate.mesh.scale.set(1, 1, 1);
+          thrownCrate.mesh.visible = true;
         }
         return;
       }
@@ -3438,14 +3492,14 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
 
       if (nearestCrate) {
         playerUnit.carryingCrate = nearestCrate.kind;
-        if (loadedLyoAssets && playerUnit.overheadCrateGroup.userData.lyoBoxKind !== nearestCrate.kind) {
+        if (playerUnit.overheadCrateGroup.userData.lyoBoxKind !== nearestCrate.kind) {
           populateRealLyoCrateBoxFromGlb(
             playerUnit.overheadCrateGroup,
             nearestCrate.kind,
             loadedLyoAssets,
             windUniforms,
             isSoftwareGl,
-            0.84,
+            UNIFIED_WORLD_CRATE_SIZE,
           );
         } else {
           playerUnit.overheadCrateBox.material = getCrateFallbackMaterial(nearestCrate.kind);
@@ -3964,16 +4018,20 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
         return;
       }
       if (mountedTank || !playerUnit || !playerUnit.alive) return;
+      // Set jump input buffer to 0.1s; if already grounded on this frame, fire immediately and reset buffer to 0
+      playerUnit.jumpBufferTimer = JUMP_BUFFER_DURATION_SEC;
       const spec = BUDDY_CLASSES[playerUnit.classId];
-      const jumpStep = stepBuddyJumpPhysics(
+      const jumpStep = stepBuddyJumpPhysicsWithBuffer(
         playerUnit.jumpOffset,
         playerUnit.vy,
         playerUnit.isGrounded,
+        playerUnit.jumpBufferTimer,
         true,
         spec.jumpMultiplier,
         playerUnit.carryingCrate !== 'none',
-        0.016,
+        0,
       );
+      playerUnit.jumpBufferTimer = jumpStep.jumpBufferTimer;
       if (jumpStep.justJumped) {
         playerUnit.jumpOffset = jumpStep.jumpOffset;
         playerUnit.vy = jumpStep.vy;
@@ -4096,13 +4154,40 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
         if (!strike.hit) continue;
 
         hitAny = true;
-        other.hp -= strike.damage;
+        if (other.isPlayer) {
+          const iFrameRes = applyPlayerDamageWithInvincibilityAndKnockback({
+            hp: other.hp,
+            invincibilityTimer: other.invincibilityTimer ?? 0,
+            x: other.x,
+            z: other.z,
+            vx: other.vx,
+            vz: other.vz,
+            vy: other.vy,
+            damage: strike.damage,
+            sourceX: attacker.x,
+            sourceZ: attacker.z,
+            facingYaw: other.yaw,
+            invincibilityDurationSec: PLAYER_INVINCIBILITY_DURATION_SEC,
+          });
+          if (!iFrameRes.damageApplied) {
+            continue;
+          }
+          other.hp = iFrameRes.hp;
+          other.invincibilityTimer = iFrameRes.invincibilityTimer;
+          other.vx = iFrameRes.vx;
+          other.vz = iFrameRes.vz;
+          other.vy = iFrameRes.vy;
+          other.jumpOffset = Math.max(other.jumpOffset, 0.08);
+          other.isGrounded = false;
+        } else {
+          other.hp -= strike.damage;
+          other.vx += strike.knockbackVx;
+          other.vz += strike.knockbackVz;
+        }
         other.hitFlashTimer = 0.15;
         other.hitReactionTimer = 0.60;
         other.hitReactionDirX = fwdX;
         other.hitReactionDirZ = fwdZ;
-        other.vx += strike.knockbackVx;
-        other.vz += strike.knockbackVz;
         if (kind === 'kick') {
           other.vy = Math.max(other.vy, strike.upwardHopVy * 0.85);
           other.jumpOffset = Math.max(other.jumpOffset, 0.12);
@@ -4461,7 +4546,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
         }
         mountedTank = nearestTank;
         nearestTank.occupiedByPlayer = true;
-        nearestTank.riderGroup.visible = true;
+        nearestTank.riderGroup.visible = nearestTank.vehicleKind !== 'truck';
         playerUnit.root.visible = false;
       }
     };
@@ -6043,14 +6128,43 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
           const dx = getPlanetShortestDelta(b.x, bx) / safeD;
           const dz = getPlanetShortestDelta(b.z, bz) / safeD;
           const falloff = 1 - d / 6.0;
-          b.vx += dx * falloff * 11.5;
-          b.vz += dz * falloff * 11.5;
+          const blastDmg = Math.max(4, Math.round(falloff * 24));
+          if (b.isPlayer) {
+            const iFrameRes = applyPlayerDamageWithInvincibilityAndKnockback({
+              hp: b.hp,
+              invincibilityTimer: b.invincibilityTimer ?? 0,
+              x: b.x,
+              z: b.z,
+              vx: b.vx,
+              vz: b.vz,
+              vy: b.vy,
+              damage: blastDmg,
+              sourceX: bx,
+              sourceZ: bz,
+              facingYaw: b.yaw,
+              invincibilityDurationSec: PLAYER_INVINCIBILITY_DURATION_SEC,
+              knockbackSpeed: Math.max(9.5, falloff * 11.5),
+            });
+            if (!iFrameRes.damageApplied) {
+              continue;
+            }
+            b.hp = iFrameRes.hp;
+            b.invincibilityTimer = iFrameRes.invincibilityTimer;
+            b.vx = iFrameRes.vx;
+            b.vz = iFrameRes.vz;
+            b.vy = iFrameRes.vy;
+            b.jumpOffset = Math.max(b.jumpOffset, 0.08);
+            b.isGrounded = false;
+          } else {
+            b.vx += dx * falloff * 11.5;
+            b.vz += dz * falloff * 11.5;
+            b.hp -= blastDmg;
+          }
           b.hitFlashTimer = 0.15;
           b.hitReactionTimer = 0.60;
           b.hitReactionDirX = dx;
           b.hitReactionDirZ = dz;
           b.stunTimer = 1.5;
-          b.hp -= Math.max(4, Math.round(falloff * 24));
           if (!playedStunSfx) {
             playSpatialSoundAt(bx, bz, 22.0, 5.0, () => {
               soundEngine.playStunned();
@@ -6586,6 +6700,10 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
         if (Math.abs(mover.x - mp.x) > propReach || Math.abs(mover.z - mp.z) > propReach) continue;
 
         if (mp.category === 'solid') {
+          // Tracked tanks can climb over low rocks and stacked pipes as long as they are not too tall (height <= 1.68m)
+          if (isTrackedTank && isTankClimbableProp(mp.kind, mp.scale)) {
+            continue;
+          }
           for (const hs of hullSpheres) {
             const sx = mover.x + hs.ox;
             const sz = mover.z + hs.oz;
@@ -7412,6 +7530,31 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                   }
                 }
 
+                // Rigid Crate-vs-Static Base Walls / Buildings / Fences OBB Collision
+                const crateWorldObbs = getStaticWorldStructures();
+                for (let oi = 0; oi < crateWorldObbs.length; oi++) {
+                  const obb = crateWorldObbs[oi];
+                  const obbRes = resolveSolidObbCollision2D(
+                    c.x,
+                    c.z,
+                    c.vx,
+                    c.vz,
+                    0.66,
+                    obb.x,
+                    obb.z,
+                    obb.halfX,
+                    obb.halfZ,
+                    obb.rotY,
+                    0.32,
+                  );
+                  if (obbRes.collided) {
+                    c.x = wrapPlanetCoord(obbRes.x);
+                    c.z = wrapPlanetCoord(obbRes.z);
+                    c.vx = obbRes.vx;
+                    c.vz = obbRes.vz;
+                  }
+                }
+
                 // Rigid Crate-vs-Crate Collision (thrown/pushed solid box knocks other grounded crates!)
                 for (let cj = 0; cj < worldCrates.length; cj++) {
                   if (cj === ci) continue;
@@ -8026,9 +8169,15 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                 true,
               );
 
+              const playerTankClimb = evaluateTankClimbableObstacleElevation(
+                mountedTank.x,
+                mountedTank.z,
+                mountedTank.hullYaw,
+                activeMapProps,
+              );
               mountedTank.root.position.set(
                 mountedTank.x,
-                getTerrainElevation(mountedTank.x, mountedTank.z),
+                getTerrainElevation(mountedTank.x, mountedTank.z) + playerTankClimb.climbY,
                 mountedTank.z,
               );
               mountedTank.bodyGroup.rotation.y = mountedTank.hullYaw;
@@ -8100,23 +8249,26 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
 
             if (!isPlane && !isTruck) {
               const isFiringNow = Boolean(isPointerDown || keys['Space']);
-              const baseBarrelX = 1.15 * (mountedTank.isSuper ? 2.75 : 2.45);
               if (mountedTank.recoilTimer > 0) {
                 mountedTank.recoilTimer = Math.max(0, mountedTank.recoilTimer - dt);
-                mountedTank.barrelGroup.position.x = baseBarrelX - mountedTank.recoilTimer * 1.6;
-              } else {
-                mountedTank.barrelGroup.position.x = baseBarrelX;
               }
 
               if (isFiringNow && mountedTank.recoilTimer <= 0.02) {
-                mountedTank.recoilTimer = 0.22;
+                mountedTank.recoilTimer = 0.24;
                 soundEngine.playTankCannonFire();
                 const totalYaw = mountedTank.hullYaw + mountedTank.turretYaw;
                 const sDir = new THREE.Vector3(Math.cos(totalYaw), 0, -Math.sin(totalYaw));
                 const rightDirX = Math.sin(totalYaw);
                 const rightDirZ = Math.cos(totalYaw);
                 const sideOffset = (mountedTank.isSuper ? 2.75 : 2.45) * 0.42;
-                const tankGroundY = getTerrainElevation(mountedTank.x, mountedTank.z);
+                const tankClimbNow = evaluateTankClimbableObstacleElevation(
+                  mountedTank.x,
+                  mountedTank.z,
+                  mountedTank.hullYaw,
+                  activeMapProps,
+                );
+                const tankGroundY =
+                  getTerrainElevation(mountedTank.x, mountedTank.z) + tankClimbNow.climbY;
                 const muzzleOrigin = new THREE.Vector3(
                   wrapPlanetCoord(mountedTank.x + sDir.x * 3.7 + rightDirX * sideOffset),
                   tankGroundY + (mountedTank.isSuper ? 3.45 : 3.08),
@@ -8184,12 +8336,13 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
             // Resolve character collision against solid buildings/pipes/trees and pushable props/crates
             resolveMoverWorldCollisions(playerUnit, 'player_foot', false, 0.72, 2.2, timeSec, true);
 
-            // Step Team Buddies Vertical Jump & Gravity Arc ([Space] on foot)
-            const jumpStep = stepBuddyJumpPhysics(
+            // Step Team Buddies Vertical Jump & Gravity Arc with 0.1s Jump Input Buffer ([Space] on foot)
+            const jumpStep = stepBuddyJumpPhysicsWithBuffer(
               playerUnit.jumpOffset,
               playerUnit.vy,
               playerUnit.isGrounded,
-              Boolean(keys['Space']),
+              playerUnit.jumpBufferTimer ?? 0,
+              false,
               spec.jumpMultiplier,
               playerUnit.carryingCrate !== 'none',
               dt,
@@ -8197,6 +8350,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
             playerUnit.jumpOffset = jumpStep.jumpOffset;
             playerUnit.vy = jumpStep.vy;
             playerUnit.isGrounded = jumpStep.isGrounded;
+            playerUnit.jumpBufferTimer = jumpStep.jumpBufferTimer;
             if (jumpStep.justJumped) {
               soundEngine.playJump();
               spawnBurstParticles(
@@ -8604,14 +8758,14 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                   goalZ = bestCrate.z;
                   if (nearestFreeCrateDist !== null && nearestFreeCrateDist < 1.85) {
                     b.carryingCrate = bestCrate.kind;
-                    if (loadedLyoAssets && b.overheadCrateGroup.userData.lyoBoxKind !== bestCrate.kind) {
+                    if (b.overheadCrateGroup.userData.lyoBoxKind !== bestCrate.kind) {
                       populateRealLyoCrateBoxFromGlb(
                         b.overheadCrateGroup,
                         bestCrate.kind,
                         loadedLyoAssets,
                         windUniforms,
                         isSoftwareGl,
-                        0.84,
+                        UNIFIED_WORLD_CRATE_SIZE,
                       );
                     } else {
                       b.overheadCrateBox.material = getCrateFallbackMaterial(bestCrate.kind);
@@ -8681,7 +8835,7 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                 goalZ = freeTank.z;
                 if (nearestEmptyVehicleDist !== null && nearestEmptyVehicleDist < 2.4) {
                   freeTank.occupiedByAiId = b.id;
-                  freeTank.riderGroup.visible = true;
+                  freeTank.riderGroup.visible = freeTank.vehicleKind !== 'truck';
                   b.root.visible = false;
                 }
               }
@@ -8729,14 +8883,14 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                       const cd = getPlanetShortestDistance(wc.x, wc.z, b.x, b.z);
                       if (cd < 1.85) {
                         b.carryingCrate = wc.kind;
-                        if (loadedLyoAssets && b.overheadCrateGroup.userData.lyoBoxKind !== wc.kind) {
+                        if (b.overheadCrateGroup.userData.lyoBoxKind !== wc.kind) {
                           populateRealLyoCrateBoxFromGlb(
                             b.overheadCrateGroup,
                             wc.kind,
                             loadedLyoAssets,
                             windUniforms,
                             isSoftwareGl,
-                            0.84,
+                            UNIFIED_WORLD_CRATE_SIZE,
                           );
                         } else {
                           b.overheadCrateBox.material = getCrateFallbackMaterial(wc.kind);
@@ -9089,6 +9243,15 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
               b.headMesh.material = frozenIceMat;
             } else {
               b.headMesh.material = (b.headMesh.userData.defaultMat as THREE.Material) || matSkin;
+            }
+
+            // Player Invincibility Frames (0.5s to 1.0s) & 10 Hz Sprite Blink
+            if ((b.invincibilityTimer ?? 0) > 0) {
+              const iFrameState = stepPlayerInvincibilityState(b.invincibilityTimer ?? 0, dt);
+              b.invincibilityTimer = iFrameState.invincibilityTimer;
+              b.bodyGroup.visible = b.isPlayer ? iFrameState.spriteVisible : true;
+            } else if (!b.bodyGroup.visible) {
+              b.bodyGroup.visible = true;
             }
           }
 
@@ -9766,18 +9929,56 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
               if ((p.isPlayerTeam && b.team === 'red') || (!p.isPlayerTeam && b.team === 'blue')) {
                 if (getPlanetShortestDistance(p.pos.x, p.pos.z, b.x, b.z) < 1.15) {
                   detonateExplosiveShellIfHeavy(p, b.x, b.y + 0.9, b.z);
-                  if (p.weaponType === 'Ice Gun') {
-                    b.isFrozen = true;
-                    b.frozenTimer = 4.0;
-                    b.hp -= Math.ceil(p.damage * 0.5);
-                  } else if (b.isFrozen) {
-                    b.hp = 0;
-                  } else {
-                    b.hp -= p.damage;
-                  }
                   const bSpd = Math.hypot(p.vel.x, p.vel.z) || 1;
                   const bDirX = p.vel.x / bSpd;
                   const bDirZ = p.vel.z / bSpd;
+                  const rawDamage =
+                    p.weaponType === 'Ice Gun'
+                      ? Math.ceil(p.damage * 0.5)
+                      : b.isFrozen
+                        ? b.hp
+                        : p.damage;
+                  if (b.isPlayer) {
+                    const iFrameRes = applyPlayerDamageWithInvincibilityAndKnockback({
+                      hp: b.hp,
+                      invincibilityTimer: b.invincibilityTimer ?? 0,
+                      x: b.x,
+                      z: b.z,
+                      vx: b.vx,
+                      vz: b.vz,
+                      vy: b.vy,
+                      damage: rawDamage,
+                      sourceX: b.x - bDirX * 2.0,
+                      sourceZ: b.z - bDirZ * 2.0,
+                      facingYaw: b.yaw,
+                      invincibilityDurationSec: PLAYER_INVINCIBILITY_DURATION_SEC,
+                    });
+                    if (!iFrameRes.damageApplied) {
+                      hitResolved = true;
+                      break;
+                    }
+                    b.hp = iFrameRes.hp;
+                    b.invincibilityTimer = iFrameRes.invincibilityTimer;
+                    b.vx = iFrameRes.vx;
+                    b.vz = iFrameRes.vz;
+                    b.vy = iFrameRes.vy;
+                    b.jumpOffset = Math.max(b.jumpOffset, 0.08);
+                    b.isGrounded = false;
+                    if (p.weaponType === 'Ice Gun') {
+                      b.isFrozen = true;
+                      b.frozenTimer = 4.0;
+                    }
+                  } else {
+                    if (p.weaponType === 'Ice Gun') {
+                      b.isFrozen = true;
+                      b.frozenTimer = 4.0;
+                      b.hp -= rawDamage;
+                    } else if (b.isFrozen) {
+                      b.hp = 0;
+                    } else {
+                      b.hp -= rawDamage;
+                    }
+                  }
                   b.hitFlashTimer = 0.15;
                   b.hitReactionTimer = 0.60;
                   b.hitReactionDirX = bDirX;
@@ -11089,18 +11290,59 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
           slopePitch = clamp(Math.atan2(hPz - hMz, sampleStep * 2.0) * 0.72, -0.36, 0.36);
           slopeRoll = clamp(-Math.atan2(hPx - hMx, sampleStep * 2.0) * 0.72, -0.36, 0.36);
         }
+
+        const tankClimb =
+          v.vehicleKind === 'tank'
+            ? evaluateTankClimbableObstacleElevation(v.x, v.z, v.hullYaw, activeMapProps)
+            : { climbY: 0, pitchRad: 0, rollRad: 0, isClimbing: false };
+
+        let tankBodyRecoilLiftY = 0;
+        let tankBodyRecoilRotX = 0;
+        let tankBodyRecoilRotZ = 0;
+        if (v.vehicleKind === 'tank') {
+          const tankScale =
+            (v.turretGroup.userData.tankScale as number | undefined) ??
+            (v.isSuper ? 2.75 : 2.45);
+          const baseTurretX =
+            (v.turretGroup.userData.baseTurretX as number | undefined) ?? -0.03 * tankScale;
+          const baseTurretY =
+            (v.turretGroup.userData.baseTurretY as number | undefined) ?? 0.82 * tankScale;
+          const baseBarrelX =
+            (v.barrelGroup.userData.baseBarrelX as number | undefined) ?? 1.15 * tankScale;
+          const recoilWindowRemaining =
+            v === mountedTank
+              ? clamp(v.recoilTimer, 0, 0.24)
+              : clamp(v.recoilTimer - (1.1 - 0.24), 0, 0.24);
+          const shotRecoil = evaluateLyoTankShotRecoilPose(recoilWindowRemaining, 0.24);
+          const turretSlideDist = shotRecoil.turretSlideBack * tankScale * 0.95;
+          v.turretGroup.position.set(
+            baseTurretX - Math.cos(v.turretYaw) * turretSlideDist,
+            baseTurretY + shotRecoil.turretLiftY * tankScale * 0.85,
+            Math.sin(v.turretYaw) * turretSlideDist,
+          );
+          v.turretGroup.rotation.z = shotRecoil.turretPitchRad;
+          v.barrelGroup.position.x =
+            baseBarrelX - shotRecoil.barrelSlideBack * tankScale * 1.45;
+          const totalFireYaw = v.hullYaw + v.turretYaw;
+          const fireDirX = Math.cos(totalFireYaw);
+          const fireDirZ = -Math.sin(totalFireYaw);
+          tankBodyRecoilLiftY = shotRecoil.bodyLiftY;
+          tankBodyRecoilRotX = -fireDirZ * shotRecoil.bodyTiltRad * 0.42;
+          tankBodyRecoilRotZ = fireDirX * shotRecoil.bodyTiltRad * 0.42;
+        }
+
         applyPlanetCurvatureToObject(
           v.root,
           v.x,
-          getTerrainElevation(v.x, v.z) + vHitPose.hopY,
+          getTerrainElevation(v.x, v.z) + tankClimb.climbY + vHitPose.hopY + tankBodyRecoilLiftY,
           v.z,
           planetPivotX,
           planetPivotZ,
           0,
           kCurve,
           0.85,
-          slopePitch + vHitPose.rotX,
-          slopeRoll + vHitPose.rotZ,
+          slopePitch + tankClimb.pitchRad + vHitPose.rotX + tankBodyRecoilRotX,
+          slopeRoll + tankClimb.rollRad + vHitPose.rotZ + tankBodyRecoilRotZ,
         );
       }
       for (let i = 0; i < tankTrackMarks.length; i++) {

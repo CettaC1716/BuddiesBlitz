@@ -1167,6 +1167,14 @@ export type BuildOrderTarget =
   | 'build_helipad'
   | 'AUTO';
 
+/**
+ * Unified 1:1 world-space side length (meters) for all crates:
+ * - Ground crates (`worldCrates`)
+ * - Overhead carried crates (`buddy.overheadCrateGroup`, compensated for `bodyGroup` 1.16x scale)
+ * - Stacking Pad crates & slot wireframes (`slotGeo`, `ghostSlotGeo`)
+ */
+export const UNIFIED_WORLD_CRATE_SIZE = 1.32;
+
 export interface BuildOrderSpec {
   key: BuildOrderTarget;
   label: string;
@@ -1182,88 +1190,88 @@ export const BUILD_ORDER_SPECS: Record<BuildOrderTarget, BuildOrderSpec> = {
     label: 'Senjata (1x1x1)',
     targetCrates: 1,
     allowedSlots: [0],
-    ghostBoxSize: [1.52, 1.52, 1.52],
-    ghostBoxCenter: [-0.85, 0.92, -0.85],
+    ghostBoxSize: [1.34, 1.34, 1.34],
+    ghostBoxCenter: [-0.95, 0.93, -0.95],
   },
   '2x1x1': {
     key: '2x1x1',
     label: 'Bazooka / Skyshield',
     targetCrates: 2,
     allowedSlots: [0, 1],
-    ghostBoxSize: [3.25, 1.52, 1.52],
-    ghostBoxCenter: [0, 0.92, -0.85],
+    ghostBoxSize: [3.24, 1.34, 1.34],
+    ghostBoxCenter: [0, 0.93, -0.95],
   },
   '1x1x2': {
     key: '1x1x2',
     label: 'Buddy T1',
     targetCrates: 2,
     allowedSlots: [0, 4],
-    ghostBoxSize: [1.52, 2.96, 1.52],
-    ghostBoxCenter: [-0.85, 1.63, -0.85],
+    ghostBoxSize: [1.34, 2.66, 1.34],
+    ghostBoxCenter: [-0.95, 1.59, -0.95],
   },
   '2x2x1': {
     key: '2x2x1',
     label: 'Dump Truck (2x2x1)',
     targetCrates: 4,
     allowedSlots: [0, 1, 2, 3],
-    ghostBoxSize: [3.25, 1.52, 3.25],
-    ghostBoxCenter: [0, 0.92, 0],
+    ghostBoxSize: [3.24, 1.34, 3.24],
+    ghostBoxCenter: [0, 0.93, 0],
   },
   '2x1x2': {
     key: '2x1x2',
     label: 'Buddy T2',
     targetCrates: 4,
     allowedSlots: [0, 1, 4, 5],
-    ghostBoxSize: [3.25, 2.96, 1.52],
-    ghostBoxCenter: [0, 1.63, -0.85],
+    ghostBoxSize: [3.24, 2.66, 1.34],
+    ghostBoxCenter: [0, 1.59, -0.95],
   },
   '2x2x2': {
     key: '2x2x2',
     label: 'Tank / Pesawat',
     targetCrates: 8,
     allowedSlots: [0, 1, 2, 3, 4, 5, 6, 7],
-    ghostBoxSize: [3.25, 2.96, 3.25],
-    ghostBoxCenter: [0, 1.63, 0],
+    ghostBoxSize: [3.24, 2.66, 3.24],
+    ghostBoxCenter: [0, 1.59, 0],
   },
   upgrade_building: {
     key: 'upgrade_building',
     label: 'Upgrade Rumah (Lv.2/3)',
     targetCrates: 2,
     allowedSlots: [0, 1, 2, 3],
-    ghostBoxSize: [3.25, 1.52, 1.52],
-    ghostBoxCenter: [0, 0.92, -0.85],
+    ghostBoxSize: [3.24, 1.34, 1.34],
+    ghostBoxCenter: [0, 0.93, -0.95],
   },
   upgrade_fence: {
     key: 'upgrade_fence',
     label: 'Upgrade Pagar Besi (Lv.2/3)',
     targetCrates: 2,
     allowedSlots: [0, 1, 2, 3],
-    ghostBoxSize: [3.25, 1.52, 1.52],
-    ghostBoxCenter: [0, 0.92, -0.85],
+    ghostBoxSize: [3.24, 1.34, 1.34],
+    ghostBoxCenter: [0, 0.93, -0.95],
   },
   build_parking: {
     key: 'build_parking',
     label: 'Build Parkiran Mobil',
     targetCrates: 2,
     allowedSlots: [0, 1],
-    ghostBoxSize: [3.25, 1.52, 1.52],
-    ghostBoxCenter: [0, 0.92, -0.85],
+    ghostBoxSize: [3.24, 1.34, 1.34],
+    ghostBoxCenter: [0, 0.93, -0.95],
   },
   build_helipad: {
     key: 'build_helipad',
     label: 'Build Helipad (H)',
     targetCrates: 4,
     allowedSlots: [0, 1, 2, 3],
-    ghostBoxSize: [3.25, 1.52, 3.25],
-    ghostBoxCenter: [0, 0.92, 0],
+    ghostBoxSize: [3.24, 1.34, 3.24],
+    ghostBoxCenter: [0, 0.93, 0],
   },
   AUTO: {
     key: 'AUTO',
     label: 'Otomatis',
     targetCrates: 8,
     allowedSlots: [0, 4, 1, 5, 2, 3, 6, 7],
-    ghostBoxSize: [3.25, 2.96, 3.25],
-    ghostBoxCenter: [0, 1.63, 0],
+    ghostBoxSize: [3.24, 2.66, 3.24],
+    ghostBoxCenter: [0, 1.59, 0],
   },
 };
 
@@ -2833,12 +2841,19 @@ export function stepMilitaryBaseBoomBarrier(
 // TEAM BUDDIES CHARACTER JUMP PHYSICS, UNARMED PUNCH COMBO & FRONT KICK
 // ============================================================================
 
+export const JUMP_BUFFER_DURATION_SEC = 0.1;
+
 export interface BuddyJumpPhysicsState {
   jumpOffset: number;
   vy: number;
   isGrounded: boolean;
   justJumped: boolean;
   justLanded: boolean;
+  jumpBufferTimer?: number;
+}
+
+export interface BuddyBufferedJumpPhysicsState extends BuddyJumpPhysicsState {
+  jumpBufferTimer: number;
 }
 
 /**
@@ -2895,6 +2910,198 @@ export function stepBuddyJumpPhysics(
     isGrounded: nextGrounded,
     justJumped,
     justLanded,
+  };
+}
+
+/**
+ * Jump input buffer + vertical jump kinematics:
+ * - When the player presses jump (`jumpPressedThisFrame === true`), sets `jumpBufferTimer` to `0.1` s.
+ * - Counts `jumpBufferTimer` down every frame (`Math.max(0, timer - dt)`).
+ * - Fires the jump on the first frame the player is grounded while `jumpBufferTimer > 0`,
+ *   and immediately resets `jumpBufferTimer = 0` so one press gives one jump.
+ */
+export function stepBuddyJumpPhysicsWithBuffer(
+  jumpOffset: number,
+  vy: number,
+  isGrounded: boolean,
+  jumpBufferTimer: number,
+  jumpPressedThisFrame: boolean,
+  jumpMultiplier = 1.0,
+  carryingCrate = false,
+  dt: number,
+): BuddyBufferedJumpPhysicsState {
+  const safeDt = clamp(dt, 0, 0.1);
+  const GRAVITY = 26.0;
+  const BASE_JUMP_VY = 9.6;
+  const crateFactor = carryingCrate ? 0.86 : 1.0;
+  const launchVy = BASE_JUMP_VY * clamp(jumpMultiplier, 0.5, 2.0) * crateFactor;
+
+  let nextTimer = jumpPressedThisFrame
+    ? JUMP_BUFFER_DURATION_SEC
+    : Math.max(0, jumpBufferTimer - safeDt);
+
+  let nextOffset = Math.max(0, jumpOffset);
+  let nextVy = vy;
+  let nextGrounded = isGrounded && nextOffset <= 0.02;
+  let justJumped = false;
+  let justLanded = false;
+
+  // 1. If already grounded at the start of the frame while buffer timer > 0, fire jump immediately & reset timer to 0
+  if (nextGrounded && nextTimer > 0) {
+    nextVy = launchVy;
+    nextGrounded = false;
+    justJumped = true;
+    nextTimer = 0;
+  }
+
+  // 2. Step vertical kinematics & gravity
+  if (!nextGrounded || nextOffset > 0 || nextVy > 0) {
+    nextOffset += nextVy * safeDt;
+    nextVy -= GRAVITY * safeDt;
+    if (nextOffset <= 0) {
+      nextOffset = 0;
+      nextVy = 0;
+      if (!nextGrounded) {
+        justLanded = true;
+      }
+      nextGrounded = true;
+    } else {
+      nextGrounded = false;
+    }
+  }
+
+  // 3. If the player just landed on this frame while buffer timer is still > 0, fire the buffered jump & reset timer to 0
+  if (nextGrounded && !justJumped && nextTimer > 0) {
+    nextVy = launchVy;
+    nextGrounded = false;
+    justJumped = true;
+    nextTimer = 0;
+  }
+
+  return {
+    jumpOffset: nextOffset,
+    vy: nextVy,
+    isGrounded: nextGrounded,
+    justJumped,
+    justLanded,
+    jumpBufferTimer: nextTimer,
+  };
+}
+
+// ============================================================================
+// PLAYER INVINCIBILITY FRAMES (I-FRAMES), 10 HZ BLINK & DAMAGE KNOCKBACK
+// ============================================================================
+
+export const PLAYER_INVINCIBILITY_DURATION_SEC = 0.75;
+export const PLAYER_INVINCIBILITY_BLINK_HZ = 10;
+export const PLAYER_DAMAGE_KNOCKBACK_SPEED = 9.5;
+
+export interface PlayerInvincibilityFrameState {
+  invincibilityTimer: number;
+  isInvincible: boolean;
+  spriteVisible: boolean;
+}
+
+/**
+ * Counts down the player's invincibility timer and computes the 10 Hz on/off blink visibility.
+ * When `invincibilityTimer <= 0`, `spriteVisible` is always `true`.
+ */
+export function stepPlayerInvincibilityState(
+  invincibilityTimer: number,
+  dt: number,
+  blinkHz = PLAYER_INVINCIBILITY_BLINK_HZ,
+): PlayerInvincibilityFrameState {
+  const safeDt = Math.max(0, dt);
+  const nextTimer = Math.max(0, invincibilityTimer - safeDt);
+  if (nextTimer <= 0) {
+    return {
+      invincibilityTimer: 0,
+      isInvincible: false,
+      spriteVisible: true,
+    };
+  }
+  const halfCycleIndex = Math.floor(nextTimer * Math.max(1, blinkHz) * 2);
+  const spriteVisible = halfCycleIndex % 2 === 0;
+  return {
+    invincibilityTimer: nextTimer,
+    isInvincible: true,
+    spriteVisible,
+  };
+}
+
+export interface PlayerDamageWithInvincibilityInput {
+  hp: number;
+  invincibilityTimer: number;
+  x: number;
+  z: number;
+  vx: number;
+  vz: number;
+  vy: number;
+  damage: number;
+  sourceX: number;
+  sourceZ: number;
+  facingYaw?: number;
+  invincibilityDurationSec?: number;
+  knockbackSpeed?: number;
+}
+
+export interface PlayerDamageWithInvincibilityResult {
+  damageApplied: boolean;
+  hp: number;
+  invincibilityTimer: number;
+  vx: number;
+  vz: number;
+  vy: number;
+  knockbackDirX: number;
+  knockbackDirZ: number;
+}
+
+/**
+ * Resolves player damage with invincibility frames (0.5s to 1.0s) and knockback impulse:
+ * - While `invincibilityTimer > 0`, ignores all incoming damage (`damageApplied: false`).
+ * - When taking damage, starts the invincibility window (`0.75s` by default, clamped to `[0.5, 1.0]`)
+ *   and applies a horizontal knockback impulse pushing the player away from `(sourceX, sourceZ)`.
+ */
+export function applyPlayerDamageWithInvincibilityAndKnockback(
+  input: PlayerDamageWithInvincibilityInput,
+): PlayerDamageWithInvincibilityResult {
+  if (input.invincibilityTimer > 0 || input.damage <= 0 || input.hp <= 0) {
+    return {
+      damageApplied: false,
+      hp: input.hp,
+      invincibilityTimer: Math.max(0, input.invincibilityTimer),
+      vx: input.vx,
+      vz: input.vz,
+      vy: input.vy,
+      knockbackDirX: 0,
+      knockbackDirZ: 0,
+    };
+  }
+
+  const nextHp = Math.max(0, input.hp - input.damage);
+  const duration = clamp(
+    input.invincibilityDurationSec ?? PLAYER_INVINCIBILITY_DURATION_SEC,
+    0.5,
+    1.0,
+  );
+  const kbSpeed = input.knockbackSpeed ?? PLAYER_DAMAGE_KNOCKBACK_SPEED;
+
+  const dx = input.x - input.sourceX;
+  const dz = input.z - input.sourceZ;
+  const dist = Math.hypot(dx, dz);
+  const fallbackYaw = input.facingYaw ?? 0;
+  const knockbackDirX = dist > 1e-4 ? dx / dist : -Math.sin(fallbackYaw);
+  const knockbackDirZ = dist > 1e-4 ? dz / dist : -Math.cos(fallbackYaw);
+
+  return {
+    damageApplied: true,
+    hp: nextHp,
+    invincibilityTimer: duration,
+    vx: input.vx + knockbackDirX * kbSpeed,
+    vz: input.vz + knockbackDirZ * kbSpeed,
+    vy: Math.max(input.vy, 3.8),
+    knockbackDirX,
+    knockbackDirZ,
   };
 }
 
@@ -9295,6 +9502,198 @@ export function evaluatePadCancelKickShatterDrops(
     drops,
   };
 }
+
+// ============================================================================
+// TANK OBSTACLE CLIMBING OVER LOW ROCKS & STACKED PIPES
+// ("tank mampu menaiki batu atau pipa bertumpuk asal jangan terlalu tinggi")
+// ============================================================================
+
+export const TANK_MAX_CLIMBABLE_OBSTACLE_HEIGHT = 1.68;
+
+export interface TankClimbableObstacleInput {
+  alive?: boolean;
+  kind: string;
+  x: number;
+  z: number;
+  rotY?: number;
+  scale?: number;
+  radius: number;
+  halfX?: number;
+  halfZ?: number;
+  heightY?: number;
+}
+
+export interface TankClimbableElevationResult {
+  climbY: number;
+  pitchRad: number;
+  rollRad: number;
+  isClimbing: boolean;
+}
+
+/**
+ * Returns the true vertical 3D surface height (in meters) of a climbable rock or pipe obstacle,
+ * or `null` if the prop kind is not a rock/pipe obstacle that a tracked tank can climb over.
+ */
+export function getTankClimbableObstacleVerticalHeight(
+  kind: string,
+  scale = 1.0,
+  explicitHeightY?: number,
+): number | null {
+  const s = Math.max(0.1, scale);
+  let baseVerticalHeight: number | null = null;
+  switch (kind) {
+    case 'river_rock':
+      baseVerticalHeight = 0.78 * s;
+      break;
+    case 'concrete_pipe':
+      baseVerticalHeight = 0.92 * s;
+      break;
+    case 'giant_pipe':
+      baseVerticalHeight = 0.95 * s;
+      break;
+    case 'giant_pipe_1b':
+      baseVerticalHeight = 1.12 * s;
+      break;
+    case 'pipe_cluster':
+    case 'pipe_cluster_1b':
+      baseVerticalHeight = 1.32 * s;
+      break;
+    case 'h_beam':
+      baseVerticalHeight = 0.55 * s;
+      break;
+    default:
+      return null;
+  }
+  if (
+    explicitHeightY !== undefined &&
+    explicitHeightY > 0 &&
+    explicitHeightY <= TANK_MAX_CLIMBABLE_OBSTACLE_HEIGHT * 1.5 &&
+    explicitHeightY < baseVerticalHeight * 1.35
+  ) {
+    return explicitHeightY;
+  }
+  return baseVerticalHeight;
+}
+
+/**
+ * Determines whether a tracked tank can climb over the given map prop (`river_rock`, `pipe_cluster`,
+ * `giant_pipe`, `concrete_pipe`, `h_beam`) as long as its vertical height does not exceed `maxClimbHeight`.
+ */
+export function isTankClimbableProp(
+  kind: string,
+  scale = 1.0,
+  maxClimbHeight = TANK_MAX_CLIMBABLE_OBSTACLE_HEIGHT,
+  explicitHeightY?: number,
+): boolean {
+  const verticalH = getTankClimbableObstacleVerticalHeight(kind, scale, explicitHeightY);
+  if (verticalH === null) return false;
+  return verticalH <= maxClimbHeight;
+}
+
+function sampleSingleClimbableObstacleHeightAtPoint(
+  px: number,
+  pz: number,
+  obs: TankClimbableObstacleInput,
+  maxClimbHeight: number,
+): number {
+  if (obs.alive === false) return 0;
+  const scale = obs.scale ?? 1.0;
+  const verticalH = getTankClimbableObstacleVerticalHeight(obs.kind, scale, obs.heightY);
+  if (verticalH === null || verticalH <= 0 || verticalH > maxClimbHeight) {
+    return 0;
+  }
+
+  const dx = px - obs.x;
+  const dz = pz - obs.z;
+  const rampMargin = 0.95; // Track approach ramp width around obstacle footprint
+
+  if (obs.halfX !== undefined && obs.halfZ !== undefined && obs.halfX > 0 && obs.halfZ > 0) {
+    const rotY = obs.rotY ?? 0;
+    const cosY = Math.cos(rotY);
+    const sinY = Math.sin(rotY);
+    const localX = dx * cosY - dz * sinY;
+    const localZ = dx * sinY + dz * cosY;
+
+    const absX = Math.abs(localX);
+    const absZ = Math.abs(localZ);
+    const outerX = obs.halfX + rampMargin;
+    const outerZ = obs.halfZ + rampMargin;
+    if (absX >= outerX || absZ >= outerZ) return 0;
+
+    const flatX = obs.halfX * 0.62;
+    const flatZ = obs.halfZ * 0.62;
+    const uX = clamp(1 - Math.max(0, absX - flatX) / Math.max(0.15, outerX - flatX), 0, 1);
+    const uZ = clamp(1 - Math.max(0, absZ - flatZ) / Math.max(0.15, outerZ - flatZ), 0, 1);
+    const sX = uX * uX * (3 - 2 * uX);
+    const sZ = uZ * uZ * (3 - 2 * uZ);
+    return verticalH * sX * sZ;
+  }
+
+  const dist = Math.hypot(dx, dz);
+  const outerR = Math.max(0.4, obs.radius) + rampMargin;
+  if (dist >= outerR) return 0;
+  const flatR = Math.max(0.2, obs.radius * 0.45);
+  const u = clamp(1 - Math.max(0, dist - flatR) / Math.max(0.15, outerR - flatR), 0, 1);
+  const s = u * u * (3 - 2 * u);
+  return verticalH * s;
+}
+
+/**
+ * Computes the vertical climb elevation (`climbY`) and hull tilt (`pitchRad`, `rollRad`) when a tank
+ * drives over climbable low rocks (`river_rock`) or stacked pipes (`pipe_cluster`, `giant_pipe`, `concrete_pipe`).
+ */
+export function evaluateTankClimbableObstacleElevation(
+  tankX: number,
+  tankZ: number,
+  hullYaw: number,
+  obstacles: ReadonlyArray<TankClimbableObstacleInput>,
+  maxClimbHeight = TANK_MAX_CLIMBABLE_OBSTACLE_HEIGHT,
+): TankClimbableElevationResult {
+  if (!obstacles || obstacles.length === 0) {
+    return { climbY: 0, pitchRad: 0, rollRad: 0, isClimbing: false };
+  }
+
+  const sampleAt = (px: number, pz: number): number => {
+    let bestH = 0;
+    for (let i = 0; i < obstacles.length; i++) {
+      const h = sampleSingleClimbableObstacleHeightAtPoint(px, pz, obstacles[i], maxClimbHeight);
+      if (h > bestH) bestH = h;
+    }
+    return bestH;
+  };
+
+  // Tank forward axis is (+cos(hullYaw), -sin(hullYaw)); right axis is (+sin(hullYaw), +cos(hullYaw))
+  const fwdX = Math.cos(hullYaw);
+  const fwdZ = -Math.sin(hullYaw);
+  const rightX = Math.sin(hullYaw);
+  const rightZ = Math.cos(hullYaw);
+
+  const halfTrackLen = 1.35;
+  const halfTrackWidth = 1.05;
+
+  const hCenter = sampleAt(tankX, tankZ);
+  const hFront = sampleAt(tankX + fwdX * halfTrackLen, tankZ + fwdZ * halfTrackLen);
+  const hRear = sampleAt(tankX - fwdX * halfTrackLen, tankZ - fwdZ * halfTrackLen);
+  const hRight = sampleAt(tankX + rightX * halfTrackWidth, tankZ + rightZ * halfTrackWidth);
+  const hLeft = sampleAt(tankX - rightX * halfTrackWidth, tankZ - rightZ * halfTrackWidth);
+
+  const avgTrackH = (hFront + hRear + hRight + hLeft) * 0.25;
+  const climbY = Math.max(hCenter, avgTrackH);
+  if (climbY <= 0.005) {
+    return { climbY: 0, pitchRad: 0, rollRad: 0, isClimbing: false };
+  }
+
+  const pitchRad = clamp(Math.atan2(hFront - hRear, halfTrackLen * 2), -0.42, 0.42);
+  const rollRad = clamp(Math.atan2(hLeft - hRight, halfTrackWidth * 2), -0.36, 0.36);
+
+  return {
+    climbY,
+    pitchRad,
+    rollRad,
+    isClimbing: climbY > 0.02,
+  };
+}
+
 
 
 

@@ -136,6 +136,18 @@ import {
   isCrateInsideOtherOrEnemyBase,
   evaluateKioskSideHologramDisplay,
   evaluatePadCancelKickShatterDrops,
+  TANK_MAX_CLIMBABLE_OBSTACLE_HEIGHT,
+  getTankClimbableObstacleVerticalHeight,
+  isTankClimbableProp,
+  evaluateTankClimbableObstacleElevation,
+  UNIFIED_WORLD_CRATE_SIZE,
+  BUILD_ORDER_SPECS,
+  JUMP_BUFFER_DURATION_SEC,
+  stepBuddyJumpPhysicsWithBuffer,
+  PLAYER_INVINCIBILITY_DURATION_SEC,
+  PLAYER_INVINCIBILITY_BLINK_HZ,
+  stepPlayerInvincibilityState,
+  applyPlayerDamageWithInvincibilityAndKnockback,
 } from './buddiesBlitzRules';
 import { evaluateRoadNetworkSdf } from './planetCurvature';
 import {
@@ -2916,6 +2928,188 @@ test('AI excludes crates inside teammate/enemy bases, Kiosk supports max-6 conti
     'Shattered pad crates must include Medkit drop',
   );
 });
+
+test('HT-88 Dump Truck 4-crate hydraulic vessel + Kiosk recipe & ST-01 Tank obstacle climbing + turret recoil', () => {
+  // 1. HT-88 Dump Truck Kiosk recipe & 4-crate (2x2) vessel capacity + hydraulic cycle
+  assert.equal(DUMP_TRUCK_MAX_CRATES, 4);
+  const truckRecipe = KIOSK_BUILD_PRIORITY_RECIPES.dump_truck;
+  assert.equal(truckRecipe.id, 'dump_truck');
+  assert.equal(truckRecipe.buildOrder, '2x2x1');
+  assert.equal(truckRecipe.targetCrates, 4);
+
+  const truckHolo = evaluateKioskSideHologramDisplay(
+    true,
+    'dump_truck',
+    '2x2x1',
+    ['red', 'red', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
+    ['dump_truck'],
+  );
+  assert.equal(truckHolo.visible, true);
+  assert.equal(truckHolo.modelKind, 'truck');
+  assert.equal(truckHolo.progressFractionText, '2/4');
+
+  const hydPeak = evaluateDumpTruckHydraulicCycle(0.7);
+  assert.equal(hydPeak.phase, 'dumping');
+  assert.ok(hydPeak.vesselTiltRad > 0.72, 'Hydraulic dump vessel must tilt upward during unload');
+  assert.ok(hydPeak.tailgateOpenRad > 0.6, 'Rear tailgate must swing open during hydraulic unload');
+  assert.ok(hydPeak.pistonExtension > 0.8, 'Telescoping hydraulic rams must extend during dump');
+
+  // 2. ST-01 Tank climbs over low rocks and stacked pipes (height <= 1.68m), blocked if too tall
+  assert.equal(TANK_MAX_CLIMBABLE_OBSTACLE_HEIGHT, 1.68);
+  assert.equal(isTankClimbableProp('river_rock', 1.0), true);
+  assert.equal(isTankClimbableProp('pipe_cluster', 1.0), true);
+  assert.equal(isTankClimbableProp('pipe_cluster_1b', 1.0), true);
+  assert.equal(isTankClimbableProp('giant_pipe', 1.0), true);
+  assert.equal(isTankClimbableProp('concrete_pipe', 1.0), true);
+  assert.equal(isTankClimbableProp('river_rock', 2.5), false); // 0.92 * 2.5 = 2.30m > 1.68m -> too tall!
+  assert.equal(isTankClimbableProp('pipe_cluster', 1.6), false); // 1.28 * 1.6 = 2.048m > 1.68m -> too tall!
+  assert.equal(isTankClimbableProp('shipping_container', 1.0), false);
+  assert.ok((getTankClimbableObstacleVerticalHeight('pipe_cluster', 1.0) ?? 0) > 1.0);
+
+  const climbOverPipe = evaluateTankClimbableObstacleElevation(10, 20, 0, [
+    {
+      alive: true,
+      kind: 'pipe_cluster',
+      x: 10,
+      z: 20,
+      radius: 1.58,
+      halfX: 1.25,
+      halfZ: 2.35,
+      rotY: 0,
+      scale: 1.0,
+    },
+  ]);
+  assert.equal(climbOverPipe.isClimbing, true);
+  assert.ok(climbOverPipe.climbY > 0.8, 'Tank on top of stacked pipes must elevate smoothly');
+
+  const approachRock = evaluateTankClimbableObstacleElevation(8.9, 20, 0, [
+    {
+      alive: true,
+      kind: 'river_rock',
+      x: 10,
+      z: 20,
+      radius: 1.08,
+      rotY: 0,
+      scale: 1.0,
+    },
+  ]);
+  assert.equal(approachRock.isClimbing, true);
+  assert.ok(approachRock.pitchRad !== 0, 'Tank approaching a rock must pitch its hull');
+
+  // 3. ST-01 Tank 4-part turret + barrel + hull recoil
+  const recoilPeak = evaluateLyoTankShotRecoilPose(0.19, 0.24);
+  assert.ok(recoilPeak.turretSlideBack > 0.14, 'Turret must slide backward on cannon shot');
+  assert.ok(recoilPeak.turretLiftY > 0.04, 'Turret must lift slightly on cannon shot');
+  assert.ok(recoilPeak.turretPitchRad > 0.08, 'Turret must pitch upward on cannon shot');
+  assert.ok(recoilPeak.barrelSlideBack > 0.14, 'Barrel must slide backward on cannon shot');
+  assert.ok(recoilPeak.bodyLiftY > 0.03, 'Tank hull must hop slightly on cannon shot');
+});
+
+test('Unified 1.32m crate size, 0.1s Jump Input Buffer, and Player Invincibility Frames (10 Hz blink + knockback)', () => {
+  // 1. Unified 1:1 crate size across ground, carried overhead, and Crate Pad slots/holograms
+  assert.equal(UNIFIED_WORLD_CRATE_SIZE, 1.32);
+  assert.deepEqual(BUILD_ORDER_SPECS['1x1x1'].ghostBoxCenter, [-0.95, 0.93, -0.95]);
+  assert.deepEqual(BUILD_ORDER_SPECS['1x1x1'].ghostBoxSize, [1.34, 1.34, 1.34]);
+  assert.deepEqual(BUILD_ORDER_SPECS['1x1x2'].ghostBoxCenter, [-0.95, 1.59, -0.95]);
+  assert.deepEqual(BUILD_ORDER_SPECS['1x1x2'].ghostBoxSize, [1.34, 2.66, 1.34]);
+
+  // 2. Jump input buffer (0.1s):
+  //    a) Pressing jump while airborne 0.06s before landing buffers the jump, counts down each frame,
+  //       fires on the first grounded frame while timer > 0, and resets timer to 0 so one press gives one jump!
+  assert.equal(JUMP_BUFFER_DURATION_SEC, 0.1);
+  const pressInAir = stepBuddyJumpPhysicsWithBuffer(0.18, -3.5, false, 0, true, 1.0, false, 0.03);
+  assert.equal(pressInAir.justJumped, false, 'Still airborne -> buffered, not fired yet');
+  assert.equal(pressInAir.jumpBufferTimer, 0.1, 'Press sets buffer timer to 0.1s');
+
+  // Next frame (dt = 0.04s): player touches down while timer is 0.06s (> 0) -> fires jump immediately and resets timer to 0!
+  const touchdownFire = stepBuddyJumpPhysicsWithBuffer(
+    pressInAir.jumpOffset,
+    pressInAir.vy,
+    pressInAir.isGrounded,
+    pressInAir.jumpBufferTimer,
+    false,
+    1.0,
+    false,
+    0.04,
+  );
+  assert.equal(touchdownFire.justJumped, true, 'Buffered jump must fire on the first grounded frame');
+  assert.equal(touchdownFire.isGrounded, false);
+  assert.ok(touchdownFire.vy > 9.0);
+  assert.equal(touchdownFire.jumpBufferTimer, 0, 'Buffer timer must reset to 0 when jump fires');
+
+  //    b) Pressing jump too early (> 0.1s before landing) expires the buffer timer before touchdown
+  let timer = 0.1;
+  let offset = 1.2;
+  let vy = -2.0;
+  let grounded = false;
+  for (let i = 0; i < 4; i++) {
+    const step = stepBuddyJumpPhysicsWithBuffer(offset, vy, grounded, timer, false, 1.0, false, 0.03);
+    offset = step.jumpOffset;
+    vy = step.vy;
+    grounded = step.isGrounded;
+    timer = step.jumpBufferTimer;
+    assert.equal(step.justJumped, false);
+  }
+  assert.equal(timer, 0, 'Buffer timer must count down to 0 after > 0.1s');
+
+  // 3. Player Invincibility Frames (0.5 to 1.0s), 10 Hz blink, and knockback away from damage source
+  assert.ok(PLAYER_INVINCIBILITY_DURATION_SEC >= 0.5 && PLAYER_INVINCIBILITY_DURATION_SEC <= 1.0);
+  assert.equal(PLAYER_INVINCIBILITY_BLINK_HZ, 10);
+
+  // First hit from source at (0, 0) while player is at (3, 4): applies damage, starts i-frames, knocks player away (+0.6, +0.8)
+  const hit1 = applyPlayerDamageWithInvincibilityAndKnockback({
+    hp: 30,
+    invincibilityTimer: 0,
+    x: 3,
+    z: 4,
+    vx: 0,
+    vz: 0,
+    vy: 0,
+    damage: 10,
+    sourceX: 0,
+    sourceZ: 0,
+  });
+  assert.equal(hit1.damageApplied, true);
+  assert.equal(hit1.hp, 20);
+  assert.equal(hit1.invincibilityTimer, PLAYER_INVINCIBILITY_DURATION_SEC);
+  assert.ok(hit1.knockbackDirX > 0.59 && hit1.knockbackDirX < 0.61);
+  assert.ok(hit1.knockbackDirZ > 0.79 && hit1.knockbackDirZ < 0.81);
+  assert.ok(hit1.vx > 5.0 && hit1.vz > 7.0, 'Must push player away from the damage source');
+
+  // Second hit during the invincibility window is completely ignored!
+  const hit2Ignored = applyPlayerDamageWithInvincibilityAndKnockback({
+    hp: hit1.hp,
+    invincibilityTimer: hit1.invincibilityTimer,
+    x: 3.5,
+    z: 4.5,
+    vx: hit1.vx,
+    vz: hit1.vz,
+    vy: hit1.vy,
+    damage: 15,
+    sourceX: 0,
+    sourceZ: 0,
+  });
+  assert.equal(hit2Ignored.damageApplied, false, 'Must ignore all further damage during invincibility window');
+  assert.equal(hit2Ignored.hp, 20);
+
+  // Verify 10 Hz blink toggles sprite visibility on and off during the window and restores visible=true when expired
+  let blinkTimer = hit1.invincibilityTimer;
+  let transitions = 0;
+  let prevVis = stepPlayerInvincibilityState(blinkTimer, 0).spriteVisible;
+  for (let i = 0; i < 30; i++) {
+    const st = stepPlayerInvincibilityState(blinkTimer, 0.025);
+    blinkTimer = st.invincibilityTimer;
+    if (st.spriteVisible !== prevVis) {
+      transitions++;
+      prevVis = st.spriteVisible;
+    }
+  }
+  assert.ok(transitions >= 12, `Expected ~15 visibility toggles at 10 Hz over 0.75s, got ${transitions}`);
+  assert.equal(blinkTimer, 0);
+  assert.equal(stepPlayerInvincibilityState(0, 0.016).spriteVisible, true);
+});
+
+
 
 
 
