@@ -2195,6 +2195,8 @@ interface St01TankTextureSet {
   frontGrilleTex: THREE.CanvasTexture;
   cyanGaugeTex: THREE.CanvasTexture;
   bellyPanTex: THREE.CanvasTexture;
+  cockpitHazardSideTex: THREE.CanvasTexture;
+  windshieldGlassTex: THREE.CanvasTexture;
 }
 
 const cachedSt01TankTextures = new Map<string, St01TankTextureSet>();
@@ -2440,6 +2442,70 @@ function getOrCreateSt01TankTextures(isSuper: boolean): St01TankTextureSet {
   bellyPanTex.colorSpace = THREE.SRGBColorSpace;
   bellyPanTex.needsUpdate = true;
 
+  // 8. Cockpit Side Hazard Trim Texture (512x64 8:1 aspect ratio so 45° yellow/black stripes never stretch into horizontal lines)
+  const hazardSideCanvas = document.createElement('canvas');
+  hazardSideCanvas.width = 512;
+  hazardSideCanvas.height = 64;
+  const hsCtx = hazardSideCanvas.getContext('2d')!;
+  hsCtx.fillStyle = '#eab308';
+  hsCtx.fillRect(0, 0, 512, 64);
+  hsCtx.fillStyle = '#181e26';
+  for (let x = -64; x < 576; x += 64) {
+    hsCtx.beginPath();
+    hsCtx.moveTo(x, 0);
+    hsCtx.lineTo(x + 32, 0);
+    hsCtx.lineTo(x + 68, 64);
+    hsCtx.lineTo(x + 36, 64);
+    hsCtx.closePath();
+    hsCtx.fill();
+  }
+  hsCtx.strokeStyle = '#11161d';
+  hsCtx.lineWidth = 6;
+  hsCtx.strokeRect(2, 2, 508, 60);
+  const cockpitHazardSideTex = new THREE.CanvasTexture(hazardSideCanvas);
+  cockpitHazardSideTex.colorSpace = THREE.SRGBColorSpace;
+  cockpitHazardSideTex.needsUpdate = true;
+
+  // 9. Curved Armored Windshield Glass Texture (translucent sky-cyan tint + diagonal white specular streaks)
+  const wsCanvas = document.createElement('canvas');
+  wsCanvas.width = 512;
+  wsCanvas.height = 256;
+  const wsCtx = wsCanvas.getContext('2d')!;
+  const wsGrad = wsCtx.createLinearGradient(0, 0, 0, 256);
+  wsGrad.addColorStop(0, 'rgba(186, 230, 253, 0.86)');
+  wsGrad.addColorStop(0.35, 'rgba(103, 232, 249, 0.64)');
+  wsGrad.addColorStop(1, 'rgba(34, 211, 238, 0.48)');
+  wsCtx.fillStyle = wsGrad;
+  wsCtx.fillRect(0, 0, 512, 256);
+
+  // Diagonal white glass reflection streaks (matching green-screen reference 1:1)
+  wsCtx.fillStyle = 'rgba(255, 255, 255, 0.58)';
+  wsCtx.beginPath();
+  wsCtx.moveTo(148, 24);
+  wsCtx.lineTo(192, 24);
+  wsCtx.lineTo(118, 232);
+  wsCtx.lineTo(74, 232);
+  wsCtx.closePath();
+  wsCtx.fill();
+
+  wsCtx.fillStyle = 'rgba(255, 255, 255, 0.36)';
+  wsCtx.beginPath();
+  wsCtx.moveTo(212, 24);
+  wsCtx.lineTo(234, 24);
+  wsCtx.lineTo(160, 232);
+  wsCtx.lineTo(138, 232);
+  wsCtx.closePath();
+  wsCtx.fill();
+
+  // Subtle inner cyan rim glow
+  wsCtx.strokeStyle = 'rgba(224, 242, 254, 0.92)';
+  wsCtx.lineWidth = 10;
+  wsCtx.strokeRect(6, 6, 500, 244);
+
+  const windshieldGlassTex = new THREE.CanvasTexture(wsCanvas);
+  windshieldGlassTex.colorSpace = THREE.SRGBColorSpace;
+  windshieldGlassTex.needsUpdate = true;
+
   const set: St01TankTextureSet = {
     fenderTex,
     turretSkirtTex,
@@ -2448,6 +2514,8 @@ function getOrCreateSt01TankTextures(isSuper: boolean): St01TankTextureSet {
     frontGrilleTex,
     cyanGaugeTex,
     bellyPanTex,
+    cockpitHazardSideTex,
+    windshieldGlassTex,
   };
   cachedSt01TankTextures.set(key, set);
   return set;
@@ -2622,61 +2690,19 @@ export function populateRealLyoTankFromGlb(
   muzzleFlash.position.set(0.38 * tankScale, 0, 0);
 
   // ==========================================================================
-  // 1. RIGHT-SIDE MOUNTED HEAVY CANNON POD (barrelGroup — TOP VIEW & RIGHT SIDE VIEW)
+  // 1. RIGHT-SIDE RECOILING HEAVY CANNON BARREL (barrelGroup — ONLY the barrel recoils!)
   // ==========================================================================
   const cannonRoot = new THREE.Group();
   cannonRoot.name = 'St01CannonRoot';
   cannonRoot.scale.setScalar(tankScale);
   barrelGroup.add(cannonRoot);
 
-  // 1A. Sloped Lime-Green Armored Rear Breech Shroud with Canvas Panel Texture (x = -1.36 to -0.66)
+  // 1B. Stepped Dark Gunmetal Heavy Cannon Barrel (3 telescoping stages along +X, sliding inside the stationary breech shroud)
   addTankPart(
     cannonRoot,
-    new THREE.BoxGeometry(0.68, 0.30, 0.34),
-    '#ffffff',
-    [-1.00, 0.02, 0],
-    [0, 0, -0.04],
-    [1, 1, 1],
-    0.016,
-    st01Tex.cannonShroudTex,
-  );
-  // Chamfered Top Crest Plate of Cannon Shroud
-  addTankPart(cannonRoot, new THREE.BoxGeometry(0.58, 0.075, 0.29), COL_LIME, [-0.98, 0.18, 0], [0, 0, -0.06], [1, 1, 1], 0.012);
-  // Dark Gunmetal Breech Base Cradle, Rear Cap & Gold Rear Accent Ring (visible in TOP VIEW)
-  addTankPart(cannonRoot, new THREE.BoxGeometry(0.72, 0.11, 0.36), COL_GUNMETAL, [-1.02, -0.14, 0], [0, 0, 0], [1, 1, 1], 0.014);
-  addTankPart(cannonRoot, new THREE.BoxGeometry(0.16, 0.28, 0.32), COL_GUNMETAL_DARK, [-1.35, 0.0, 0], [0, 0, 0], [1, 1, 1], 0.014);
-  addTankPart(
-    cannonRoot,
-    new THREE.CylinderGeometry(0.125, 0.135, 0.10, 14),
-    COL_GOLD_COLLAR,
-    [-1.42, 0.0, 0],
-    [0, 0, -Math.PI / 2],
-    [1, 1, 1],
-    0.012,
-  );
-  addTankPart(
-    cannonRoot,
-    new THREE.CylinderGeometry(0.11, 0.12, 0.08, 14),
+    new THREE.CylinderGeometry(0.152, 0.165, 0.42, 16),
     COL_GUNMETAL_DARK,
-    [-1.47, 0.0, 0],
-    [0, 0, -Math.PI / 2],
-    [1, 1, 1],
-    0.012,
-  );
-
-  // Glowing Cyan Rectangular Energy Core Window on Right Side & Top of Breech (TOP VIEW, RIGHT SIDE VIEW & green-screen render)
-  addTankPart(cannonRoot, new THREE.BoxGeometry(0.19, 0.22, 0.368), COL_GUNMETAL_DARK, [-1.22, 0.02, 0], [0, 0, 0], [1, 1, 1], 0.012);
-  addTankPart(cannonRoot, new THREE.BoxGeometry(0.125, 0.155, 0.382), COL_CYAN_GLOW, [-1.22, 0.02, 0], [0, 0, 0], [1, 1, 1], 0, undefined, true);
-  // Top Cyan Core Window Bezel (TOP VIEW)
-  addTankPart(cannonRoot, new THREE.BoxGeometry(0.15, 0.045, 0.18), COL_GUNMETAL_DARK, [-1.22, 0.19, -0.03], [0, 0, 0], [1, 1, 1], 0.01);
-  addTankPart(cannonRoot, new THREE.BoxGeometry(0.11, 0.055, 0.14), COL_CYAN_GLOW, [-1.22, 0.195, -0.03], [0, 0, 0], [1, 1, 1], 0, undefined, true);
-
-  // 1B. Stepped Dark Gunmetal Heavy Cannon Barrel (3 telescoping stages along +X)
-  addTankPart(
-    cannonRoot,
-    new THREE.CylinderGeometry(0.152, 0.165, 0.26, 16),
-    COL_GUNMETAL_DARK,
-    [-0.55, 0, 0],
+    [-0.62, 0, 0],
     [0, 0, -Math.PI / 2],
     [1, 1, 1],
     0.016,
@@ -2742,6 +2768,107 @@ export function populateRealLyoTankFromGlb(
   turretRoot.name = 'St01TurretRoot';
   turretRoot.scale.setScalar(tankScale);
   turretGroup.add(turretRoot);
+
+  // 1A. Stationary Right-Side Lime-Green Armored Cannon Breech Shroud & Cyan Energy Core Window
+  //     (Mounted stably to turretRoot at [1.15, 0.47, 0.42] so the housing stays steady while the barrel slides inside it!)
+  const shroudOffsetX = 1.15;
+  const shroudOffsetY = 0.47;
+  const shroudOffsetZ = 0.42;
+  addTankPart(
+    turretRoot,
+    new THREE.BoxGeometry(0.68, 0.30, 0.34),
+    '#ffffff',
+    [shroudOffsetX - 1.00, shroudOffsetY + 0.02, shroudOffsetZ],
+    [0, 0, -0.04],
+    [1, 1, 1],
+    0.016,
+    st01Tex.cannonShroudTex,
+  );
+  addTankPart(
+    turretRoot,
+    new THREE.BoxGeometry(0.58, 0.075, 0.29),
+    COL_LIME,
+    [shroudOffsetX - 0.98, shroudOffsetY + 0.18, shroudOffsetZ],
+    [0, 0, -0.06],
+    [1, 1, 1],
+    0.012,
+  );
+  addTankPart(
+    turretRoot,
+    new THREE.BoxGeometry(0.72, 0.11, 0.36),
+    COL_GUNMETAL,
+    [shroudOffsetX - 1.02, shroudOffsetY - 0.14, shroudOffsetZ],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.014,
+  );
+  addTankPart(
+    turretRoot,
+    new THREE.BoxGeometry(0.16, 0.28, 0.32),
+    COL_GUNMETAL_DARK,
+    [shroudOffsetX - 1.35, shroudOffsetY, shroudOffsetZ],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.014,
+  );
+  addTankPart(
+    turretRoot,
+    new THREE.CylinderGeometry(0.125, 0.135, 0.10, 14),
+    COL_GOLD_COLLAR,
+    [shroudOffsetX - 1.42, shroudOffsetY, shroudOffsetZ],
+    [0, 0, -Math.PI / 2],
+    [1, 1, 1],
+    0.012,
+  );
+  addTankPart(
+    turretRoot,
+    new THREE.CylinderGeometry(0.11, 0.12, 0.08, 14),
+    COL_GUNMETAL_DARK,
+    [shroudOffsetX - 1.47, shroudOffsetY, shroudOffsetZ],
+    [0, 0, -Math.PI / 2],
+    [1, 1, 1],
+    0.012,
+  );
+  addTankPart(
+    turretRoot,
+    new THREE.BoxGeometry(0.19, 0.22, 0.368),
+    COL_GUNMETAL_DARK,
+    [shroudOffsetX - 1.22, shroudOffsetY + 0.02, shroudOffsetZ],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.012,
+  );
+  addTankPart(
+    turretRoot,
+    new THREE.BoxGeometry(0.125, 0.155, 0.382),
+    COL_CYAN_GLOW,
+    [shroudOffsetX - 1.22, shroudOffsetY + 0.02, shroudOffsetZ],
+    [0, 0, 0],
+    [1, 1, 1],
+    0,
+    undefined,
+    true,
+  );
+  addTankPart(
+    turretRoot,
+    new THREE.BoxGeometry(0.15, 0.045, 0.18),
+    COL_GUNMETAL_DARK,
+    [shroudOffsetX - 1.22, shroudOffsetY + 0.19, shroudOffsetZ - 0.03],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.01,
+  );
+  addTankPart(
+    turretRoot,
+    new THREE.BoxGeometry(0.11, 0.055, 0.14),
+    COL_CYAN_GLOW,
+    [shroudOffsetX - 1.22, shroudOffsetY + 0.195, shroudOffsetZ - 0.03],
+    [0, 0, 0],
+    [1, 1, 1],
+    0,
+    undefined,
+    true,
+  );
 
   // 2A. Lower Dark Gunmetal Turret Tub / Skirt
   addTankPart(turretRoot, new THREE.BoxGeometry(0.96, 0.24, 0.88), COL_GUNMETAL, [-0.04, 0.12, 0], [0, 0, 0], [1, 1, 1], 0.018);
@@ -2811,26 +2938,27 @@ export function populateRealLyoTankFromGlb(
     }
   }
 
-  // 2B. Open-Top Lime-Green Cockpit Side Walls & Diagonal Yellow/Black Hazard Stripe Rims
+  // 2B. Open-Top Lime-Green Cockpit Side Walls & Crisp 8:1 Diagonal Yellow/Black Hazard Stripe Rims
   for (const side of [-1, 1]) {
     addTankPart(
       turretRoot,
-      new THREE.BoxGeometry(0.88, 0.14, 0.09),
+      new THREE.BoxGeometry(0.88, 0.15, 0.095),
       COL_LIME,
-      [0.02, 0.27, side * 0.41],
+      [0.02, 0.28, side * 0.41],
       [0, 0, -0.14],
       [1, 1, 1],
       0.015,
     );
+    // Outer side hazard stripe plate with 8:1 aspect-ratio diagonal stripes (no stretched lines on top!)
     addTankPart(
       turretRoot,
-      new THREE.BoxGeometry(0.86, 0.085, 0.105),
+      new THREE.BoxGeometry(0.84, 0.082, 0.024),
       '#ffffff',
-      [0.04, 0.31, side * 0.415],
+      [0.04, 0.285, side * 0.452],
       [0, 0, -0.14],
       [1, 1, 1],
-      0.012,
-      hazardTex,
+      0.008,
+      st01Tex.cockpitHazardSideTex,
     );
     // Raised Rear Cockpit Side Pillar (slopes up toward rear cowling)
     addTankPart(
@@ -2846,7 +2974,16 @@ export function populateRealLyoTankFromGlb(
 
   // Front Cockpit Rim Cowl & Hazard Stripe Collar
   addTankPart(turretRoot, new THREE.BoxGeometry(0.20, 0.12, 0.78), COL_LIME, [0.44, 0.25, 0], [0, 0, 0], [1, 1, 1], 0.015);
-  addTankPart(turretRoot, new THREE.BoxGeometry(0.14, 0.075, 0.72), '#ffffff', [0.46, 0.26, 0], [0, 0, 0], [1, 1, 1], 0.01, hazardTex);
+  addTankPart(
+    turretRoot,
+    new THREE.BoxGeometry(0.03, 0.075, 0.72),
+    '#ffffff',
+    [0.535, 0.255, 0],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.008,
+    st01Tex.cockpitHazardSideTex,
+  );
 
   // Rear Turret Cowling Hump & Rear Top Hazard Stripe Bar (TOP, LEFT & RIGHT SIDE VIEW)
   addTankPart(turretRoot, new THREE.BoxGeometry(0.36, 0.34, 0.78), COL_GUNMETAL, [-0.46, 0.36, 0], [0, 0, 0], [1, 1, 1], 0.016);
@@ -2898,29 +3035,93 @@ export function populateRealLyoTankFromGlb(
     true,
   );
 
-  // 2C. Curved Translucent Cyan-Green Armored Windshield (TOP VIEW, LEFT SIDE VIEW & green-screen render)
-  const windshieldGeo = new THREE.CylinderGeometry(
-    0.34,
-    0.38,
-    0.29,
-    18,
-    1,
-    false,
-    -Math.PI * 0.45,
-    Math.PI * 0.90,
-  );
+  // 2C. Upright Curved Wrap-Around Cyan Armored Canopy Windshield (1:1 TOP VIEW, LEFT SIDE VIEW & green-screen render)
+  const buildSt01WindshieldSurfacePoint = (u: number, v: number): THREE.Vector3 => {
+    const arch = Math.cos(u * Math.PI * 0.44); // 1.0 at center (u=0), ~0.19 at sides (u=±1)
+    const cosHalf = Math.cos(u * Math.PI * 0.5);
+    const xBase = 0.20 + 0.24 * cosHalf; // 0.44 at front center, 0.20 at side rails
+    const xTop = 0.19 + 0.09 * cosHalf; // 0.28 at top center, 0.19 at side rails
+    const yBase = 0.305;
+    const yTop = 0.325 + 0.295 * arch; // 0.62 at top center, tapering to 0.38 at side rails
+    const zBase = u * 0.355;
+    const zTop = u * 0.325;
+    const bow = Math.sin(v * Math.PI) * 0.036 * arch;
+    return new THREE.Vector3(
+      (1 - v) * xBase + v * xTop + bow,
+      (1 - v) * yBase + v * yTop + bow * 0.35,
+      (1 - v) * zBase + v * zTop,
+    );
+  };
+
+  const wsUSegs = 24;
+  const wsVSegs = 10;
+  const wsPositions: number[] = [];
+  const wsUvs: number[] = [];
+  const wsIndices: number[] = [];
+  for (let iv = 0; iv <= wsVSegs; iv++) {
+    const v = iv / wsVSegs;
+    for (let iu = 0; iu <= wsUSegs; iu++) {
+      const u = -1 + (2 * iu) / wsUSegs;
+      const pt = buildSt01WindshieldSurfacePoint(u, v);
+      wsPositions.push(pt.x, pt.y, pt.z);
+      wsUvs.push(iu / wsUSegs, 1 - v);
+    }
+  }
+  for (let iv = 0; iv < wsVSegs; iv++) {
+    for (let iu = 0; iu < wsUSegs; iu++) {
+      const a = iv * (wsUSegs + 1) + iu;
+      const b = a + 1;
+      const c = a + (wsUSegs + 1);
+      const d = c + 1;
+      wsIndices.push(a, b, d, a, d, c);
+    }
+  }
+  const windshieldGeo = new THREE.BufferGeometry();
+  windshieldGeo.setAttribute('position', new THREE.Float32BufferAttribute(wsPositions, 3));
+  windshieldGeo.setAttribute('uv', new THREE.Float32BufferAttribute(wsUvs, 2));
+  windshieldGeo.setIndex(wsIndices);
+  windshieldGeo.computeVertexNormals();
+
   const windshieldMat = new THREE.MeshBasicMaterial({
-    color: 0x67e8f9,
+    map: st01Tex.windshieldGlassTex,
     transparent: true,
-    opacity: 0.62,
+    opacity: 0.78,
+    depthWrite: false,
     side: THREE.DoubleSide,
   });
   const windshieldMesh = new THREE.Mesh(windshieldGeo, windshieldMat);
-  windshieldMesh.position.set(0.18, 0.41, 0);
-  windshieldMesh.rotation.set(0, Math.PI / 2, 0.32);
-  const wsStroke = createLyoStrokeMesh(windshieldGeo, 0.012);
-  if (wsStroke) windshieldMesh.add(wsStroke);
+  windshieldMesh.name = 'St01CurvedWindshieldGlass';
+  windshieldMesh.renderOrder = 2;
   turretRoot.add(windshieldMesh);
+
+  // Dark gunmetal lower windshield mounting frame (along v = 0) & top/side canopy rim frame (along v = 1)
+  const wsBaseCurvePts: THREE.Vector3[] = [];
+  const wsTopRimPts: THREE.Vector3[] = [];
+  wsTopRimPts.push(buildSt01WindshieldSurfacePoint(-1, 0));
+  for (let iu = 0; iu <= 20; iu++) {
+    const u = -1 + (2 * iu) / 20;
+    wsBaseCurvePts.push(buildSt01WindshieldSurfacePoint(u, 0));
+    wsTopRimPts.push(buildSt01WindshieldSurfacePoint(u, 1));
+  }
+  wsTopRimPts.push(buildSt01WindshieldSurfacePoint(1, 0));
+
+  const wsBaseTubeGeo = new THREE.TubeGeometry(
+    new THREE.CatmullRomCurve3(wsBaseCurvePts),
+    20,
+    0.018,
+    8,
+    false,
+  );
+  addTankPart(turretRoot, wsBaseTubeGeo, COL_GUNMETAL_DARK, [0, 0, 0], [0, 0, 0], [1, 1, 1], 0.006);
+
+  const wsTopRimTubeGeo = new THREE.TubeGeometry(
+    new THREE.CatmullRomCurve3(wsTopRimPts),
+    24,
+    0.014,
+    8,
+    false,
+  );
+  addTankPart(turretRoot, wsTopRimTubeGeo, '#bae6fd', [0, 0, 0], [0, 0, 0], [1, 1, 1], 0.008, undefined, true);
 
   // 2D. Cockpit Interior Floor, Brown Leather Tactical Bucket Seat & Dual Control Joysticks (TOP VIEW & LEFT SIDE VIEW)
   addTankPart(turretRoot, new THREE.BoxGeometry(0.66, 0.06, 0.68), COL_GUNMETAL_DARK, [-0.04, 0.22, 0], [0, 0, 0], [1, 1, 1], 0);

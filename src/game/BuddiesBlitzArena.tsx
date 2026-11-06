@@ -8284,9 +8284,9 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
                   mountedTank.isSuper ? 1.45 : 1.22,
                   'cannon',
                 );
-                recoilOffset.x -= sDir.x * 0.18;
-                recoilOffset.z -= sDir.z * 0.18;
-                shakeTrauma = Math.min(1, shakeTrauma + 0.25);
+                recoilOffset.x -= sDir.x * 0.03;
+                recoilOffset.z -= sDir.z * 0.03;
+                shakeTrauma = Math.min(1, shakeTrauma + 0.05);
               }
             }
           } else if (ridingTramCarIdx !== null && playerUnit.alive) {
@@ -11296,9 +11296,9 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
             ? evaluateTankClimbableObstacleElevation(v.x, v.z, v.hullYaw, activeMapProps)
             : { climbY: 0, pitchRad: 0, rollRad: 0, isClimbing: false };
 
-        let tankBodyRecoilLiftY = 0;
-        let tankBodyRecoilRotX = 0;
-        let tankBodyRecoilRotZ = 0;
+        const tankBodyRecoilLiftY = 0;
+        const tankBodyRecoilRotX = 0;
+        const tankBodyRecoilRotZ = 0;
         if (v.vehicleKind === 'tank') {
           const tankScale =
             (v.turretGroup.userData.tankScale as number | undefined) ??
@@ -11314,21 +11314,12 @@ export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
               ? clamp(v.recoilTimer, 0, 0.24)
               : clamp(v.recoilTimer - (1.1 - 0.24), 0, 0.24);
           const shotRecoil = evaluateLyoTankShotRecoilPose(recoilWindowRemaining, 0.24);
-          const turretSlideDist = shotRecoil.turretSlideBack * tankScale * 0.95;
-          v.turretGroup.position.set(
-            baseTurretX - Math.cos(v.turretYaw) * turretSlideDist,
-            baseTurretY + shotRecoil.turretLiftY * tankScale * 0.85,
-            Math.sin(v.turretYaw) * turretSlideDist,
-          );
-          v.turretGroup.rotation.z = shotRecoil.turretPitchRad;
+          // Keep the tank hull and turret cockpit rock-solid when firing; ONLY the
+          // telescoping cannon barrel slides back and recovers along its barrel axis.
+          v.turretGroup.position.set(baseTurretX, baseTurretY, 0);
+          v.turretGroup.rotation.z = 0;
           v.barrelGroup.position.x =
-            baseBarrelX - shotRecoil.barrelSlideBack * tankScale * 1.45;
-          const totalFireYaw = v.hullYaw + v.turretYaw;
-          const fireDirX = Math.cos(totalFireYaw);
-          const fireDirZ = -Math.sin(totalFireYaw);
-          tankBodyRecoilLiftY = shotRecoil.bodyLiftY;
-          tankBodyRecoilRotX = -fireDirZ * shotRecoil.bodyTiltRad * 0.42;
-          tankBodyRecoilRotZ = fireDirX * shotRecoil.bodyTiltRad * 0.42;
+            baseBarrelX - shotRecoil.barrelSlideBack * tankScale * 1.55;
         }
 
         applyPlanetCurvatureToObject(
