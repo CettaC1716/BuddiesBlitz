@@ -16,7 +16,8 @@ import {
   evaluateCityTramConsistState,
   CityTramConsistState,
   stepCommanderSlidingGate,
-} from './rules';
+  KioskSideHologramModelKind,
+} from './buddiesBlitzRules';
 import {
   PLANET_CURVATURE_STRENGTH,
   PLANET_HALF_EXTENT,
@@ -1647,6 +1648,7 @@ export function createLyoInfiniteGrassSystem(
 
   let trailFadeCounter = 0;
   let trailDirty = false;
+  let activeTrailFramesRemaining = 0;
   let prevPlayerX = 0;
   let prevPlayerZ = 12.5;
 
@@ -1671,15 +1673,19 @@ export function createLyoInfiniteGrassSystem(
         trailCtx.arc(cx, cy, 4.8, 0, Math.PI * 2);
         trailCtx.fill();
         trailDirty = true;
+        activeTrailFramesRemaining = 720;
         prevPlayerX = playerX;
         prevPlayerZ = playerZ;
       }
 
       trailFadeCounter++;
-      if (trailFadeCounter % 24 === 0) {
-        trailCtx.fillStyle = 'rgba(0, 0, 0, 0.012)';
-        trailCtx.fillRect(0, 0, 512, 512);
-        trailDirty = true;
+      if (activeTrailFramesRemaining > 0) {
+        activeTrailFramesRemaining--;
+        if (trailFadeCounter % 24 === 0) {
+          trailCtx.fillStyle = 'rgba(0, 0, 0, 0.012)';
+          trailCtx.fillRect(0, 0, 512, 512);
+          trailDirty = true;
+        }
       }
 
       if (trailDirty && trailFadeCounter % 3 === 0) {
@@ -1705,6 +1711,7 @@ export function createLyoInfiniteGrassSystem(
       drawRut(leftX, leftZ);
       drawRut(rightX, rightZ);
       trailDirty = true;
+      activeTrailFramesRemaining = 720;
     },
     stampExplosionShockwave(worldX: number, worldZ: number, radiusMeters = 4.2, waveStrength = 1.0) {
       const cx = ((worldX + trailHalfSpan) / trailSpan) * 512;
@@ -1720,6 +1727,7 @@ export function createLyoInfiniteGrassSystem(
       trailCtx.fill();
       trailTex.needsUpdate = true;
       trailDirty = false;
+      activeTrailFramesRemaining = 720;
       uBlastWave.value.set(worldX, worldZ, radiusMeters * 1.35, Math.min(1.5, waveStrength));
     },
     decayBlastWave(dt: number) {
@@ -1755,6 +1763,7 @@ export function createLyoInfiniteGrassSystem(
       trailCtx.arc(cx, cy, pxRadius, 0, Math.PI * 2);
       trailCtx.fill();
       trailDirty = true;
+      activeTrailFramesRemaining = 720;
     },
     setDynamicExclusions(
       items: ReadonlyArray<{
@@ -1860,22 +1869,54 @@ function getSharedTreeClusterGeometry(planesPerCluster: number): THREE.BufferGeo
   return mergedClusterGeo;
 }
 
+let sharedFallbackFoliageMaskTex: THREE.CanvasTexture | null = null;
+export function getSharedFallbackFoliageMaskTexture(): THREE.CanvasTexture {
+  if (!sharedFallbackFoliageMaskTex) {
+    sharedFallbackFoliageMaskTex = createFallbackFoliageMaskTexture();
+  }
+  return sharedFallbackFoliageMaskTex;
+}
+
+const DEFAULT_TREE_1A_MARKERS: ReadonlyArray<{ pos: [number, number, number]; scale: number }> = [
+  { pos: [3.199194, 8.762081, 1.109548], scale: 1.380665 },
+  { pos: [1.150006, 8.153307, 3.332199], scale: 1.744493 },
+  { pos: [-1.662091, 8.742344, 2.410386], scale: 1.616032 },
+  { pos: [-0.322173, 5.554489, 2.019353], scale: 1.530025 },
+  { pos: [-2.012829, 7.901125, -0.343776], scale: 1.612328 },
+  { pos: [0.518135, 7.112765, -1.909685], scale: 1.757379 },
+  { pos: [-0.90037, 5.143407, -0.517511], scale: 1.380665 },
+  { pos: [0.990456, 10.069603, -0.715984], scale: 1.90842 },
+];
+
+const DEFAULT_TREE_1B_MARKERS: ReadonlyArray<{ pos: [number, number, number]; scale: number }> = [
+  { pos: [-1.326642, 9.998069, -0.517182], scale: 2.082448 },
+  { pos: [-1.564714, 5.638724, 0.66546], scale: 1.55381 },
+  { pos: [2.39235, 8.997023, 2.076546], scale: 2.082448 },
+  { pos: [0.842955, 8.418361, -2.369225], scale: 2.445399 },
+  { pos: [0.262933, 6.74558, 2.850314], scale: 1.7219 },
+  { pos: [3.232309, 7.056585, -0.362566], scale: 2.18204 },
+  { pos: [-0.189277, 5.601172, -1.472421], scale: 1.418981 },
+  { pos: [-3.484861, 8.525259, 0.389176], scale: 1.963265 },
+  { pos: [-0.464042, 9.066426, 2.037847], scale: 1.55381 },
+];
+
 /**
  * Exact port of Lyo's TreeLeaves (TreeLeaves + TreeLeavesMaterial):
  * - Merges 64 random spherical leaf planes per foliage cluster
  * - Rotates each plane to face camera with per-plane random spin
- * - Samples tree-foliage.ktx2 mask texture for crisp leaf cutout silhouette
+ * - Samples tree-foliage.ktx2 / createFallbackFoliageMaskTexture mask texture for crisp leaf cutout silhouette
  * - Shades with two-tone color ramp + wind sway
  */
 export function populateRealLyoTreeFromGlb(
   targetGroup: THREE.Group,
-  treeGltfScene: THREE.Group,
+  treeGltfScene: THREE.Group | null,
   isPurpleTree: boolean,
-  leafMaskTexture: THREE.Texture,
+  leafMaskTexture: THREE.Texture | null | undefined,
   windUniforms: LyoWindUniforms,
   isSoftwareGl: boolean,
   userScale = 1.0,
 ) {
+  const effectiveLeafMask = leafMaskTexture || getSharedFallbackFoliageMaskTexture();
   for (let i = targetGroup.children.length - 1; i >= 0; i--) {
     const ch = targetGroup.children[i];
     if (ch.name !== 'ContactShadowDisc') {
@@ -1886,51 +1927,85 @@ export function populateRealLyoTreeFromGlb(
     }
   }
 
-  treeGltfScene.updateMatrixWorld(true);
-
-  let refRoot: THREE.Object3D | null = null;
-  treeGltfScene.traverse((obj) => {
-    const n = (obj.name || '').toLowerCase();
-    if (!refRoot && n.endsWith('ref')) {
-      refRoot = obj;
-    }
-  });
-  const sourceRoot = (refRoot || treeGltfScene.children[0] || treeGltfScene) as THREE.Object3D;
-
   const trunkGroup = new THREE.Group();
   trunkGroup.name = 'RealGlbTreeTrunk';
-  const baseRefScale = sourceRoot.scale.x > 0.01 ? sourceRoot.scale.x : 0.4362676;
-  const refScale = baseRefScale * 1.75 * userScale;
-
-  if ((sourceRoot as THREE.Mesh).isMesh) {
-    const srcTrunk = sourceRoot as THREE.Mesh;
-    const trunkMesh = new THREE.Mesh(srcTrunk.geometry, srcTrunk.material);
-    trunkMesh.name = srcTrunk.name;
-    trunkMesh.scale.setScalar(refScale);
-    trunkMesh.frustumCulled = true;
-    trunkMesh.castShadow = true;
-    trunkMesh.receiveShadow = true;
-    upgradeMeshToLyoWorldMaterial(trunkMesh, windUniforms, '#755341');
-    const stroke = createLyoStrokeMesh(trunkMesh.geometry, 0.036);
-    if (stroke) {
-      stroke.frustumCulled = true;
-      trunkMesh.add(stroke);
-    }
-    trunkGroup.add(trunkMesh);
-  }
-
   const foliageMarkerMatrices: THREE.Matrix4[] = [];
-  sourceRoot.traverse((child) => {
-    if (child === sourceRoot) return;
-    const lower = (child.name || '').toLowerCase();
-    if (lower.startsWith('tree_foliage') || lower.includes('foliage')) {
+
+  if (treeGltfScene) {
+    treeGltfScene.updateMatrixWorld(true);
+
+    let refRoot: THREE.Object3D | null = null;
+    treeGltfScene.traverse((obj) => {
+      const n = (obj.name || '').toLowerCase();
+      if (!refRoot && n.endsWith('ref')) {
+        refRoot = obj;
+      }
+    });
+    const sourceRoot = (refRoot || treeGltfScene.children[0] || treeGltfScene) as THREE.Object3D;
+
+    const baseRefScale = sourceRoot.scale.x > 0.01 ? sourceRoot.scale.x : 0.4362676;
+    const refScale = baseRefScale * 1.75 * userScale;
+
+    if ((sourceRoot as THREE.Mesh).isMesh) {
+      const srcTrunk = sourceRoot as THREE.Mesh;
+      const trunkMesh = new THREE.Mesh(srcTrunk.geometry, srcTrunk.material);
+      trunkMesh.name = srcTrunk.name;
+      trunkMesh.scale.setScalar(refScale);
+      trunkMesh.frustumCulled = true;
+      trunkMesh.castShadow = true;
+      trunkMesh.receiveShadow = true;
+      upgradeMeshToLyoWorldMaterial(trunkMesh, windUniforms, '#755341');
+      const stroke = createLyoStrokeMesh(trunkMesh.geometry, 0.036);
+      if (stroke) {
+        stroke.frustumCulled = true;
+        trunkMesh.add(stroke);
+      }
+      trunkGroup.add(trunkMesh);
+    }
+
+    sourceRoot.traverse((child) => {
+      if (child === sourceRoot) return;
+      const lower = (child.name || '').toLowerCase();
+      if (lower.startsWith('tree_foliage') || lower.includes('foliage')) {
+        const m = new THREE.Matrix4();
+        const pos = child.position.clone().multiplyScalar(refScale);
+        const scl = child.scale.clone().multiplyScalar(refScale * 0.65);
+        m.compose(pos, child.quaternion, scl);
+        foliageMarkerMatrices.push(m);
+      }
+    });
+  } else {
+    const refScale = 0.4362676 * 1.75 * userScale;
+    const addTrunkLimb = (
+      geo: THREE.BufferGeometry,
+      pos: [number, number, number],
+      rot: [number, number, number] = [0, 0, 0],
+    ) => {
+      const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: '#755341' }));
+      m.position.set(pos[0] * userScale, pos[1] * userScale, pos[2] * userScale);
+      m.rotation.set(rot[0], rot[1], rot[2]);
+      m.scale.setScalar(userScale);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      upgradeMeshToLyoWorldMaterial(m, windUniforms, '#755341');
+      const stroke = createLyoStrokeMesh(geo, 0.032);
+      if (stroke) m.add(stroke);
+      trunkGroup.add(m);
+    };
+    addTrunkLimb(new THREE.CylinderGeometry(0.42, 0.68, 4.4, 8), [0, 2.2, 0]);
+    addTrunkLimb(new THREE.CylinderGeometry(0.24, 0.38, 2.8, 7), [0.65, 4.6, 0.35], [-0.28, 0.2, -0.36]);
+    addTrunkLimb(new THREE.CylinderGeometry(0.22, 0.36, 2.6, 7), [-0.58, 4.5, -0.32], [0.25, -0.3, 0.34]);
+
+    const fallbackMarkers = isPurpleTree ? DEFAULT_TREE_1B_MARKERS : DEFAULT_TREE_1A_MARKERS;
+    const dummyQ = new THREE.Quaternion();
+    for (const mk of fallbackMarkers) {
       const m = new THREE.Matrix4();
-      const pos = child.position.clone().multiplyScalar(refScale);
-      const scl = child.scale.clone().multiplyScalar(refScale * 0.65);
-      m.compose(pos, child.quaternion, scl);
+      const pos = new THREE.Vector3(mk.pos[0], mk.pos[1], mk.pos[2]).multiplyScalar(refScale);
+      const scl = new THREE.Vector3(mk.scale, mk.scale, mk.scale).multiplyScalar(refScale * 0.65);
+      m.compose(pos, dummyQ, scl);
       foliageMarkerMatrices.push(m);
     }
-  });
+  }
 
   const box = new THREE.Box3().setFromObject(trunkGroup);
   if (!box.isEmpty()) {
@@ -1955,7 +2030,7 @@ export function populateRealLyoTreeFromGlb(
 
     foliageMaterial = new THREE.ShaderMaterial({
       uniforms: {
-        uLeafTex: { value: leafMaskTexture },
+        uLeafTex: { value: effectiveLeafMask },
         uColorA: { value: colorA },
         uColorB: { value: colorB },
         uLeafScale: { value: 1.38 },
@@ -2037,13 +2112,13 @@ export function populateRealLyoTreeFromGlb(
       matCache.greenMat = foliageMaterial;
     }
   } else {
-    foliageMaterial.uniforms.uLeafTex.value = leafMaskTexture;
+    foliageMaterial.uniforms.uLeafTex.value = effectiveLeafMask;
   }
 
   if (!matCache.depthMat) {
     matCache.depthMat = new THREE.ShaderMaterial({
       uniforms: {
-        uLeafTex: { value: leafMaskTexture },
+        uLeafTex: { value: effectiveLeafMask },
         uLeafScale: { value: 0.78 },
         uAlphaThreshold: { value: 0.42 },
       },
@@ -2086,7 +2161,7 @@ export function populateRealLyoTreeFromGlb(
       side: THREE.DoubleSide,
     });
   } else {
-    matCache.depthMat.uniforms.uLeafTex.value = leafMaskTexture;
+    matCache.depthMat.uniforms.uLeafTex.value = effectiveLeafMask;
   }
 
   const markers =
@@ -2176,13 +2251,18 @@ export function populateRealLyoTankFromGlb(
   const glbBarrel = findByName(['Player_Barrel', 'playerbarrel']);
   const glbTrackSeg = findByName(['Player_Track', 'playertrack']) as THREE.Mesh | null;
 
-  // In player.glb:
-  // - Player_Body is centered at local z = 0, and sits at root z = -0.08413078 (symmetryZ).
-  // - Children of Player_Body (TrackCover_Left_01..03, Left_Light_1A..2A) mirror across local z = 0 (-z).
-  // - Root-level nodes (Left_Wheel_01..04, Player_Track, player-track.json) mirror across root symmetryZ (2 * symmetryZ - z).
+  // Hide old closed GLB turret & center barrel so we replace them with the 1:1 Open-Top Cockpit Turret
+  // & Right-Side Mounted Heavy Cannon from screen.png / st01_minitank.png!
+  if (glbBarrel) glbBarrel.visible = false;
+  if (glbTurret) {
+    glbTurret.visible = false;
+    glbTurret.traverse((ch) => {
+      ch.visible = false;
+    });
+  }
+
   const symmetryZ = glbBody ? glbBody.position.z : -0.08413078;
 
-  // Helper from B1Nq4Kq6.js:initMirroredGeometry (flips Z and triangle winding)
   const createMirroredGeometry = (geo: THREE.BufferGeometry) => {
     const g = geo.clone();
     g.scale(1, 1, -1);
@@ -2201,46 +2281,395 @@ export function populateRealLyoTankFromGlb(
 
   const tint = isSuper ? '#00d2ff' : undefined;
   const tankScale = isSuper ? 2.75 : 2.45;
+  const hazardTex = getWeaponHazardStripeTexture();
 
-  // Align turretGroup, barrelGroup, riderGroup, and muzzleFlash to the scaled & centered player.glb rig
-  turretGroup.position.set(-0.03 * tankScale, 0.82 * tankScale, 0);
-  barrelGroup.position.set(1.15 * tankScale, 0.21 * tankScale, 0);
-  riderGroup.position.set(-0.15 * tankScale, 0.32 * tankScale, 0);
-  riderGroup.scale.setScalar(1.15);
-  muzzleFlash.position.set(0.28 * tankScale, 0.04 * tankScale, 0);
+  // Palette matching screen.png (TOP / BOTTOM / LEFT / RIGHT VIEW) & st01_minitank.png 1:1
+  const COL_LIME = isSuper ? '#38bdf8' : '#8ec63f';
+  const COL_LIME_DARK = isSuper ? '#0284c7' : '#6ea028';
+  const COL_GUNMETAL = '#272f3b';
+  const COL_GUNMETAL_DARK = '#1b212a';
+  const COL_SLATE = '#394454';
+  const COL_SEAT_BROWN = '#5c4033';
+  const COL_SEAT_DARK = '#432d22';
+  const COL_GOLD_COLLAR = '#eab308';
+  const COL_CYAN_GLOW = '#00f5ff';
+  const COL_GAUGE_TEAL = '#2dd4bf';
 
-  // 1. Reparent Player_Turret (including Player_Engine_1A) and Player_Barrel BEFORE upgrading materials
-  // so Object3D.clone() never serializes ShaderMaterial uniforms via JSON.stringify(userData)
-  if (glbBarrel) {
-    const barrelMesh = glbBarrel.clone(false);
-    barrelMesh.position.set(0, 0, 0);
-    barrelMesh.rotation.set(0, 0, 0);
-    barrelMesh.scale.setScalar(tankScale);
-    barrelGroup.add(barrelMesh);
-    glbBarrel.visible = false;
-  }
-
-  if (glbTurret) {
-    const turretRoot = new THREE.Group();
-    turretRoot.scale.setScalar(tankScale);
-    if ((glbTurret as THREE.Mesh).isMesh) {
-      const srcTurret = glbTurret as THREE.Mesh;
-      const tMesh = new THREE.Mesh(srcTurret.geometry, srcTurret.material);
-      tMesh.name = srcTurret.name;
-      turretRoot.add(tMesh);
+  const addTankPart = (
+    parent: THREE.Object3D,
+    geo: THREE.BufferGeometry,
+    colorHex: string,
+    pos: [number, number, number],
+    rot: [number, number, number] = [0, 0, 0],
+    scale: [number, number, number] = [1, 1, 1],
+    strokeWidth = 0.018,
+    tex?: THREE.Texture,
+    unlit = false,
+  ): THREE.Mesh => {
+    const mat = unlit
+      ? new THREE.MeshBasicMaterial({
+          color: tex ? '#ffffff' : colorHex,
+          map: tex ?? null,
+        })
+      : new THREE.MeshStandardMaterial({
+          color: tex ? '#ffffff' : colorHex,
+          map: tex ?? null,
+          roughness: 0.48,
+          metalness: 0.16,
+        });
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(pos[0], pos[1], pos[2]);
+    m.rotation.set(rot[0], rot[1], rot[2]);
+    m.scale.set(scale[0], scale[1], scale[2]);
+    m.castShadow = !isSoftwareGl && !unlit;
+    m.receiveShadow = !isSoftwareGl;
+    if (!unlit) {
+      upgradeMeshToLyoWorldMaterial(m, windUniforms, tex ? undefined : colorHex, 0.0);
     }
-    glbTurret.children.forEach((ch) => {
-      const lower = (ch.name || '').toLowerCase();
-      if (!lower.includes('barrel') && (ch as THREE.Mesh).isMesh) {
-        const sub = (ch as THREE.Mesh).clone(false);
-        turretRoot.add(sub);
-      }
-    });
-    turretGroup.add(turretRoot);
-    glbTurret.visible = false;
+    if (strokeWidth > 0) {
+      const st = createLyoStrokeMesh(geo, strokeWidth);
+      if (st) m.add(st);
+    }
+    parent.add(m);
+    return m;
+  };
+
+  // Align turretGroup, barrelGroup (offset to RIGHT shoulder +Z per RIGHT SIDE VIEW & TOP VIEW),
+  // riderGroup (seated inside open cockpit on brown leather seat), and muzzleFlash:
+  turretGroup.position.set(-0.02 * tankScale, 0.80 * tankScale, 0);
+  barrelGroup.position.set(1.15 * tankScale, 0.47 * tankScale, 0.42 * tankScale);
+  riderGroup.position.set(-0.10 * tankScale, 0.24 * tankScale, -0.02 * tankScale);
+  riderGroup.scale.setScalar(1.08);
+  muzzleFlash.position.set(0.38 * tankScale, 0, 0);
+
+  // ==========================================================================
+  // 1. RIGHT-SIDE MOUNTED HEAVY CANNON POD (barrelGroup — TOP VIEW & RIGHT SIDE VIEW)
+  //     Note: barrelGroup is at [1.15 * tankScale, 0.47 * tankScale, +0.42 * tankScale]
+  //     so local x = -1.15 is aligned with turret center X = 0.
+  // ==========================================================================
+  const cannonRoot = new THREE.Group();
+  cannonRoot.scale.setScalar(tankScale);
+  barrelGroup.add(cannonRoot);
+
+  // 1A. Sloped Lime-Green Armored Rear Breech Housing (x = -1.36 to -0.66)
+  addTankPart(cannonRoot, new THREE.BoxGeometry(0.68, 0.30, 0.34), COL_LIME, [-1.00, 0.02, 0], [0, 0, -0.04], [1, 1, 1], 0.016);
+  addTankPart(cannonRoot, new THREE.BoxGeometry(0.58, 0.07, 0.30), COL_LIME_DARK, [-0.98, 0.18, 0], [0, 0, -0.06], [1, 1, 1], 0.012);
+  // Dark Gunmetal Breech Base Cradle & Rear Cap
+  addTankPart(cannonRoot, new THREE.BoxGeometry(0.72, 0.11, 0.36), COL_GUNMETAL, [-1.02, -0.14, 0], [0, 0, 0], [1, 1, 1], 0.014);
+  addTankPart(cannonRoot, new THREE.BoxGeometry(0.16, 0.28, 0.32), COL_GUNMETAL_DARK, [-1.35, 0.0, 0], [0, 0, 0], [1, 1, 1], 0.014);
+
+  // Glowing Cyan Rectangular Energy Core Window on Breech (visible in TOP VIEW, RIGHT SIDE VIEW & st01_minitank.png)
+  addTankPart(cannonRoot, new THREE.BoxGeometry(0.18, 0.22, 0.365), COL_GUNMETAL_DARK, [-1.22, 0.02, 0], [0, 0, 0], [1, 1, 1], 0.012);
+  addTankPart(cannonRoot, new THREE.BoxGeometry(0.12, 0.15, 0.376), COL_CYAN_GLOW, [-1.22, 0.02, 0], [0, 0, 0], [1, 1, 1], 0, undefined, true);
+  // Top Cyan Core Window Bezel (visible in TOP VIEW)
+  addTankPart(cannonRoot, new THREE.BoxGeometry(0.12, 0.04, 0.16), COL_CYAN_GLOW, [-1.22, 0.195, -0.04], [0, 0, 0], [1, 1, 1], 0, undefined, true);
+
+  // 1B. Stepped Dark Gunmetal Heavy Cannon Barrel (extending forward along +X)
+  // Rear thick barrel collar (x = -0.66 to -0.38)
+  addTankPart(
+    cannonRoot,
+    new THREE.CylinderGeometry(0.145, 0.16, 0.30, 16),
+    COL_GUNMETAL_DARK,
+    [-0.52, 0, 0],
+    [0, 0, -Math.PI / 2],
+    [1, 1, 1],
+    0.016,
+  );
+  // Mid heavy barrel tube (x = -0.38 to +0.02)
+  addTankPart(
+    cannonRoot,
+    new THREE.CylinderGeometry(0.122, 0.132, 0.42, 16),
+    COL_GUNMETAL,
+    [-0.18, 0, 0],
+    [0, 0, -Math.PI / 2],
+    [1, 1, 1],
+    0.016,
+  );
+  // 1C. Octagonal Gold-Amber Muzzle Collar Band (x = +0.02 to +0.16 — iconic in TOP & RIGHT SIDE VIEW)
+  addTankPart(
+    cannonRoot,
+    new THREE.CylinderGeometry(0.162, 0.162, 0.15, 8),
+    COL_GOLD_COLLAR,
+    [0.09, 0, 0],
+    [Math.PI / 8, 0, -Math.PI / 2],
+    [1, 1, 1],
+    0.016,
+  );
+  // Recessed dark gunmetal rectangular pockets on the Gold Collar Band
+  addTankPart(
+    cannonRoot,
+    new THREE.CylinderGeometry(0.166, 0.166, 0.085, 8),
+    COL_GUNMETAL_DARK,
+    [0.09, 0, 0],
+    [Math.PI / 8, 0, -Math.PI / 2],
+    [1, 0.96, 0.96],
+    0,
+  );
+  // 1D. Front Heavy Cylindrical Muzzle Tip & Inner Dark Bore Cavity (x = +0.16 to +0.36)
+  addTankPart(
+    cannonRoot,
+    new THREE.CylinderGeometry(0.132, 0.136, 0.22, 16),
+    COL_GUNMETAL,
+    [0.26, 0, 0],
+    [0, 0, -Math.PI / 2],
+    [1, 1, 1],
+    0.016,
+  );
+  addTankPart(
+    cannonRoot,
+    new THREE.CylinderGeometry(0.092, 0.092, 0.04, 14),
+    '#0b0e14',
+    [0.36, 0, 0],
+    [0, 0, -Math.PI / 2],
+    [1, 1, 1],
+    0,
+    undefined,
+    true,
+  );
+
+  // ==========================================================================
+  // 2. OPEN-TOP ARMORED COCKPIT TURRET (turretGroup — 1:1 screen.png)
+  //    Includes Lower Gunmetal Skirt, Diagonal Yellow/Black Hazard Rim,
+  //    Curved Cyan Windshield, Brown Leather Bucket Seat, Twin Joysticks,
+  //    Left Circular Cyan Gauge & Curved Black Ribbed Conduit Hoses!
+  // ==========================================================================
+  const turretRoot = new THREE.Group();
+  turretRoot.scale.setScalar(tankScale);
+  turretGroup.add(turretRoot);
+
+  // 2A. Lower Dark Gunmetal Turret Tub / Skirt
+  addTankPart(turretRoot, new THREE.BoxGeometry(0.96, 0.24, 0.88), COL_GUNMETAL, [-0.04, 0.12, 0], [0, 0, 0], [1, 1, 1], 0.018);
+  // Sloped Front Lower Turret Nose + Glowing Circular Cyan Sensor Spotlight (st01_minitank.png & TOP VIEW)
+  addTankPart(turretRoot, new THREE.BoxGeometry(0.24, 0.22, 0.76), COL_GUNMETAL_DARK, [0.46, 0.14, 0], [0, 0, 0.18], [1, 1, 1], 0.016);
+  addTankPart(turretRoot, new THREE.BoxGeometry(0.12, 0.16, 0.22), COL_LIME, [0.56, 0.16, 0], [0, 0, 0], [1, 1, 1], 0.014);
+  addTankPart(
+    turretRoot,
+    new THREE.CylinderGeometry(0.065, 0.065, 0.06, 14),
+    COL_CYAN_GLOW,
+    [0.61, 0.16, 0],
+    [0, 0, -Math.PI / 2],
+    [1, 1, 1],
+    0.01,
+    undefined,
+    true,
+  );
+
+  // Left & Right Lower Skirt Armor Panels + 3 Glowing Cyan Vertical Telemetry Slits
+  for (const side of [-1, 1]) {
+    addTankPart(
+      turretRoot,
+      new THREE.BoxGeometry(0.78, 0.18, 0.06),
+      COL_SLATE,
+      [-0.02, 0.13, side * 0.44],
+      [0, 0, 0],
+      [1, 1, 1],
+      0.012,
+    );
+    for (const sx of [-0.28, -0.22, -0.16]) {
+      addTankPart(
+        turretRoot,
+        new THREE.BoxGeometry(0.022, 0.11, 0.075),
+        COL_CYAN_GLOW,
+        [sx, 0.14, side * 0.44],
+        [0, 0, 0.18],
+        [1, 1, 1],
+        0,
+        undefined,
+        true,
+      );
+    }
   }
 
-  // 2. Mirror Left_Wheel_01..04 (in root space across symmetryZ) and TrackCover_Left_01..03 + Left_Light (in Player_Body local space across 0)
+  // 2B. Open-Top Lime-Green Cockpit Side Walls & Diagonal Yellow/Black Hazard Stripe Rims
+  // Left & Right Sloped Cockpit Cheek Walls
+  for (const side of [-1, 1]) {
+    // Lime-green lower cheek rail
+    addTankPart(
+      turretRoot,
+      new THREE.BoxGeometry(0.88, 0.14, 0.09),
+      COL_LIME,
+      [0.02, 0.27, side * 0.41],
+      [0, 0, -0.14],
+      [1, 1, 1],
+      0.015,
+    );
+    // 45° Diagonal Yellow/Black Hazard Stripe Bar along Cockpit Side Rim (LEFT, RIGHT & TOP VIEW)
+    addTankPart(
+      turretRoot,
+      new THREE.BoxGeometry(0.86, 0.085, 0.105),
+      '#ffffff',
+      [0.04, 0.31, side * 0.415],
+      [0, 0, -0.14],
+      [1, 1, 1],
+      0.012,
+      hazardTex,
+    );
+    // Raised Rear Cockpit Side Pillar (slopes up toward rear cowling)
+    addTankPart(
+      turretRoot,
+      new THREE.BoxGeometry(0.36, 0.28, 0.10),
+      COL_LIME,
+      [-0.36, 0.42, side * 0.38],
+      [0, 0, 0.24],
+      [1, 1, 1],
+      0.015,
+    );
+  }
+
+  // Front Cockpit Rim Cowl & Hazard Stripe Collar
+  addTankPart(turretRoot, new THREE.BoxGeometry(0.20, 0.12, 0.78), COL_LIME, [0.44, 0.25, 0], [0, 0, 0], [1, 1, 1], 0.015);
+  addTankPart(turretRoot, new THREE.BoxGeometry(0.14, 0.075, 0.72), '#ffffff', [0.46, 0.26, 0], [0, 0, 0], [1, 1, 1], 0.01, hazardTex);
+
+  // Rear Turret Cowling Hump & Rear Top Hazard Stripe Bar (TOP, LEFT & RIGHT SIDE VIEW)
+  addTankPart(turretRoot, new THREE.BoxGeometry(0.34, 0.34, 0.78), COL_GUNMETAL, [-0.46, 0.36, 0], [0, 0, 0], [1, 1, 1], 0.016);
+  addTankPart(turretRoot, new THREE.BoxGeometry(0.28, 0.14, 0.80), COL_LIME, [-0.42, 0.54, 0], [0, 0, 0.12], [1, 1, 1], 0.016);
+  addTankPart(turretRoot, new THREE.BoxGeometry(0.14, 0.06, 0.68), '#ffffff', [-0.32, 0.58, 0], [0, 0, 0], [1, 1, 1], 0.01, hazardTex);
+
+  // Circular Glowing Cyan Pressure Gauge on Rear-Left Turret Wall (LEFT SIDE VIEW & st01_minitank.png)
+  addTankPart(
+    turretRoot,
+    new THREE.CylinderGeometry(0.085, 0.085, 0.05, 16),
+    COL_GUNMETAL_DARK,
+    [-0.38, 0.34, -0.41],
+    [Math.PI / 2, 0, 0],
+    [1, 1, 1],
+    0.012,
+  );
+  addTankPart(
+    turretRoot,
+    new THREE.CylinderGeometry(0.062, 0.062, 0.06, 14),
+    COL_GAUGE_TEAL,
+    [-0.38, 0.34, -0.415],
+    [Math.PI / 2, 0, 0],
+    [1, 1, 1],
+    0,
+    undefined,
+    true,
+  );
+  // Small glowing cyan pill indicator above gauge (LEFT SIDE VIEW)
+  addTankPart(
+    turretRoot,
+    new THREE.BoxGeometry(0.06, 0.028, 0.03),
+    COL_CYAN_GLOW,
+    [-0.44, 0.46, -0.41],
+    [0, 0, 0],
+    [1, 1, 1],
+    0,
+    undefined,
+    true,
+  );
+
+  // 2C. Curved Translucent Cyan-Green Armored Windshield (TOP VIEW, LEFT SIDE VIEW & st01_minitank.png)
+  const windshieldGeo = new THREE.CylinderGeometry(
+    0.34,
+    0.38,
+    0.28,
+    18,
+    1,
+    false,
+    -Math.PI * 0.45,
+    Math.PI * 0.90,
+  );
+  const windshieldMat = new THREE.MeshBasicMaterial({
+    color: 0x67e8f9,
+    transparent: true,
+    opacity: 0.58,
+    side: THREE.DoubleSide,
+  });
+  const windshieldMesh = new THREE.Mesh(windshieldGeo, windshieldMat);
+  windshieldMesh.position.set(0.18, 0.41, 0);
+  windshieldMesh.rotation.set(0, Math.PI / 2, 0.32);
+  const wsStroke = createLyoStrokeMesh(windshieldGeo, 0.012);
+  if (wsStroke) windshieldMesh.add(wsStroke);
+  turretRoot.add(windshieldMesh);
+
+  // 2D. Cockpit Interior Floor, Brown Leather Tactical Bucket Seat & Dual Control Joysticks (TOP VIEW & LEFT SIDE VIEW)
+  // Dark Cockpit Floor Pan
+  addTankPart(turretRoot, new THREE.BoxGeometry(0.66, 0.06, 0.68), COL_GUNMETAL_DARK, [-0.04, 0.22, 0], [0, 0, 0], [1, 1, 1], 0);
+
+  // Brown Leather Bucket Seat Cushion & Side Bolsters
+  addTankPart(turretRoot, new THREE.BoxGeometry(0.32, 0.08, 0.36), COL_SEAT_BROWN, [-0.10, 0.27, -0.02], [0, 0, 0], [1, 1, 1], 0.012);
+  for (const bSide of [-1, 1]) {
+    addTankPart(
+      turretRoot,
+      new THREE.BoxGeometry(0.30, 0.10, 0.07),
+      COL_SEAT_DARK,
+      [-0.10, 0.29, -0.02 + bSide * 0.18],
+      [0, 0, 0],
+      [1, 1, 1],
+      0.01,
+    );
+  }
+  // Angled Brown Leather Backrest with 3 Horizontal Padded Ribs & Headrest
+  const seatBackGroup = new THREE.Group();
+  seatBackGroup.position.set(-0.24, 0.32, -0.02);
+  seatBackGroup.rotation.z = 0.22;
+  turretRoot.add(seatBackGroup);
+  addTankPart(seatBackGroup, new THREE.BoxGeometry(0.09, 0.34, 0.34), COL_SEAT_DARK, [0, 0.14, 0], [0, 0, 0], [1, 1, 1], 0.014);
+  for (const ry of [0.05, 0.14, 0.23]) {
+    addTankPart(seatBackGroup, new THREE.BoxGeometry(0.105, 0.07, 0.28), COL_SEAT_BROWN, [0.01, ry, 0], [0, 0, 0], [1, 1, 1], 0.008);
+  }
+  // Contoured Headrest
+  addTankPart(seatBackGroup, new THREE.BoxGeometry(0.095, 0.11, 0.24), COL_SEAT_BROWN, [0.01, 0.35, 0], [0, 0, 0], [1, 1, 1], 0.012);
+
+  // Twin Pilot Control Joysticks & Front Console (TOP VIEW & LEFT SIDE VIEW)
+  for (const jSide of [-1, 1]) {
+    const jZ = -0.02 + jSide * 0.20;
+    addTankPart(turretRoot, new THREE.BoxGeometry(0.12, 0.07, 0.09), COL_GUNMETAL, [0.14, 0.26, jZ], [0, 0, 0], [1, 1, 1], 0.01);
+    addTankPart(
+      turretRoot,
+      new THREE.CylinderGeometry(0.022, 0.026, 0.15, 10),
+      COL_GUNMETAL_DARK,
+      [0.15, 0.35, jZ],
+      [0, 0, -0.18],
+      [1, 1, 1],
+      0.01,
+    );
+    addTankPart(turretRoot, new THREE.SphereGeometry(0.038, 10, 10), COL_GUNMETAL_DARK, [0.17, 0.43, jZ], [0, 0, 0], [1, 1, 1], 0.01);
+  }
+
+  // 2E. Curved Ribbed Black Power Conduit Hoses (Looping around Left & Rear Turret into Right Cannon Breech)
+  const hoseCurveMain = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.22, 0.18, -0.44),
+    new THREE.Vector3(-0.56, 0.28, -0.46),
+    new THREE.Vector3(-0.68, 0.48, -0.26),
+    new THREE.Vector3(-0.64, 0.56, 0.08),
+    new THREE.Vector3(-0.42, 0.52, 0.34),
+  ]);
+  const hoseGeoMain = new THREE.TubeGeometry(hoseCurveMain, 20, 0.055, 10, false);
+  addTankPart(turretRoot, hoseGeoMain, COL_GUNMETAL_DARK, [0, 0, 0], [0, 0, 0], [1, 1, 1], 0.014);
+
+  // Ribbed rings along the main conduit hose for authentic corrugated look
+  const ribDummy = new THREE.Object3D();
+  for (let rIdx = 1; rIdx < 16; rIdx++) {
+    const u = rIdx / 16;
+    const pt = hoseCurveMain.getPointAt(u);
+    const tan = hoseCurveMain.getTangentAt(u);
+    ribDummy.position.copy(pt);
+    ribDummy.lookAt(pt.clone().add(tan));
+    addTankPart(
+      turretRoot,
+      new THREE.TorusGeometry(0.058, 0.012, 6, 12),
+      '#141820',
+      [pt.x, pt.y, pt.z],
+      [ribDummy.rotation.x, ribDummy.rotation.y, ribDummy.rotation.z],
+      [1, 1, 1],
+      0,
+    );
+  }
+
+  // Secondary Upper Rear Ribbed Conduit Hose (TOP VIEW & st01_minitank.png)
+  const hoseCurveUpper = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.42, 0.48, -0.14),
+    new THREE.Vector3(-0.54, 0.62, 0.04),
+    new THREE.Vector3(-0.34, 0.58, 0.32),
+  ]);
+  const hoseGeoUpper = new THREE.TubeGeometry(hoseCurveUpper, 12, 0.044, 8, false);
+  addTankPart(turretRoot, hoseGeoUpper, COL_GUNMETAL_DARK, [0, 0, 0], [0, 0, 0], [1, 1, 1], 0.012);
+
+  // ==========================================================================
+  // 3. MIRROR WHEELS, TRACK COVERS & LIGHTS FROM player.glb + ADD LIME HUBS
+  // ==========================================================================
   const leftWheels = findPrefixList('Left_Wheel');
   const rightWheels: THREE.Mesh[] = [];
   leftWheels.forEach((wheel, idx) => {
@@ -2254,6 +2683,28 @@ export function populateRealLyoTankFromGlb(
     rightWheel.scale.copy(wheel.scale);
     (wheel.parent || clonedRoot).add(rightWheel);
     rightWheels.push(rightWheel);
+
+    // Add Lime-Green Outer Sprocket Wheel Hubcaps on Front & Rear Wheels (idx 0 & 3 — LEFT & RIGHT SIDE VIEW)
+    if (idx === 0 || idx === leftWheels.length - 1) {
+      addTankPart(
+        wheel,
+        new THREE.CylinderGeometry(0.078, 0.078, 0.04, 14),
+        COL_LIME,
+        [0, 0, -0.032],
+        [Math.PI / 2, 0, 0],
+        [1, 1, 1],
+        0.01,
+      );
+      addTankPart(
+        rightWheel,
+        new THREE.CylinderGeometry(0.078, 0.078, 0.04, 14),
+        COL_LIME,
+        [0, 0, 0.032],
+        [Math.PI / 2, 0, 0],
+        [1, 1, 1],
+        0.01,
+      );
+    }
   });
 
   const leftCovers = findPrefixList('TrackCover_Left');
@@ -2263,7 +2714,6 @@ export function populateRealLyoTankFromGlb(
     const rightCover = new THREE.Mesh(mirroredGeo, cover.material);
     rightCover.name = `TrackCover_Right_0${idx + 1}`;
     rightCover.position.copy(cover.position);
-    // Inside Player_Body local space, symmetry plane is z = 0
     rightCover.position.z = cover.parent === glbBody ? -cover.position.z : 2 * symmetryZ - cover.position.z;
     rightCover.quaternion.copy(cover.quaternion);
     rightCover.scale.copy(cover.scale);
@@ -2283,9 +2733,155 @@ export function populateRealLyoTankFromGlb(
     (light.parent || clonedRoot).add(rightLight);
   });
 
-  // 3. Build Player_Track Tire Belts along player-track.json CatmullRomCurve3 (18 segments per side)
-  // Centered squarely on Left_Wheel (worldCenterZ = -0.658) & Right_Wheel (2 * symmetryZ - (-0.658) = +0.490)
-  // and tucked symmetrically under the Left & Right TrackCovers!
+  // ==========================================================================
+  // 4. HULL DETAILS (TOP VIEW, BOTTOM VIEW, LEFT/RIGHT SIDE VIEW & st01_minitank.png)
+  // ==========================================================================
+  const hullDetailsGroup = new THREE.Group();
+  hullDetailsGroup.position.set(0, 0, symmetryZ);
+  clonedRoot.add(hullDetailsGroup);
+
+  // 4A. Left & Right Track Side Bogie Armor Plates (Lime-Green Center Plate in Dark Gunmetal Frame — LEFT & RIGHT SIDE VIEW)
+  for (const side of [-1, 1]) {
+    const bogieZ = side * 0.705;
+    // Dark gunmetal outer bogie frame connecting front & rear sprockets
+    addTankPart(
+      hullDetailsGroup,
+      new THREE.BoxGeometry(0.92, 0.24, 0.05),
+      COL_GUNMETAL,
+      [-0.03, 0.30, bogieZ],
+      [0, 0, 0],
+      [1, 1, 1],
+      0.014,
+    );
+    // Bright Lime-Green Center Stadium Plate
+    addTankPart(
+      hullDetailsGroup,
+      new THREE.BoxGeometry(0.56, 0.16, 0.065),
+      COL_LIME,
+      [-0.03, 0.30, bogieZ + side * 0.006],
+      [0, 0, 0],
+      [1, 1, 1],
+      0.012,
+    );
+  }
+
+  // 4B. Front Center Hexagonal Nose Grille with 3 Glowing Warm-Orange Louvre Bars (st01_minitank.png & TOP VIEW)
+  addTankPart(
+    hullDetailsGroup,
+    new THREE.BoxGeometry(0.14, 0.32, 0.42),
+    COL_GUNMETAL_DARK,
+    [0.58, 0.46, 0],
+    [0, 0, -0.18],
+    [1, 1, 1],
+    0.014,
+  );
+  for (const ly of [0.53, 0.46, 0.39]) {
+    addTankPart(
+      hullDetailsGroup,
+      new THREE.BoxGeometry(0.06, 0.036, 0.28),
+      '#fbbf24',
+      [0.64, ly, 0],
+      [0, 0, -0.18],
+      [1, 1, 1],
+      0,
+      undefined,
+      true,
+    );
+  }
+
+  // 4C. Front Left & Right Rectangular Headlights in Gunmetal Bezels (TOP VIEW & st01_minitank.png)
+  for (const side of [-1, 1]) {
+    addTankPart(
+      hullDetailsGroup,
+      new THREE.BoxGeometry(0.10, 0.09, 0.16),
+      COL_GUNMETAL_DARK,
+      [0.54, 0.64, side * 0.50],
+      [0, 0, -0.12],
+      [1, 1, 1],
+      0.01,
+    );
+    addTankPart(
+      hullDetailsGroup,
+      new THREE.BoxGeometry(0.04, 0.055, 0.12),
+      '#fef08a',
+      [0.58, 0.64, side * 0.50],
+      [0, 0, -0.12],
+      [1, 1, 1],
+      0,
+      undefined,
+      true,
+    );
+  }
+
+  // 4D. Left Fender Top Stowage Box & Front-Left Canister / Cyan Sensor Pod (TOP VIEW & st01_minitank.png)
+  // Dark gunmetal stowage box with straps on mid-left fender (z = -0.50)
+  addTankPart(
+    hullDetailsGroup,
+    new THREE.BoxGeometry(0.38, 0.11, 0.20),
+    COL_GUNMETAL,
+    [-0.12, 0.76, -0.50],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.012,
+  );
+  // Front-left glowing cyan sensor module & twin canisters (TOP VIEW & st01_minitank.png)
+  addTankPart(
+    hullDetailsGroup,
+    new THREE.BoxGeometry(0.22, 0.08, 0.16),
+    COL_GUNMETAL_DARK,
+    [0.24, 0.75, -0.48],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.01,
+  );
+  addTankPart(
+    hullDetailsGroup,
+    new THREE.CylinderGeometry(0.045, 0.045, 0.14, 12),
+    COL_CYAN_GLOW,
+    [0.26, 0.77, -0.48],
+    [0, 0, Math.PI / 2],
+    [1, 1, 1],
+    0,
+    undefined,
+    true,
+  );
+
+  // 4E. Rear Hull Armored Engine Block (LEFT/RIGHT/TOP VIEW)
+  addTankPart(
+    hullDetailsGroup,
+    new THREE.BoxGeometry(0.18, 0.28, 0.54),
+    COL_GUNMETAL_DARK,
+    [-0.66, 0.54, 0],
+    [0, 0, 0.12],
+    [1, 1, 1],
+    0.014,
+  );
+
+  // 4F. Bottom Hull Armored Belly Plate with 4 Longitudinal Ribs & Louvered Vents (BOTTOM VIEW / TAMPAK BAWAH)
+  addTankPart(
+    hullDetailsGroup,
+    new THREE.BoxGeometry(1.12, 0.06, 0.88),
+    COL_GUNMETAL_DARK,
+    [-0.02, 0.18, 0],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.012,
+  );
+  for (const bx of [-0.36, -0.16, 0.04, 0.24]) {
+    addTankPart(
+      hullDetailsGroup,
+      new THREE.BoxGeometry(0.14, 0.03, 0.68),
+      COL_SLATE,
+      [bx, 0.15, 0],
+      [0, 0, 0],
+      [1, 1, 1],
+      0.008,
+    );
+  }
+
+  // ==========================================================================
+  // 5. BUILD 18-SEGMENT INSTANCED CATERPILLAR TRACK BELTS ALONG player-track.json
+  // ==========================================================================
   let leftTrackInstanced: THREE.InstancedMesh | null = null;
   let rightTrackInstanced: THREE.InstancedMesh | null = null;
   let leftTrackCurve: THREE.CatmullRomCurve3 | null = null;
@@ -2300,7 +2896,6 @@ export function populateRealLyoTankFromGlb(
       const prev = trackPoints[i - 1];
       return Math.hypot(pt.x - prev.x, pt.y - prev.y, pt.z - prev.z) > 1e-4;
     });
-    // Left_Wheel center Z in root space is -0.650; mirror across symmetryZ (-0.08413) gives Right_Wheel center Z = +0.4817
     const leftTrackZ = -0.650;
     const rightTrackZ = 2 * symmetryZ - leftTrackZ;
     const leftPts = uniquePts.map((p) => new THREE.Vector3(p.x, p.y, leftTrackZ));
@@ -2361,16 +2956,20 @@ export function populateRealLyoTankFromGlb(
     clonedRoot.add(trackGroup);
   }
 
-  // 4. Upgrade all GLB visual meshes in clonedRoot, turretGroup, and barrelGroup
+  // Upgrade remaining visible GLB meshes in clonedRoot
   const upgradeHierarchy = (rootObj: THREE.Object3D) => {
     rootObj.traverse((obj) => {
       if (obj === riderGroup || obj.parent === riderGroup) return;
       if ((obj as THREE.Mesh).isMesh && !(obj instanceof THREE.InstancedMesh)) {
         const m = obj as THREE.Mesh;
         if (!m.visible || m.userData.isModelStroke || m === muzzleFlash) return;
+        if (m.material instanceof THREE.ShaderMaterial || m.material instanceof THREE.MeshBasicMaterial) {
+          return;
+        }
         let p: THREE.Object3D | null = m.parent;
         while (p) {
           if (p === riderGroup) return;
+          if (!p.visible) return;
           p = p.parent;
         }
         if (isLyoColliderOrHelperNode(m)) {
@@ -2388,10 +2987,6 @@ export function populateRealLyoTankFromGlb(
     });
   };
   upgradeHierarchy(clonedRoot);
-  upgradeHierarchy(turretGroup);
-  if (barrelGroup.parent !== turretGroup) {
-    upgradeHierarchy(barrelGroup);
-  }
 
   clonedRoot.scale.setScalar(tankScale);
 
@@ -2401,7 +2996,7 @@ export function populateRealLyoTankFromGlb(
   clonedRoot.position.z = -symmetryZ * tankScale;
   bodyGroup.add(clonedRoot);
 
-  // 5. Attach live Track & Wheel Animator on bodyGroup (non-enumerable so Object3D.clone never touches it)
+  // Live Track & Wheel Animator on bodyGroup
   let leftPhase = 0;
   let rightPhase = 0;
   Object.defineProperty(bodyGroup, '__stepLyoTracks', {
@@ -2651,7 +3246,7 @@ export async function loadAllRealLyoAssets(renderer: THREE.WebGLRenderer): Promi
     loadSmokeTex(),
   ]);
 
-  return {
+  const loaded: LoadedLyoAssets = {
     playerGltf,
     bossGltf,
     fodderGltf,
@@ -2693,8 +3288,11 @@ export async function loadAllRealLyoAssets(renderer: THREE.WebGLRenderer): Promi
     playerTrackPoints,
     treeFoliageTex,
   };
+  cachedLoadedLyoAssets = loaded;
+  return loaded;
 }
 
+let cachedLoadedLyoAssets: LoadedLyoAssets | null = null;
 let loadedLyoSmokeKtx2Texture: THREE.Texture | null = null;
 let sharedChimneyPuffGeo: THREE.BufferGeometry | null = null;
 const CHIMNEY_SMOKE_PALETTE = ['#dce0e5', '#cfd4db', '#c2c8d0', '#b5bcc5', '#a6adb8'] as const;
@@ -2915,6 +3513,8 @@ export function buildRealLyoBulletTemplates(
  * emitter nodes (chimney_smoke.001 & chimney_smoke.002), applies Lyo's WorldMaterial + Stroke
  * Outline, and grounds it cleanly at (x, 0, z).
  */
+const cachedStaticGlbPropTemplates = new WeakMap<THREE.Object3D, Map<string, THREE.Group>>();
+
 export function spawnRealLyoPropFromGlb(
   parent: THREE.Object3D,
   gltf: GLTF | null,
@@ -2926,6 +3526,22 @@ export function spawnRealLyoPropFromGlb(
   isSoftwareGl: boolean,
 ): THREE.Group | null {
   if (!gltf || !gltf.scene) return null;
+  const cacheKey = `${targetHeight.toFixed(3)}_${isSoftwareGl ? 1 : 0}`;
+  let sceneCache = cachedStaticGlbPropTemplates.get(gltf.scene);
+  if (sceneCache) {
+    const cachedTemplate = sceneCache.get(cacheKey);
+    if (cachedTemplate) {
+      const clonedWrapper = cachedTemplate.clone(true);
+      clonedWrapper.position.set(x, getRawGroundElevation(x, z), z);
+      clonedWrapper.rotation.set(0, rotY, 0);
+      clonedWrapper.userData.windFanNodes = [];
+      clonedWrapper.userData.spinYNodes = [];
+      clonedWrapper.userData.craneTopNodes = [];
+      clonedWrapper.userData.animPhase = Math.abs(x * 1.37 + z * 2.13) % 6.283;
+      parent.add(clonedWrapper);
+      return clonedWrapper;
+    }
+  }
   gltf.scene.updateMatrixWorld(true);
 
   const refNodes: THREE.Object3D[] = [];
@@ -3125,12 +3741,28 @@ export function spawnRealLyoPropFromGlb(
   wrapper.frustumCulled = false;
   const isBenchProp = selectedSources.some((s) => (s.name || '').toLowerCase().includes('bench'));
   const isLamppostProp = selectedSources.some((s) => (s.name || '').toLowerCase().includes('lamppost'));
-  if (isLamppostProp) {
-    // Anchor street lamps by their bottom pole base foot (bottom 14% of height) so overhanging
-    // light arms never push the pole base onto the road!
+  const isCraneProp =
+    craneTopNodes.length > 0 ||
+    selectedSources.some((s) => (s.name || '').toLowerCase().includes('crane'));
+  const isChimneyProp =
+    rawSmokeEmitters.length > 0 ||
+    selectedSources.some((s) => (s.name || '').toLowerCase().includes('chimney'));
+  const isHydrantProp = selectedSources.some((s) => (s.name || '').toLowerCase().includes('hydrant'));
+  const turbineMastObj = propGroup.getObjectByName('WindTurbine_TowerMastConnector');
+  if (turbineMastObj) {
+    // Anchor WindTurbine directly to its vertical white tower pole so the pole sits 100% coaxially at (prop.x, prop.z)
+    const mastBox = new THREE.Box3().setFromObject(turbineMastObj);
+    if (!mastBox.isEmpty()) {
+      const mastCenter = mastBox.getCenter(new THREE.Vector3());
+      center.x = mastCenter.x;
+      center.z = mastCenter.z;
+    }
+  } else if (isLamppostProp || isCraneProp || isChimneyProp || isHydrantProp) {
+    // Anchor tall overhanging props (street lamps, cranes, chimneys, hydrants) by their bottom base foot (bottom 15% of height)
+    // so overhanging arms/booms never shift the ground pole/pedestal away from (prop.x, prop.z)!
     const baseFootBox = new THREE.Box3();
     const tmpVert = new THREE.Vector3();
-    const maxFootY = box.min.y + size.y * 0.14;
+    const maxFootY = box.min.y + size.y * 0.15;
     propGroup.traverse((obj) => {
       const m = obj as THREE.Mesh;
       if (!m.isMesh || !m.geometry || (m.name || '').includes('Stroke')) return;
@@ -3258,6 +3890,19 @@ export function spawnRealLyoPropFromGlb(
   }
   bakeStaticGroupMeshes(wrapper, { excludeObjects: propBakeExclude });
 
+  if (
+    windFanNodes.length === 0 &&
+    spinYNodes.length === 0 &&
+    craneTopNodes.length === 0 &&
+    rawSmokeEmitters.length === 0
+  ) {
+    if (!sceneCache) {
+      sceneCache = new Map<string, THREE.Group>();
+      cachedStaticGlbPropTemplates.set(gltf.scene, sceneCache);
+    }
+    sceneCache.set(cacheKey, wrapper.clone(true));
+  }
+
   wrapper.position.set(x, getRawGroundElevation(x, z), z);
   wrapper.rotation.y = rotY;
   wrapper.userData.windFanNodes = windFanNodes;
@@ -3339,13 +3984,14 @@ function splitCrateGeometryByUv(
  */
 export function populateRealLyoCrateBoxFromGlb(
   targetGroup: THREE.Group,
-  kind: 'red' | 'super' | 'legend' | 'medical',
+  kind: 'red' | 'super' | 'legend' | 'medical' | 'silver_metallic' | 'gold_metallic',
   assets: LoadedLyoAssets,
   windUniforms: LyoWindUniforms,
   isSoftwareGl: boolean,
   targetSize = 1.32,
 ): boolean {
-  // Prefer woodenBoxGltf (`WoddenBox.REF`) for structural geometry because it has all 6 faces + diagonal braces intact
+  const isMetallicSpecial = kind === 'silver_metallic' || kind === 'gold_metallic';
+  // Prefer metalBoxGltf for metallic special boxes if available, otherwise woodenBoxGltf
   const useWoodenGeo = Boolean(assets.woodenBoxGltf && assets.woodenBoxGltf.scene);
   const gltf = useWoodenGeo ? assets.woodenBoxGltf : assets.metalBoxGltf;
   if (!gltf || !gltf.scene) return false;
@@ -3364,21 +4010,29 @@ export function populateRealLyoCrateBoxFromGlb(
 
   const innerGroup = new THREE.Group();
   const coreColorHex =
-    kind === 'medical'
-      ? '#f8fafc'
-      : kind === 'legend'
-        ? '#fbbf24'
-        : kind === 'super'
-          ? '#38bdf8'
-          : '#e59242';
+    kind === 'gold_metallic'
+      ? '#fde047'
+      : kind === 'silver_metallic'
+        ? '#e2e8f0'
+        : kind === 'medical'
+          ? '#f8fafc'
+          : kind === 'legend'
+            ? '#fbbf24'
+            : kind === 'super'
+              ? '#38bdf8'
+              : '#e59242';
   const frameColorHex =
-    kind === 'medical'
-      ? '#cbd5e1'
-      : kind === 'legend'
-        ? '#92400e'
-        : kind === 'super'
-          ? '#1e3a5f'
-          : '#7c3a16';
+    kind === 'gold_metallic'
+      ? '#b45309'
+      : kind === 'silver_metallic'
+        ? '#64748b'
+        : kind === 'medical'
+          ? '#cbd5e1'
+          : kind === 'legend'
+            ? '#92400e'
+            : kind === 'super'
+              ? '#1e3a5f'
+              : '#7c3a16';
 
   source.traverse((child) => {
     if ((child as THREE.Mesh).isMesh && !isLyoColliderOrHelperNode(child)) {
@@ -3401,7 +4055,18 @@ export function populateRealLyoCrateBoxFromGlb(
 
       const coreMesh = new THREE.Mesh(
         mergedCoreGeo,
-        new THREE.MeshStandardMaterial({ color: coreColorHex, roughness: 0.72 }),
+        new THREE.MeshStandardMaterial({
+          color: coreColorHex,
+          roughness: isMetallicSpecial ? 0.14 : 0.72,
+          metalness: isMetallicSpecial ? 0.92 : 0.08,
+          emissive:
+            kind === 'gold_metallic'
+              ? '#f59e0b'
+              : kind === 'silver_metallic'
+                ? '#38bdf8'
+                : '#000000',
+          emissiveIntensity: kind === 'gold_metallic' ? 0.24 : kind === 'silver_metallic' ? 0.16 : 0,
+        }),
       );
       coreMesh.name = `${srcMesh.name}_SolidCore`;
       coreMesh.position.copy(pos);
@@ -3409,14 +4074,20 @@ export function populateRealLyoCrateBoxFromGlb(
       coreMesh.scale.copy(scl);
       coreMesh.castShadow = !isSoftwareGl;
       coreMesh.receiveShadow = !isSoftwareGl;
-      upgradeMeshToLyoWorldMaterial(coreMesh, windUniforms, coreColorHex, 0.0);
+      if (!isMetallicSpecial) {
+        upgradeMeshToLyoWorldMaterial(coreMesh, windUniforms, coreColorHex, 0.0);
+      }
       innerGroup.add(coreMesh);
 
       // 2. Reinforced 3D Outer Corner Frame & Diagonal Cross-Braces on all faces
       if (frameGeo.getAttribute('position')?.count > 0 && kind !== 'medical') {
         const frameMesh = new THREE.Mesh(
           frameGeo,
-          new THREE.MeshStandardMaterial({ color: frameColorHex, roughness: 0.65 }),
+          new THREE.MeshStandardMaterial({
+            color: frameColorHex,
+            roughness: isMetallicSpecial ? 0.22 : 0.65,
+            metalness: isMetallicSpecial ? 0.88 : 0.12,
+          }),
         );
         frameMesh.name = `${srcMesh.name}_SolidFrame`;
         frameMesh.position.copy(pos);
@@ -3424,7 +4095,9 @@ export function populateRealLyoCrateBoxFromGlb(
         frameMesh.scale.copy(scl);
         frameMesh.castShadow = !isSoftwareGl;
         frameMesh.receiveShadow = !isSoftwareGl;
-        upgradeMeshToLyoWorldMaterial(frameMesh, windUniforms, frameColorHex, 0.0);
+        if (!isMetallicSpecial) {
+          upgradeMeshToLyoWorldMaterial(frameMesh, windUniforms, frameColorHex, 0.0);
+        }
         innerGroup.add(frameMesh);
       }
 
@@ -5256,7 +5929,7 @@ export function stepLyoPlaneAnimation(
 // 8. PROCEDURAL 3D ROBLOX-STYLE AVATAR CHARACTER & 3 TACTICAL WEAPONS
 //    (Unarmed Brawler + LyoPistol, LyoAssaultRifle, LyoRocketLauncher + Stances)
 // ============================================================================
-export type LyoWeaponId = 'unarmed' | 'pistol' | 'rifle' | 'bazooka';
+export type LyoWeaponId = 'unarmed' | 'pistol' | 'rifle' | 'bazooka' | 'laser' | 'gatling';
 
 let cachedRobloxFaceTex: THREE.CanvasTexture | null = null;
 let cachedCapLogoTex: THREE.CanvasTexture | null = null;
@@ -5571,6 +6244,8 @@ export interface RobloxBuddyRig {
   pistolGroup: THREE.Group;
   rifleGroup: THREE.Group;
   bazookaGroup: THREE.Group;
+  laserGroup?: THREE.Group;
+  gatlingGroup?: THREE.Group;
   bazookaFrontFlash: THREE.Group;
   bazookaBackblastGroup: THREE.Group;
 }
@@ -6152,16 +6827,45 @@ export function buildCraftedWeaponPickupMesh(
   };
 
   const lower = (weaponNameOrId || '').toLowerCase();
+  const isGatling =
+    lower.includes('gatling') || lower.includes('titan-6') || lower.includes('titan6') || lower.includes('rotary');
+  const isLaser =
+    !isGatling &&
+    (lower.includes('laser') || lower.includes('photon') || lower.includes('lg-88') || lower.includes('lg88'));
   const isBazooka =
-    lower.includes('bazooka') ||
-    lower.includes('supazooka') ||
-    lower.includes('rocket') ||
-    lower.includes('granat');
+    !isGatling &&
+    !isLaser &&
+    (lower.includes('bazooka') ||
+      lower.includes('supazooka') ||
+      lower.includes('rocket') ||
+      lower.includes('granat'));
   const isRifle =
+    !isGatling &&
+    !isLaser &&
     !isBazooka &&
     (lower.includes('rifle') || lower.includes('machine') || lower.includes('assault'));
 
   const wrapper = new THREE.Group();
+
+  if (isGatling) {
+    const gatlingGroup = buildProceduralTitan6GatlingGun(addPart);
+    gatlingGroup.scale.setScalar(1.36);
+    gatlingGroup.position.set(0, 0.26, -0.08);
+    gatlingGroup.rotation.set(-0.24, 0, 0.58);
+    bakeStaticGroupMeshes(gatlingGroup, { minShadowCasterSpan: 0.35 });
+    wrapper.add(gatlingGroup);
+    return wrapper;
+  }
+
+  if (isLaser) {
+    const laserGroup = buildProceduralLg88LaserRifle(addPart);
+    laserGroup.scale.setScalar(1.42);
+    laserGroup.position.set(0, 0.26, -0.08);
+    laserGroup.rotation.set(-0.24, 0, 0.58);
+    bakeStaticGroupMeshes(laserGroup, { minShadowCasterSpan: 0.35 });
+    wrapper.add(laserGroup);
+    return wrapper;
+  }
 
   if (isBazooka) {
     const { bazookaGroup, bazookaFrontFlash, bazookaBackblastGroup } =
@@ -6196,6 +6900,1018 @@ export function buildCraftedWeaponPickupMesh(
 }
 
 /**
+ * 4B. TITAN-6 // HEAVY TACTICAL ROTARY GATLING GUN (1:1 Blueprint Sheet):
+ * - Olive-drab (#526038) & dark gunmetal (#2b313a) main receiver ('TITAN-6 ROTARY SYSTEM')
+ * - Front diagonal yellow/black hazard stripe collar
+ * - 6-barrel rotary cluster with 2 intermediate support clamp rings and perforated cylindrical muzzle shroud
+ * - Top carry handle / chainsaw bar grip
+ * - Under-receiver electric drive motor housing + cylindrical high-capacity drum magazine
+ * - Rear heavy buttstock & curved ribbed black power cable conduit looping from stock to motor
+ */
+let cachedTitan6ReceiverTex: THREE.CanvasTexture | null = null;
+function getTitan6ReceiverSideTexture(): THREE.CanvasTexture {
+  if (cachedTitan6ReceiverTex) return cachedTitan6ReceiverTex;
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#68704e';
+    ctx.fillRect(0, 0, 512, 256);
+    // Upper & lower bevel shading
+    ctx.fillStyle = '#78825b';
+    ctx.fillRect(0, 0, 512, 34);
+    ctx.fillStyle = '#4e553a';
+    ctx.fillRect(0, 190, 512, 66);
+    // Panel seam lines
+    ctx.strokeStyle = '#262b1f';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(10, 10, 492, 236);
+    ctx.beginPath();
+    ctx.moveTo(16, 86);
+    ctx.lineTo(496, 86);
+    ctx.moveTo(190, 86);
+    ctx.lineTo(230, 185);
+    ctx.lineTo(496, 185);
+    ctx.stroke();
+    // Stencil text: TITAN-6 ROTARY SYSTEM
+    ctx.fillStyle = '#cfd5b8';
+    ctx.font = '900 30px "Space Grotesk", "Inter", monospace';
+    ctx.fillText('TITAN-6 ROTARY SYSTEM', 34, 64);
+    // Glowing amber status bar on front-right
+    ctx.fillStyle = '#ffaa2b';
+    ctx.fillRect(418, 102, 54, 18);
+    ctx.strokeStyle = '#1f241a';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(418, 102, 54, 18);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  cachedTitan6ReceiverTex = tex;
+  return tex;
+}
+
+let cachedLg88CoatlTex: THREE.CanvasTexture | null = null;
+function getLg88CoatlSideTexture(): THREE.CanvasTexture {
+  if (cachedLg88CoatlTex) return cachedLg88CoatlTex;
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#bfa97a';
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.fillStyle = '#cdb88a';
+    ctx.fillRect(0, 0, 512, 36);
+    ctx.strokeStyle = '#2b3036';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(8, 8, 496, 240);
+    ctx.beginPath();
+    ctx.moveTo(12, 54);
+    ctx.lineTo(498, 54);
+    ctx.moveTo(12, 198);
+    ctx.lineTo(498, 198);
+    ctx.stroke();
+    // Bold COATL stencil
+    ctx.fillStyle = '#2b3036';
+    ctx.font = '900 72px "Space Grotesk", "Inter", monospace';
+    ctx.fillText('COATL', 42, 168);
+    ctx.font = '700 18px monospace';
+    ctx.fillText('CAUTION // LG-88 PHOTON', 250, 118);
+    ctx.fillText('HIGH VOLTAGE', 310, 146);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  cachedLg88CoatlTex = tex;
+  return tex;
+}
+
+let cachedLg88Stock72Tex: THREE.CanvasTexture | null = null;
+function getLg88Stock72Texture(): THREE.CanvasTexture {
+  if (cachedLg88Stock72Tex) return cachedLg88Stock72Tex;
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#bfa97a';
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.strokeStyle = '#2b3036';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(8, 8, 496, 240);
+    // Bold 72 + white square + red T-bar
+    ctx.fillStyle = '#2b3036';
+    ctx.font = '900 92px "Space Grotesk", "Inter", monospace';
+    ctx.fillText('72', 85, 145);
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(228, 102, 24, 24);
+    ctx.fillStyle = '#d13b3b';
+    ctx.fillRect(274, 104, 48, 20);
+    ctx.fillRect(318, 76, 22, 76);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  cachedLg88Stock72Tex = tex;
+  return tex;
+}
+
+let cachedNuclearFrontPlateTex: THREE.CanvasTexture | null = null;
+function getNuclearTurretFrontPlateTexture(): THREE.CanvasTexture {
+  if (cachedNuclearFrontPlateTex) return cachedNuclearFrontPlateTex;
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#aea892';
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.strokeStyle = '#2c3128';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(10, 10, 236, 236);
+    // Radiation trefoil symbol
+    const cx = 128;
+    const cy = 124;
+    ctx.fillStyle = '#2c3128';
+    for (let i = 0; i < 3; i++) {
+      const a0 = (i * Math.PI * 2) / 3 - Math.PI / 2 - Math.PI / 6;
+      const a1 = a0 + Math.PI / 3;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, 52, a0, a1);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = '#aea892';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#2c3128';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  cachedNuclearFrontPlateTex = tex;
+  return tex;
+}
+
+let cachedHg04FrontTex: THREE.CanvasTexture | null = null;
+function getHg04GrenadeCenterTexture(): THREE.CanvasTexture {
+  if (cachedHg04FrontTex) return cachedHg04FrontTex;
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#5b663e';
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.strokeStyle = '#1e2318';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(6, 6, 244, 244);
+    ctx.beginPath();
+    ctx.moveTo(0, 128);
+    ctx.lineTo(256, 128);
+    ctx.stroke();
+    ctx.fillStyle = '#cbd3aa';
+    ctx.font = '900 42px "Space Grotesk", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('HG-04', 128, 62);
+    ctx.fillText('FRAG', 128, 108);
+    ctx.font = '900 36px "Space Grotesk", monospace';
+    ctx.fillText('DELAY', 128, 178);
+    ctx.fillText('3.5s', 128, 224);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  cachedHg04FrontTex = tex;
+  return tex;
+}
+
+let cachedCb24BodyTex: THREE.CanvasTexture | null = null;
+function getCb24ClusterBodyTexture(): THREE.CanvasTexture {
+  if (cachedCb24BodyTex) return cachedCb24BodyTex;
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#5b6442';
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.strokeStyle = '#23281c';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(4, 4, 504, 248);
+    // Stencil CB-24 CLUSTER DISPENSER
+    ctx.fillStyle = '#d7dec2';
+    ctx.font = '900 58px "Space Grotesk", monospace';
+    ctx.fillText('CB-24', 36, 98);
+    ctx.font = '900 22px "Space Grotesk", monospace';
+    ctx.fillText('CLUSTER DISPENSER', 36, 134);
+    ctx.font = '700 16px monospace';
+    ctx.fillText('DANGER // EXPLOSIVE', 38, 184);
+    ctx.fillText('SUBMUNITIONS', 52, 206);
+    // 3 Yellow Chevrons
+    ctx.fillStyle = '#d4ac36';
+    for (let i = 0; i < 3; i++) {
+      const x = 310 + i * 28;
+      ctx.beginPath();
+      ctx.moveTo(x + 18, 92);
+      ctx.lineTo(x, 124);
+      ctx.lineTo(x + 18, 156);
+      ctx.lineTo(x + 28, 156);
+      ctx.lineTo(x + 10, 124);
+      ctx.lineTo(x + 28, 92);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Access hatch rectangle
+    ctx.strokeStyle = '#23281c';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(410, 74, 82, 108);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  cachedCb24BodyTex = tex;
+  return tex;
+}
+
+let cachedTm89TopTex: THREE.CanvasTexture | null = null;
+function getTm89MineTopTexture(): THREE.CanvasTexture {
+  if (cachedTm89TopTex) return cachedTm89TopTex;
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 512;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    const cx = 256;
+    const cy = 256;
+    ctx.fillStyle = '#5c6440';
+    ctx.fillRect(0, 0, 512, 512);
+    // Outer ring border
+    ctx.strokeStyle = '#23281b';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 240, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Recessed hazard ring channel (r = 162 to 188)
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 188, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 158, 0, Math.PI * 2, true);
+    ctx.clip();
+    ctx.fillStyle = '#d4a72c';
+    ctx.fillRect(0, 0, 512, 512);
+    ctx.strokeStyle = '#1f2318';
+    ctx.lineWidth = 16;
+    for (let i = -512; i < 1024; i += 36) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i + 512, 512);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Glowing orange armed ring (r = 148)
+    ctx.strokeStyle = '#ff9f1c';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 148, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Inner dark gunmetal collar (r = 118 to 140)
+    ctx.strokeStyle = '#363b38';
+    ctx.lineWidth = 22;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 129, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Top & bottom stencil markings
+    ctx.fillStyle = '#c8cfa8';
+    ctx.font = '900 38px "Space Grotesk", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('TM-89 MINE', cx, 58);
+    ctx.fillText('ARMED', cx, 476);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  cachedTm89TopTex = tex;
+  return tex;
+}
+
+export function buildProceduralTitan6GatlingGun(addPart: AddWeaponPartFn): THREE.Group {
+  const g = new THREE.Group();
+  const COL_OLIVE = '#68704e';
+  const COL_OLIVE_DARK = '#4e553a';
+  const COL_GUNMETAL = '#383f47';
+  const COL_CHARCOAL = '#24292e';
+  const COL_STEEL = '#4b5563';
+  const COL_BRONZE = '#9e7b52';
+  const hazardTex = getWeaponHazardStripeTexture();
+  const receiverTex = getTitan6ReceiverSideTexture();
+
+  // 1. Main Receiver Body ('TITAN-6 ROTARY SYSTEM', z = -0.30 to +0.16)
+  addPart(g, new THREE.BoxGeometry(0.20, 0.22, 0.46), '#ffffff', [0, 0.06, -0.07], [0, 0, 0], [1, 1, 1], 0.018, receiverTex);
+  addPart(g, new THREE.BoxGeometry(0.21, 0.08, 0.34), COL_GUNMETAL, [0, -0.04, -0.08], [0, 0, 0], [1, 1, 1], 0.012);
+
+  // Glowing Amber Status LED Bar on Receiver Front Side
+  const amberMat = new THREE.MeshBasicMaterial({ color: 0xffaa2b });
+  const amberBar = new THREE.Mesh(new THREE.BoxGeometry(0.212, 0.022, 0.055), amberMat);
+  amberBar.position.set(0, 0.09, 0.09);
+  g.add(amberBar);
+
+  // Front Diagonal Yellow/Black Hazard Stripe Collar (z = +0.14 to +0.23) + Top Picatinny Rail
+  addPart(g, new THREE.BoxGeometry(0.208, 0.23, 0.095), '#ffffff', [0, 0.055, 0.175], [0, 0, 0], [1, 1, 1], 0.014, hazardTex);
+  for (const railZ of [0.14, 0.175, 0.21]) {
+    addPart(g, new THREE.BoxGeometry(0.11, 0.024, 0.02), COL_GUNMETAL, [0, 0.18, railZ], [0, 0, 0], [1, 1, 1], 0.008);
+  }
+
+  // 2. Top Carry Handle with Scalloped Finger Grooves & Bolted Riser Blocks
+  addPart(g, new THREE.BoxGeometry(0.08, 0.042, 0.28), COL_GUNMETAL, [0, 0.26, -0.02], [0, 0, 0], [1, 1, 1], 0.014);
+  for (const grooveZ of [-0.09, -0.04, 0.01, 0.06]) {
+    addPart(g, new THREE.CylinderGeometry(0.018, 0.018, 0.084, 8), COL_CHARCOAL, [0, 0.24, grooveZ], [0, 0, Math.PI / 2], [1, 1, 1], 0);
+  }
+  addPart(g, new THREE.BoxGeometry(0.075, 0.10, 0.055), COL_GUNMETAL, [0, 0.205, 0.10], [-0.28, 0, 0], [1, 1, 1], 0.012);
+  addPart(g, new THREE.BoxGeometry(0.075, 0.10, 0.055), COL_GUNMETAL, [0, 0.205, -0.14], [0.28, 0, 0], [1, 1, 1], 0.012);
+
+  // 3. Under-Receiver Ribbed Electric Drive Motor + High-Capacity Drum Magazine & U-Bracket
+  addPart(
+    g,
+    new THREE.CylinderGeometry(0.068, 0.068, 0.20, 14),
+    COL_GUNMETAL,
+    [0, -0.14, -0.03],
+    [Math.PI / 2, 0, 0],
+    [1, 1, 1],
+    0.014,
+  );
+  // U-Shaped Drum Mounting Bracket on Receiver Side
+  addPart(g, new THREE.BoxGeometry(0.23, 0.11, 0.16), COL_STEEL, [0, -0.05, 0.08], [0, 0, 0], [1, 1, 1], 0.012);
+  // Cylindrical Drum Magazine with Raised Rib Bands
+  addPart(
+    g,
+    new THREE.CylinderGeometry(0.135, 0.135, 0.18, 18),
+    COL_GUNMETAL,
+    [0, -0.20, 0.08],
+    [0, 0, Math.PI / 2],
+    [1, 1, 1],
+    0.018,
+  );
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    addPart(
+      g,
+      new THREE.BoxGeometry(0.19, 0.025, 0.032),
+      COL_CHARCOAL,
+      [0, -0.20 + Math.sin(a) * 0.125, 0.08 + Math.cos(a) * 0.125],
+      [-a, 0, 0],
+      [1, 1, 1],
+      0.008,
+    );
+  }
+
+  // 4. Ergonomic Olive Pistol Grip, Trigger Guard & Glowing Orange Status Dots
+  addPart(g, new THREE.BoxGeometry(0.085, 0.21, 0.095), COL_OLIVE_DARK, [0, -0.16, -0.22], [-0.36, 0, 0], [1, 1, 1], 0.014);
+  addPart(g, new THREE.BoxGeometry(0.09, 0.13, 0.055), COL_CHARCOAL, [0, -0.17, -0.21], [-0.36, 0, 0], [1, 1, 1], 0.008);
+  addPart(g, new THREE.BoxGeometry(0.05, 0.022, 0.09), COL_CHARCOAL, [0, -0.12, -0.14], [0, 0, 0], [1, 1, 1], 0.008);
+
+  // 5. 6-Barrel Rotary Cluster + Rotor Base + 2 Intermediate Clamp Rings + Perforated Muzzle Shroud (z = +0.22 to +0.92)
+  addPart(
+    g,
+    new THREE.CylinderGeometry(0.096, 0.096, 0.035, 16),
+    COL_GUNMETAL,
+    [0, 0.06, 0.235],
+    [Math.PI / 2, 0, 0],
+    [1, 1, 1],
+    0.012,
+  );
+  // Central Rotor Axle
+  addPart(
+    g,
+    new THREE.CylinderGeometry(0.022, 0.022, 0.66, 8),
+    COL_CHARCOAL,
+    [0, 0.06, 0.56],
+    [Math.PI / 2, 0, 0],
+    [1, 1, 1],
+    0,
+  );
+  for (let i = 0; i < 6; i++) {
+    const ang = (i / 6) * Math.PI * 2;
+    const bx = Math.cos(ang) * 0.062;
+    const by = 0.06 + Math.sin(ang) * 0.062;
+    addPart(
+      g,
+      new THREE.CylinderGeometry(0.019, 0.019, 0.68, 10),
+      COL_STEEL,
+      [bx, by, 0.56],
+      [Math.PI / 2, 0, 0],
+      [1, 1, 1],
+      0.008,
+    );
+  }
+  for (const clampZ of [0.43, 0.64]) {
+    addPart(
+      g,
+      new THREE.CylinderGeometry(0.098, 0.098, 0.052, 16),
+      COL_GUNMETAL,
+      [0, 0.06, clampZ],
+      [Math.PI / 2, 0, 0],
+      [1, 1, 1],
+      0.014,
+    );
+    // Bottom clamp lug block
+    addPart(g, new THREE.BoxGeometry(0.06, 0.03, 0.046), COL_CHARCOAL, [0, -0.042, clampZ], [0, 0, 0], [1, 1, 1], 0.008);
+  }
+  // Front Perforated Muzzle Shroud (z = +0.76 to +0.93) with Cooling Slots
+  addPart(
+    g,
+    new THREE.CylinderGeometry(0.104, 0.104, 0.18, 16),
+    COL_GUNMETAL,
+    [0, 0.06, 0.84],
+    [Math.PI / 2, 0, 0],
+    [1, 1, 1],
+    0.016,
+  );
+  for (let i = 0; i < 6; i++) {
+    const ang = (i / 6) * Math.PI * 2;
+    const sx = Math.cos(ang) * 0.098;
+    const sy = 0.06 + Math.sin(ang) * 0.098;
+    for (const sz of [0.805, 0.875]) {
+      addPart(
+        g,
+        new THREE.BoxGeometry(0.024, 0.024, 0.042),
+        '#111418',
+        [sx, sy, sz],
+        [0, 0, ang],
+        [1, 1, 1],
+        0,
+      );
+    }
+  }
+
+  // 6. Bronze Buffer Ring + Skeletonized Dark Gunmetal Stock + Ribbed Power Conduit Hose (z = -0.30 to -0.68)
+  addPart(
+    g,
+    new THREE.CylinderGeometry(0.072, 0.072, 0.055, 14),
+    COL_BRONZE,
+    [0, 0.05, -0.32],
+    [Math.PI / 2, 0, 0],
+    [1, 1, 1],
+    0.012,
+  );
+  // Top Stock Cheek Rest & Rear Serrated Buttpad
+  addPart(g, new THREE.BoxGeometry(0.13, 0.11, 0.30), COL_GUNMETAL, [0, 0.07, -0.49], [0, 0, 0], [1, 1, 1], 0.016);
+  addPart(g, new THREE.BoxGeometry(0.11, 0.055, 0.28), COL_CHARCOAL, [0, -0.06, -0.48], [-0.34, 0, 0], [1, 1, 1], 0.014);
+  addPart(g, new THREE.BoxGeometry(0.14, 0.25, 0.055), COL_CHARCOAL, [0, 0.0, -0.65], [0, 0, 0], [1, 1, 1], 0.014);
+
+  // Curved Ribbed Black Power Cable Conduit Looping from Stock Strut to Electric Drive Motor
+  const cableCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, -0.07, -0.40),
+    new THREE.Vector3(0, -0.24, -0.34),
+    new THREE.Vector3(0, -0.31, -0.22),
+    new THREE.Vector3(0, -0.20, -0.11),
+  ]);
+  addPart(
+    g,
+    new THREE.TubeGeometry(cableCurve, 14, 0.025, 8, false),
+    '#1c2026',
+    [0, 0, 0],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.008,
+  );
+  // Mid-cable metal clamp collar
+  addPart(
+    g,
+    new THREE.CylinderGeometry(0.033, 0.033, 0.028, 10),
+    COL_STEEL,
+    [0, -0.24, -0.34],
+    [0.45, 0, 0],
+    [1, 1, 1],
+    0.008,
+  );
+
+  return g;
+}
+
+/**
+ * 4. LG-88 PHOTON LANCE // TACTICAL LASER RIFLE (1:1 Blueprint & Green-Screen Reference):
+ */
+export function buildProceduralLg88LaserRifle(addPart: AddWeaponPartFn): THREE.Group {
+  const g = new THREE.Group();
+  const COL_TAN = '#bfa97a';
+  const COL_TAN_LIGHT = '#cdb88a';
+  const COL_CHARCOAL = '#2c3137';
+  const COL_GUNMETAL = '#49525a';
+  const COL_CRIMSON = '#d13b3b';
+  const coatlTex = getLg88CoatlSideTexture();
+  const stock72Tex = getLg88Stock72Texture();
+
+  // 1. Main Upper Receiver & Mid-Barrel Housing (Coyote Tan) + Top Rail Lugs
+  addPart(g, new THREE.BoxGeometry(0.15, 0.19, 0.68), COL_TAN, [0, 0.08, 0.04], [0, 0, 0], [1, 1, 1], 0.018);
+  for (const lugZ of [0.02, 0.10, 0.18, 0.26, 0.34]) {
+    addPart(g, new THREE.BoxGeometry(0.11, 0.024, 0.032), COL_TAN_LIGHT, [0, 0.182, lugZ], [0, 0, 0], [1, 1, 1], 0.008);
+  }
+
+  // Dark Charcoal Mid-Barrel Rail Recess
+  addPart(g, new THREE.BoxGeometry(0.158, 0.105, 0.42), COL_CHARCOAL, [0, 0.08, 0.13], [0, 0, 0], [1, 1, 1], 0.012);
+
+  // Twin Glowing Cyan Laser Rails (Left & Right Sides of Mid-Barrel Recess)
+  const cyanMat = new THREE.MeshBasicMaterial({ color: 0x48ffff });
+  for (const yOff of [0.102, 0.058]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.166, 0.022, 0.35), cyanMat);
+    rail.position.set(0, yOff, 0.13);
+    g.add(rail);
+  }
+
+  // 2. Front Rectangular Optical Emitter Shroud ('COATL' Stencil Texture) + Stepped Slate Lower Rail
+  addPart(g, new THREE.BoxGeometry(0.156, 0.20, 0.36), '#ffffff', [0, 0.075, 0.54], [0, 0, 0], [1, 1, 1], 0.018, coatlTex);
+  addPart(g, new THREE.BoxGeometry(0.16, 0.058, 0.37), COL_GUNMETAL, [0, -0.022, 0.55], [0, 0, 0], [1, 1, 1], 0.014);
+  // Rectangular Optical Emitter Aperture + Glowing Cyan Emitter Slit at Muzzle (+Z)
+  addPart(g, new THREE.BoxGeometry(0.10, 0.13, 0.04), '#16191d', [0, 0.08, 0.71], [0, 0, 0], [1, 1, 1], 0.01);
+  const muzzleGlow = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.095, 0.045), cyanMat);
+  muzzleGlow.position.set(0, 0.08, 0.715);
+  g.add(muzzleGlow);
+
+  // 3. Underbarrel Tactical Fusion Battery & Power Conduit + Crimson Locking Tabs
+  addPart(g, new THREE.BoxGeometry(0.12, 0.082, 0.22), COL_CHARCOAL, [0, -0.058, 0.28], [0, 0, 0], [1, 1, 1], 0.014);
+  const batteryGlow = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.028, 0.12), cyanMat);
+  batteryGlow.position.set(0, -0.055, 0.28);
+  g.add(batteryGlow);
+  // Front & Rear Crimson Locking Tabs
+  addPart(g, new THREE.BoxGeometry(0.11, 0.065, 0.075), COL_CRIMSON, [0, -0.055, 0.41], [0, 0, 0], [1, 1, 1], 0.012);
+  addPart(g, new THREE.BoxGeometry(0.08, 0.055, 0.042), COL_CRIMSON, [0, -0.105, 0.21], [0.25, 0, 0], [1, 1, 1], 0.01);
+
+  // 4. Lower Receiver Ribbed Foregrip + Circular Cyan Energy Core + 38° Angled Cylindrical Power Cell Drum
+  addPart(g, new THREE.BoxGeometry(0.14, 0.11, 0.42), COL_CHARCOAL, [0, -0.03, -0.02], [0, 0, 0], [1, 1, 1], 0.016);
+  // Circular Tan Energy Core Housing with Horizontal Cyan Slit
+  addPart(
+    g,
+    new THREE.CylinderGeometry(0.062, 0.062, 0.16, 16),
+    COL_TAN,
+    [0, -0.01, -0.09],
+    [0, 0, Math.PI / 2],
+    [1, 1, 1],
+    0.012,
+  );
+  addPart(
+    g,
+    new THREE.CylinderGeometry(0.042, 0.042, 0.166, 14),
+    COL_TAN_LIGHT,
+    [0, -0.01, -0.09],
+    [0, 0, Math.PI / 2],
+    [1, 1, 1],
+    0.008,
+  );
+  const coreSlit = new THREE.Mesh(new THREE.BoxGeometry(0.172, 0.014, 0.052), cyanMat);
+  coreSlit.position.set(0, -0.01, -0.09);
+  g.add(coreSlit);
+
+  // Angled Cylindrical Power Cell Drum (38° Forward Tilt) with Crimson Neck Collar
+  const drumPivot = new THREE.Group();
+  drumPivot.position.set(0, -0.12, -0.07);
+  drumPivot.rotation.x = -0.64;
+  g.add(drumPivot);
+  addPart(drumPivot, new THREE.BoxGeometry(0.11, 0.04, 0.12), COL_CRIMSON, [0, 0.04, 0.02], [0, 0, 0], [1, 1, 1], 0.008);
+  addPart(drumPivot, new THREE.CylinderGeometry(0.098, 0.098, 0.25, 16), COL_TAN, [0, -0.08, 0], [0, 0, 0], [1, 1, 1], 0.016);
+  addPart(drumPivot, new THREE.CylinderGeometry(0.102, 0.102, 0.13, 16), COL_CHARCOAL, [0, -0.08, 0], [0, 0, 0], [1, 1, 1], 0.012);
+
+  // 5. Upper Receiver Wavelength Cylinder + Top Targeting Optic
+  addPart(
+    g,
+    new THREE.CylinderGeometry(0.038, 0.038, 0.16, 12),
+    COL_CHARCOAL,
+    [0, 0.09, -0.13],
+    [Math.PI / 2, 0, 0],
+    [1, 1, 1],
+    0.01,
+  );
+  addPart(
+    g,
+    new THREE.CylinderGeometry(0.042, 0.042, 0.045, 12),
+    COL_CRIMSON,
+    [0, 0.09, -0.16],
+    [Math.PI / 2, 0, 0],
+    [1, 1, 1],
+    0.01,
+  );
+  addPart(g, new THREE.BoxGeometry(0.13, 0.105, 0.34), COL_TAN, [0, 0.225, -0.05], [0, 0, 0], [1, 1, 1], 0.016);
+  addPart(g, new THREE.BoxGeometry(0.136, 0.052, 0.20), COL_CHARCOAL, [0, 0.18, -0.06], [0, 0, 0], [1, 1, 1], 0.012);
+  addPart(g, new THREE.BoxGeometry(0.142, 0.036, 0.085), COL_CRIMSON, [0, 0.178, -0.15], [0, 0, 0], [1, 1, 1], 0.01);
+  // Green Coated Optic Front Lens
+  const greenLens = new THREE.Mesh(
+    new THREE.BoxGeometry(0.09, 0.065, 0.02),
+    new THREE.MeshBasicMaterial({ color: 0x2cb84b }),
+  );
+  greenLens.position.set(0, 0.225, 0.122);
+  g.add(greenLens);
+
+  // 6. Skeletonized Thumbhole Stock ('72' Stencil Texture) + Charcoal Cheek Pad + Red Rear Latch
+  addPart(g, new THREE.BoxGeometry(0.138, 0.13, 0.42), '#ffffff', [0, 0.065, -0.45], [0, 0, 0], [1, 1, 1], 0.018, stock72Tex);
+  addPart(g, new THREE.BoxGeometry(0.142, 0.045, 0.16), COL_CHARCOAL, [0, 0.01, -0.50], [0, 0, 0], [1, 1, 1], 0.01);
+  addPart(g, new THREE.BoxGeometry(0.115, 0.22, 0.095), COL_TAN, [0, -0.08, -0.25], [0.36, 0, 0], [1, 1, 1], 0.016);
+  addPart(g, new THREE.BoxGeometry(0.115, 0.07, 0.30), COL_TAN, [0, -0.14, -0.43], [-0.22, 0, 0], [1, 1, 1], 0.014);
+  addPart(g, new THREE.BoxGeometry(0.135, 0.21, 0.065), COL_TAN, [0, -0.01, -0.63], [0, 0, 0], [1, 1, 1], 0.016);
+  addPart(g, new THREE.BoxGeometry(0.142, 0.075, 0.035), COL_CRIMSON, [0, 0.065, -0.655], [0, 0, 0], [1, 1, 1], 0.01);
+
+  return g;
+}
+
+/**
+ * 5. TACTICAL NUCLEAR MISSILE // MLRS-MK5 'ATLAS' NUKE ROCKET (1:1 Blueprint Sheet):
+ * - Dark gunmetal ogive Guidance Nose Cone with pitot probes & yellow radiation trefoil
+ * - Olive-drab Tactical Nuclear Warhead Payload ('WARHEAD MOD-5') with glowing emerald-cyan core window
+ * - 4 swept-back mid-body canard fins in 45° X-configuration
+ * - Solid Rocket Motor with dual diagonal yellow/black hazard stripe bands & external cable conduit
+ * - 4 rear stabilizing tail fins in 45° X-configuration & flared metallic Thrust Vectoring Nozzle
+ */
+export function buildProceduralNuclearMissileMesh(
+  windUniforms: LyoWindUniforms,
+  isSoftwareGl: boolean,
+): THREE.Group {
+  const g = new THREE.Group();
+  const hazardTex = getWeaponHazardStripeTexture();
+  const addPart = (
+    geo: THREE.BufferGeometry,
+    colorHex: string,
+    pos: [number, number, number],
+    rot: [number, number, number] = [0, 0, 0],
+    strokeWidth = 0.02,
+    tex?: THREE.Texture,
+  ) => {
+    const m = new THREE.Mesh(
+      geo,
+      new THREE.MeshStandardMaterial({
+        color: tex ? '#ffffff' : colorHex,
+        map: tex ?? null,
+        roughness: 0.45,
+        metalness: 0.18,
+      }),
+    );
+    m.position.set(pos[0], pos[1], pos[2]);
+    m.rotation.set(rot[0], rot[1], rot[2]);
+    m.castShadow = !isSoftwareGl;
+    m.receiveShadow = !isSoftwareGl;
+    upgradeMeshToLyoWorldMaterial(m, windUniforms, colorHex, 0.0);
+    if (strokeWidth > 0) {
+      const st = createLyoStrokeMesh(geo, strokeWidth);
+      if (st) m.add(st);
+    }
+    g.add(m);
+    return m;
+  };
+
+  const COL_NOSE_DARK = '#343837';
+  const COL_OLIVE_WARHEAD = '#4e553d';
+  const COL_OLIVE_MOTOR = '#596145';
+  const COL_FIN_SILVER = '#8d9288';
+  const COL_NOZZLE = '#666b64';
+
+  // Aligned along +Z forward axis so projectile lookAt points the nose cone toward target:
+  // 1. Guidance Nose Cone (z = +0.78 to +1.28)
+  addPart(
+    new THREE.ConeGeometry(0.18, 0.52, 16),
+    COL_NOSE_DARK,
+    [0, 0, 1.04],
+    [Math.PI / 2, 0, 0],
+    0.018,
+  );
+  // Brass Collar Ring between Nose Cone & Warhead
+  addPart(
+    new THREE.CylinderGeometry(0.184, 0.184, 0.05, 16),
+    '#b89d58',
+    [0, 0, 0.76],
+    [Math.PI / 2, 0, 0],
+    0.012,
+  );
+
+  // 2. Tactical Nuclear Warhead Payload ('TACTICAL NUKE // WARHEAD MOD-5', z = +0.18 to +0.76)
+  addPart(
+    new THREE.CylinderGeometry(0.188, 0.188, 0.58, 16),
+    COL_OLIVE_WARHEAD,
+    [0, 0, 0.47],
+    [Math.PI / 2, 0, 0],
+    0.02,
+  );
+  // Glowing Emerald-Cyan Enriched Core Inspection Window
+  const coreGlow = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.194, 0.194, 0.11, 16),
+    new THREE.MeshBasicMaterial({ color: 0x38ffcc }),
+  );
+  coreGlow.rotation.x = Math.PI / 2;
+  coreGlow.position.set(0, 0, 0.25);
+  g.add(coreGlow);
+
+  // 3. 4 Mid-Body Steering Canard Fins in 45° X-Configuration (z = +0.04)
+  for (let i = 0; i < 4; i++) {
+    const angle = Math.PI / 4 + (i * Math.PI) / 2;
+    const cx = Math.cos(angle) * 0.24;
+    const cy = Math.sin(angle) * 0.24;
+    addPart(
+      new THREE.BoxGeometry(0.032, 0.22, 0.20),
+      COL_FIN_SILVER,
+      [cx, cy, 0.04],
+      [0, 0, angle - Math.PI / 2],
+      0.014,
+    );
+  }
+
+  // 4. Solid Rocket Motor Body (z = -0.78 to +0.18) + Dual Yellow/Black Hazard Stripe Bands
+  addPart(
+    new THREE.CylinderGeometry(0.182, 0.182, 0.96, 16),
+    COL_OLIVE_MOTOR,
+    [0, 0, -0.30],
+    [Math.PI / 2, 0, 0],
+    0.02,
+  );
+  for (const zBand of [-0.04, -0.64]) {
+    addPart(
+      new THREE.CylinderGeometry(0.188, 0.188, 0.11, 16),
+      '#ffffff',
+      [0, 0, zBand],
+      [Math.PI / 2, 0, 0],
+      0.012,
+      hazardTex,
+    );
+  }
+
+  // 5. 4 Rear Stabilizing Tail Fins in 45° X-Configuration (z = -0.82)
+  for (let i = 0; i < 4; i++) {
+    const angle = Math.PI / 4 + (i * Math.PI) / 2;
+    const cx = Math.cos(angle) * 0.28;
+    const cy = Math.sin(angle) * 0.28;
+    addPart(
+      new THREE.BoxGeometry(0.036, 0.30, 0.28),
+      COL_FIN_SILVER,
+      [cx, cy, -0.82],
+      [0, 0, angle - Math.PI / 2],
+      0.014,
+    );
+  }
+
+  // 6. Flared Thrust Vectoring Nozzle (z = -1.04) + Glowing Afterburner Core
+  addPart(
+    new THREE.CylinderGeometry(0.13, 0.19, 0.26, 16),
+    COL_NOZZLE,
+    [0, 0, -0.96],
+    [Math.PI / 2, 0, 0],
+    0.016,
+  );
+  const plume = new THREE.Mesh(
+    new THREE.ConeGeometry(0.15, 0.45, 12),
+    new THREE.MeshBasicMaterial({ color: 0xffaa2b }),
+  );
+  plume.rotation.x = -Math.PI / 2;
+  plume.position.set(0, 0, -1.25);
+  g.add(plume);
+
+  bakeStaticGroupMeshes(g, { minShadowCasterSpan: 0.35 });
+  return g;
+}
+
+export interface NuclearLauncherTurretRig {
+  root: THREE.Group;
+  yawGroup: THREE.Group;
+  pitchGroup: THREE.Group;
+  team: 'blue' | 'red';
+  lastFireSec: number;
+  nextPodIndex: number;
+}
+
+/**
+ * 6. TACTICAL NUCLEAR MISSILE LAUNCHER // STRATEGIC DEFENSE TURRET EMPLACEMENT (1:1 Green-Screen Reference):
+ * - Domed olive-drab base pedestal with 6 radial outrigger stabilizer legs, circular jack pads & hinged footpads
+ * - Two-tone central turret housing: off-white/cream (#dcd6c4) angled side armor cheeks + olive-drab inner core
+ *   with Radiation Trefoil front glacis plate
+ * - Upper optical sensor hood with green lens, flanked by bright yellow-gold circular side trunnion caps (#d9a726),
+ *   twin forward-angled double-barrel defense/targeting barrels, and twin pairs of curved black hydraulic hoses
+ * - Left & right horizontal olive cylindrical trunnion arms with bright yellow-gold circular end caps (#d9a726)
+ * - Dual 2x2 quad-pack rectangular olive launch canisters (8 tubes) with pyramid-embossed blast caps,
+ *   front & rear yellow-gold X-braced box frames (#d4a93c), and dual angled brown-rust truss support struts (#7c5230)
+ */
+export function buildProceduralNuclearLauncherTurret(
+  windUniforms: LyoWindUniforms,
+  isSoftwareGl: boolean,
+  team: 'blue' | 'red' = 'blue',
+): NuclearLauncherTurretRig {
+  const root = new THREE.Group();
+  root.name = `NuclearLauncher_${team}`;
+  const frontRadTex = getNuclearTurretFrontPlateTexture();
+
+  const addPart = (
+    parent: THREE.Object3D,
+    geo: THREE.BufferGeometry,
+    colorHex: string,
+    pos: [number, number, number],
+    rot: [number, number, number] = [0, 0, 0],
+    strokeWidth = 0.024,
+    tex?: THREE.Texture,
+  ) => {
+    const m = new THREE.Mesh(
+      geo,
+      new THREE.MeshStandardMaterial({
+        color: tex ? '#ffffff' : colorHex,
+        map: tex ?? null,
+        roughness: 0.5,
+        metalness: 0.16,
+      }),
+    );
+    m.position.set(pos[0], pos[1], pos[2]);
+    m.rotation.set(rot[0], rot[1], rot[2]);
+    m.castShadow = !isSoftwareGl;
+    m.receiveShadow = !isSoftwareGl;
+    upgradeMeshToLyoWorldMaterial(m, windUniforms, colorHex, 0.0);
+    if (strokeWidth > 0) {
+      const st = createLyoStrokeMesh(geo, strokeWidth);
+      if (st) m.add(st);
+    }
+    parent.add(m);
+    return m;
+  };
+
+  const COL_OLIVE = '#687052';
+  const COL_OLIVE_DARK = '#4d543c';
+  const COL_CREAM_ARMOR = '#dcd6c4';
+  const COL_GOLD_FRAME = '#d4a93c';
+  const COL_YELLOW_CAP = '#d9a726';
+  const COL_RUST_TRUSS = '#7c5230';
+  const COL_CHARCOAL = '#2c3136';
+
+  // 1. Domed Armored Base Pedestal & 6 Radial Outrigger Stabilizer Legs with Jack Pads + Footpads
+  addPart(root, new THREE.CylinderGeometry(1.38, 1.78, 0.30, 18), COL_OLIVE, [0, 0.18, 0]);
+  addPart(root, new THREE.CylinderGeometry(0.95, 1.32, 0.20, 18), COL_OLIVE_DARK, [0, 0.38, 0]);
+  for (let i = 0; i < 6; i++) {
+    const angle = (i * Math.PI * 2) / 6 + Math.PI / 6;
+    const legGrp = new THREE.Group();
+    legGrp.rotation.y = angle;
+    root.add(legGrp);
+    // Outrigger shoulder housing on pedestal rim
+    addPart(legGrp, new THREE.BoxGeometry(0.42, 0.24, 0.48), COL_OLIVE, [0, 0.26, 1.48]);
+    // Inner circular leveling jack pad
+    addPart(legGrp, new THREE.CylinderGeometry(0.24, 0.28, 0.10, 12), COL_CHARCOAL, [0, 0.06, 1.62]);
+    // Slanted outrigger beam extending outward
+    addPart(legGrp, new THREE.BoxGeometry(0.30, 0.16, 1.05), COL_OLIVE, [0, 0.18, 1.98], [0.22, 0, 0]);
+    // Outer hinged rectangular footpad
+    addPart(legGrp, new THREE.BoxGeometry(0.44, 0.09, 0.38), COL_OLIVE_DARK, [0, 0.05, 2.46]);
+  }
+
+  // 2. 360° Rotating Yaw Turret Housing
+  const yawGroup = new THREE.Group();
+  yawGroup.position.set(0, 0.46, 0);
+  root.add(yawGroup);
+
+  addPart(yawGroup, new THREE.CylinderGeometry(0.88, 0.96, 0.22, 18), COL_OLIVE_DARK, [0, 0.10, 0]);
+
+  // Central Turret Core + Two-Tone Off-White/Cream Angled Side Armor Cheeks
+  addPart(yawGroup, new THREE.BoxGeometry(1.18, 1.32, 1.32), COL_OLIVE_DARK, [0, 0.84, -0.02]);
+  for (const side of [-1, 1]) {
+    // Cream-white angled side armor cheek
+    addPart(
+      yawGroup,
+      new THREE.BoxGeometry(0.36, 1.26, 1.36),
+      COL_CREAM_ARMOR,
+      [side * 0.56, 0.85, 0.02],
+      [0, 0, side * 0.08],
+    );
+    // Upper angled cream shoulder bevel
+    addPart(
+      yawGroup,
+      new THREE.BoxGeometry(0.38, 0.42, 1.24),
+      COL_CREAM_ARMOR,
+      [side * 0.46, 1.42, -0.02],
+      [0.18, 0, side * 0.28],
+    );
+  }
+
+  // Front Radiation Trefoil Glacis Plate (+Z Front)
+  addPart(yawGroup, new THREE.BoxGeometry(0.68, 0.64, 0.10), '#ffffff', [0, 0.62, 0.66], [-0.08, 0, 0], 0.02, frontRadTex);
+
+  // Upper-Center Optical Sensor Hood + Green Optical Lens + Yellow Side Trunnion Caps + Twin Double Barrels
+  addPart(yawGroup, new THREE.BoxGeometry(0.56, 0.42, 0.62), COL_OLIVE, [0, 1.48, 0.36], [0.22, 0, 0]);
+  const greenLaserEye = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.09, 0.09, 0.06, 14),
+    new THREE.MeshBasicMaterial({ color: 0x2cb84b }),
+  );
+  greenLaserEye.rotation.x = Math.PI / 2;
+  greenLaserEye.position.set(0, 1.60, 0.66);
+  yawGroup.add(greenLaserEye);
+
+  for (const side of [-1, 1]) {
+    // Bright Yellow Circular Side Trunnion Caps on Upper Sensor Housing
+    addPart(
+      yawGroup,
+      new THREE.CylinderGeometry(0.20, 0.20, 0.12, 16),
+      COL_YELLOW_CAP,
+      [side * 0.32, 1.40, 0.34],
+      [0, 0, Math.PI / 2],
+    );
+    // Twin Forward-Angled Double-Barrel Defense/Targeting Barrels (+Z)
+    addPart(
+      yawGroup,
+      new THREE.BoxGeometry(0.18, 0.22, 0.42),
+      COL_OLIVE_DARK,
+      [side * 0.22, 1.26, 0.66],
+      [0.42, 0, 0],
+    );
+    for (const bOff of [-0.045, 0.045]) {
+      addPart(
+        yawGroup,
+        new THREE.CylinderGeometry(0.042, 0.042, 0.32, 10),
+        COL_CHARCOAL,
+        [side * 0.22 + bOff, 1.15, 0.88],
+        [Math.PI / 2 + 0.42, 0, 0],
+      );
+    }
+    // Curved Black Hydraulic Hoses Looping from Under Barrels into Lower Front Plate
+    const hoseCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(side * 0.22, 1.14, 0.64),
+      new THREE.Vector3(side * 0.28, 0.86, 0.78),
+      new THREE.Vector3(side * 0.20, 0.54, 0.68),
+    ]);
+    addPart(yawGroup, new THREE.TubeGeometry(hoseCurve, 10, 0.042, 8, false), COL_CHARCOAL, [0, 0, 0], [0, 0, 0], 0.012);
+  }
+
+  // 3. Elevating Pitch Group: Dual 2x2 Quad-Pack Nuclear Launch Pods (8 Rectangular Canisters)
+  const pitchGroup = new THREE.Group();
+  pitchGroup.position.set(0, 1.18, -0.06);
+  pitchGroup.rotation.x = -0.58; // Steep strategic launch elevation matching green-screen reference
+  yawGroup.add(pitchGroup);
+
+  for (const podSide of [-1, 1]) {
+    const podGroup = new THREE.Group();
+    podGroup.position.set(podSide * 1.36, 0, 0);
+    pitchGroup.add(podGroup);
+
+    // Heavy Horizontal Cylindrical Olive Trunnion Arm + Bright Yellow Outer End Cap
+    addPart(
+      podGroup,
+      new THREE.CylinderGeometry(0.24, 0.24, 1.24, 16),
+      COL_OLIVE,
+      [-podSide * 0.18, -0.18, -0.08],
+      [0, 0, Math.PI / 2],
+    );
+    addPart(
+      podGroup,
+      new THREE.CylinderGeometry(0.21, 0.21, 0.08, 16),
+      COL_YELLOW_CAP,
+      [podSide * 0.44, -0.18, -0.08],
+      [0, 0, Math.PI / 2],
+    );
+
+    // Dual Angled Brown-Rust Open-Truss Support Struts Underneath Pod
+    for (const col of [-0.27, 0.27]) {
+      addPart(
+        podGroup,
+        new THREE.BoxGeometry(0.14, 0.14, 1.55),
+        COL_RUST_TRUSS,
+        [col, -0.10, 0.24],
+        [0, 0, 0],
+      );
+    }
+
+    // 2x2 Quad-Pack Rectangular Olive Launch Canisters (4 per Pod = 8 Total)
+    for (const col of [-0.27, 0.27]) {
+      for (const row of [0.42, -0.02]) {
+        // Olive Rectangular Launch Canister
+        addPart(podGroup, new THREE.BoxGeometry(0.46, 0.38, 2.48), COL_OLIVE, [col, row, 0.14]);
+        // Front Pyramid-Embossed Blast Cap (+Z)
+        addPart(podGroup, new THREE.BoxGeometry(0.42, 0.34, 0.14), COL_OLIVE_DARK, [col, row, 1.40]);
+        // Rear Exhaust Breech Cap (-Z)
+        addPart(podGroup, new THREE.BoxGeometry(0.42, 0.34, 0.12), COL_OLIVE_DARK, [col, row, -1.12]);
+      }
+      // Front & Rear Yellow-Gold X-Braced Retaining Box Collars
+      addPart(podGroup, new THREE.BoxGeometry(0.52, 0.88, 0.26), COL_GOLD_FRAME, [col, 0.20, 0.86]);
+      addPart(podGroup, new THREE.BoxGeometry(0.52, 0.88, 0.26), COL_GOLD_FRAME, [col, 0.20, -0.68]);
+    }
+  }
+
+  bakeStaticGroupMeshes(pitchGroup, { minShadowCasterSpan: 0.45 });
+  bakeStaticGroupMeshes(yawGroup, {
+    excludeObjects: new Set<THREE.Object3D>([pitchGroup]),
+    minShadowCasterSpan: 0.45,
+  });
+  bakeStaticGroupMeshes(root, {
+    excludeObjects: new Set<THREE.Object3D>([yawGroup]),
+    minShadowCasterSpan: 0.45,
+  });
+
+  return {
+    root,
+    yawGroup,
+    pitchGroup,
+    team,
+    lastFireSec: -999,
+    nextPodIndex: 0,
+  };
+}
+
+/**
  * Builds crisp 3D cel-shaded models for Team Buddies (PS1) battlefield item drops:
  * - `'coin_gold'` / `'coin_silver'`: Bevelled 3D coin disc with raised rim & star emblem
  * - `'secondary'` (`hand_grenade` | `cluster_bomb` | `land_mine`): Segmented pineapple grenade,
@@ -6216,10 +7932,16 @@ export function buildTeamBuddiesDropPickupMesh(
     pos: [number, number, number],
     rot: [number, number, number] = [0, 0, 0],
     strokeWidth = 0.02,
+    tex?: THREE.Texture,
   ) => {
     const m = new THREE.Mesh(
       geo,
-      new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.48, metalness: 0.15 }),
+      new THREE.MeshStandardMaterial({
+        color: tex ? '#ffffff' : colorHex,
+        map: tex ?? null,
+        roughness: 0.48,
+        metalness: 0.15,
+      }),
     );
     m.position.set(pos[0], pos[1], pos[2]);
     m.rotation.set(rot[0], rot[1], rot[2]);
@@ -6260,22 +7982,162 @@ export function buildTeamBuddiesDropPickupMesh(
   }
 
   if (kind === 'secondary') {
+    const hazardTex = getWeaponHazardStripeTexture();
     if (subId === 'land_mine') {
-      // Disc land mine with red armed beacon
-      addBoxOrCyl(new THREE.CylinderGeometry(0.38, 0.44, 0.14, 16), '#365314', [0, 0.10, 0], [0, 0, 0], 0.02);
-      addBoxOrCyl(new THREE.CylinderGeometry(0.22, 0.24, 0.08, 12), '#1e293b', [0, 0.19, 0], [0, 0, 0], 0);
-      addBoxOrCyl(new THREE.CylinderGeometry(0.09, 0.09, 0.07, 10), '#ef4444', [0, 0.24, 0], [0, 0, 0], 0);
+      // TM-89 // TACTICAL ANTI-VEHICLE LAND MINE (1:1 Green-Screen Reference):
+      // Circular olive-drab casing (#5c6440) with 12 perimeter rim lugs, top face custom texture
+      // ('TM-89 MINE' / 'ARMED' / hazard ring / orange ring), 8 glowing orange LEDs, central pressure dome,
+      // detailed silver-tan & red mechanical fuze assembly, and side woven canvas carry strap handle
+      const tm89TopTex = getTm89MineTopTexture();
+      addBoxOrCyl(new THREE.CylinderGeometry(0.45, 0.47, 0.14, 24), '#5c6440', [0, 0.10, 0], [0, 0, 0], 0.02);
+      // 12 Raised Perimeter Rim Lugs
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        addBoxOrCyl(
+          new THREE.BoxGeometry(0.08, 0.12, 0.06),
+          '#4a5233',
+          [Math.cos(a) * 0.45, 0.10, Math.sin(a) * 0.45],
+          [0, -a, 0],
+          0.01,
+        );
+      }
+      // Top Face Disc with Custom Stencil & Hazard Ring Texture
+      addBoxOrCyl(new THREE.CylinderGeometry(0.43, 0.43, 0.025, 24), '#ffffff', [0, 0.175, 0], [0, 0, 0], 0.01, tm89TopTex);
+      // Central Olive Pressure Plate Dome
+      addBoxOrCyl(new THREE.CylinderGeometry(0.21, 0.23, 0.045, 18), '#656e48', [0, 0.20, 0], [0, 0, 0], 0.014);
+      // Center Silver-Tan Mechanical Striker Block + Red Arming Lever & Red Safety Fork
+      addBoxOrCyl(new THREE.BoxGeometry(0.11, 0.06, 0.13), '#b0ab99', [0, 0.24, 0], [0, 0, 0], 0.012);
+      addBoxOrCyl(new THREE.BoxGeometry(0.14, 0.035, 0.045), '#c83e37', [0.04, 0.26, -0.09], [0, -0.35, 0], 0.008);
+      addBoxOrCyl(new THREE.BoxGeometry(0.16, 0.035, 0.08), '#c83e37', [0, 0.24, 0.11], [0, 0, 0], 0.008);
+      // 8 Glowing Orange LED Nodes around Armed Ring
+      for (let i = 0; i < 8; i++) {
+        const ang = (i * Math.PI) / 4;
+        const led = new THREE.Mesh(
+          new THREE.SphereGeometry(0.022, 8, 8),
+          new THREE.MeshBasicMaterial({ color: 0xff9f1c }),
+        );
+        led.position.set(Math.cos(ang) * 0.27, 0.195, Math.sin(ang) * 0.27);
+        g.add(led);
+      }
+      // Right Side Bolted Steel Bracket & Curved Woven Canvas Carry Strap
+      addBoxOrCyl(new THREE.BoxGeometry(0.06, 0.06, 0.26), '#495159', [0.43, 0.12, 0], [0, 0, 0], 0.01);
+      addBoxOrCyl(new THREE.BoxGeometry(0.11, 0.045, 0.28), '#555c3b', [0.50, 0.10, 0], [0, 0, 0], 0.012);
     } else if (subId === 'cluster_bomb') {
-      // Crimson & hazard-yellow cluster bomb canister
-      addBoxOrCyl(new THREE.CylinderGeometry(0.24, 0.24, 0.52, 14), '#dc2626', [0, 0.32, 0], [0, 0, 0.25], 0.022);
-      addBoxOrCyl(new THREE.CylinderGeometry(0.25, 0.25, 0.12, 14), '#facc15', [0, 0.32, 0], [0, 0, 0.25], 0);
-      addBoxOrCyl(new THREE.CylinderGeometry(0.10, 0.14, 0.14, 10), '#334155', [-0.07, 0.60, 0], [0, 0, 0.25], 0.015);
+      // CB-24 // TACTICAL CLUSTER BOMB DISPENSER (1:1 Green-Screen Reference):
+      // Dark gunmetal ogive nose cone with side timer dial gauge, olive-drab dispenser body ('CB-24')
+      // with glowing cyan vertical submunition status window, dual diagonal hazard stripe bands,
+      // top dual U-shaped suspension lugs, red rotary switch + side conduit cable, 4 swept X-tail fins & flared nozzle
+      const cb24BodyTex = getCb24ClusterBodyTexture();
+      const piv = new THREE.Group();
+      piv.position.set(0, 0.42, 0);
+      piv.rotation.set(0, 0, 0.18);
+      g.add(piv);
+
+      const addCbPart = (
+        geo: THREE.BufferGeometry,
+        colorHex: string,
+        pos: [number, number, number],
+        rot: [number, number, number] = [0, 0, 0],
+        strokeWidth = 0.016,
+        tex?: THREE.Texture,
+      ) => {
+        const m = new THREE.Mesh(
+          geo,
+          new THREE.MeshStandardMaterial({
+            color: tex ? '#ffffff' : colorHex,
+            map: tex ?? null,
+            roughness: 0.46,
+            metalness: 0.16,
+          }),
+        );
+        m.position.set(pos[0], pos[1], pos[2]);
+        m.rotation.set(rot[0], rot[1], rot[2]);
+        m.castShadow = !isSoftwareGl;
+        m.receiveShadow = !isSoftwareGl;
+        upgradeMeshToLyoWorldMaterial(m, windUniforms, colorHex, 0.0);
+        if (strokeWidth > 0) {
+          const st = createLyoStrokeMesh(geo, strokeWidth);
+          if (st) m.add(st);
+        }
+        piv.add(m);
+      };
+
+      // Main Olive Dispenser Cylinder (Horizontal along X) with Stencil Texture
+      addCbPart(new THREE.CylinderGeometry(0.17, 0.17, 0.78, 18), '#ffffff', [0.04, 0, 0], [0, 0, Math.PI / 2], 0.018, cb24BodyTex);
+      // Dark Gunmetal Ogive Nose Cone (-X Left) + Side Timer Dial Gauge
+      addCbPart(new THREE.ConeGeometry(0.17, 0.34, 18), '#3d4240', [-0.52, 0, 0], [0, 0, Math.PI / 2], 0.016);
+      addCbPart(new THREE.CylinderGeometry(0.055, 0.055, 0.36, 12), '#525854', [-0.42, 0, 0], [Math.PI / 2, 0, 0], 0.01);
+      // Glowing Cyan Vertical Submunition Window Collar
+      addCbPart(new THREE.CylinderGeometry(0.178, 0.178, 0.09, 18), '#3a403d', [-0.12, 0, 0], [0, 0, Math.PI / 2], 0.012);
+      const cyanWin = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.183, 0.183, 0.05, 16),
+        new THREE.MeshBasicMaterial({ color: 0x38ffcc }),
+      );
+      cyanWin.rotation.z = Math.PI / 2;
+      cyanWin.position.set(-0.12, 0, 0);
+      piv.add(cyanWin);
+
+      // Dual Diagonal Yellow/Black Hazard Stripe Bands
+      for (const xBand of [0.08, 0.36]) {
+        addCbPart(new THREE.CylinderGeometry(0.175, 0.175, 0.065, 18), '#ffffff', [xBand, 0, 0], [0, 0, Math.PI / 2], 0.01, hazardTex);
+      }
+      // Top Dual U-Shaped Suspension Lugs
+      for (const lugX of [-0.02, 0.18]) {
+        addCbPart(new THREE.BoxGeometry(0.09, 0.07, 0.04), '#7d846c', [lugX, 0.19, 0], [0, 0, 0], 0.01);
+      }
+      // 4 Swept Metallic X-Tail Fins (+X Right) & Flared Nozzle
+      for (let i = 0; i < 4; i++) {
+        const ang = Math.PI / 4 + (i * Math.PI) / 2;
+        addCbPart(
+          new THREE.BoxGeometry(0.22, 0.24, 0.028),
+          '#858980',
+          [0.44, Math.cos(ang) * 0.18, Math.sin(ang) * 0.18],
+          [ang, 0, -0.32],
+          0.012,
+        );
+      }
+      addCbPart(new THREE.CylinderGeometry(0.12, 0.165, 0.18, 16), '#6c7068', [0.52, 0, 0], [0, 0, Math.PI / 2], 0.014);
     } else {
-      // Classic olive pineapple Hand Grenade with spoon lever & pull ring
-      addBoxOrCyl(new THREE.IcosahedronGeometry(0.26, 1), '#3f6212', [0, 0.30, 0], [0, 0, 0], 0.022);
-      addBoxOrCyl(new THREE.CylinderGeometry(0.09, 0.11, 0.14, 10), '#475569', [0, 0.58, 0], [0, 0, 0], 0.015);
-      addBoxOrCyl(new THREE.BoxGeometry(0.06, 0.28, 0.05), '#94a3b8', [0.16, 0.42, 0], [0, 0, -0.25], 0);
-      addBoxOrCyl(new THREE.TorusGeometry(0.07, 0.02, 8, 14), '#facc15', [-0.10, 0.58, 0], [0, 0, 0], 0);
+      // HG-04 // TACTICAL FRAGMENTATION HAND GRENADE (1:1 Green-Screen Reference):
+      // Tapered notched dark gunmetal bottom bumper, 5 rows of segmented olive-drab pineapple blocks (#5b663e),
+      // front stencil panel ('HG-04 FRAG' / 'DELAY 3.5s'), diagonal yellow/black hazard neck collar,
+      // glowing orange LED neck ring (#ff9f1c), stepped dark gunmetal fuze head, curved olive spoon lever, and brass pull ring
+      const hg04Tex = getHg04GrenadeCenterTexture();
+      addBoxOrCyl(new THREE.CylinderGeometry(0.18, 0.22, 0.10, 14), '#3a4046', [0, 0.10, 0], [0, 0, 0], 0.016);
+      addBoxOrCyl(new THREE.SphereGeometry(0.26, 14, 12), '#262b22', [0, 0.35, 0], [0, 0, 0], 0.02);
+      // 5 Segmented Horizontal Pineapple Fragmentation Rings
+      for (const [ry, rad] of [
+        [0.19, 0.22],
+        [0.27, 0.255],
+        [0.35, 0.268],
+        [0.43, 0.255],
+        [0.50, 0.215],
+      ] as const) {
+        addBoxOrCyl(new THREE.CylinderGeometry(rad, rad, 0.062, 10), '#5b663e', [0, ry, 0], [0, 0, 0], 0.012);
+      }
+      // Front Stencil Panel ('HG-04 FRAG' / 'DELAY 3.5s') + Glowing Orange LED Dot
+      addBoxOrCyl(new THREE.BoxGeometry(0.13, 0.16, 0.04), '#ffffff', [0, 0.35, 0.255], [0, 0, 0], 0.008, hg04Tex);
+      const sideLed = new THREE.Mesh(
+        new THREE.SphereGeometry(0.018, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xff9f1c }),
+      );
+      sideLed.position.set(0.11, 0.31, 0.245);
+      g.add(sideLed);
+
+      // Diagonal Yellow/Black Hazard Neck Collar & Glowing Orange LED Ring
+      addBoxOrCyl(new THREE.CylinderGeometry(0.145, 0.165, 0.055, 14), '#ffffff', [0, 0.56, 0], [0, 0, 0], 0.01, hazardTex);
+      const neckGlow = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.14, 0.14, 0.032, 14),
+        new THREE.MeshBasicMaterial({ color: 0xff9f1c }),
+      );
+      neckGlow.position.set(0, 0.60, 0);
+      g.add(neckGlow);
+      // Dark Gunmetal Stepped Fuze Assembly
+      addBoxOrCyl(new THREE.CylinderGeometry(0.115, 0.125, 0.13, 12), '#495159', [0, 0.67, 0], [0, 0, 0], 0.016);
+      // Olive Safety Lever (Spoon) Extending Down Right Side & Large Brass Pull Ring
+      addBoxOrCyl(new THREE.BoxGeometry(0.24, 0.055, 0.07), '#747e54', [0.06, 0.73, 0], [0, 0, 0], 0.012);
+      addBoxOrCyl(new THREE.BoxGeometry(0.055, 0.42, 0.065), '#747e54', [0.23, 0.48, 0], [0, 0, -0.18], 0.012);
+      addBoxOrCyl(new THREE.TorusGeometry(0.105, 0.022, 10, 20), '#b89658', [0.13, 0.61, 0.11], [0.15, 0.25, 0], 0.012);
     }
     bakeStaticGroupMeshes(g, { minShadowCasterSpan: 0.3 });
     return g;
@@ -6417,6 +8279,12 @@ export function updateCharacterWeaponStance(
   rig.pistolGroup.visible = weaponId === 'pistol';
   rig.rifleGroup.visible = weaponId === 'rifle';
   rig.bazookaGroup.visible = weaponId === 'bazooka';
+  if (rig.laserGroup) {
+    rig.laserGroup.visible = weaponId === 'laser';
+  }
+  if (rig.gatlingGroup) {
+    rig.gatlingGroup.visible = weaponId === 'gatling';
+  }
 
   if (weaponId === 'pistol') {
     // 1. TWO-HANDED PISTOL AIMING STANCE (Reference Image 1):
@@ -6434,10 +8302,8 @@ export function updateCharacterWeaponStance(
 
     rig.bazookaFrontFlash.visible = false;
     rig.bazookaBackblastGroup.visible = false;
-  } else if (weaponId === 'rifle') {
-    // 2. ASSAULT RIFLE C-CLAMP SUPPORT STANCE (Reference Image 4):
-    // Stock tucked against right shoulder (x = -0.28), right hand on pistol grip,
-    // left arm reaching across chest to hold the front handguard behind the hazard stripes
+  } else if (weaponId === 'rifle' || weaponId === 'laser' || weaponId === 'gatling') {
+    // 2. ASSAULT RIFLE / LG-88 LASER RIFLE / TITAN-6 ROTARY GATLING STANCE:
     const kickZ = r * 0.16;
     const kickPitch = r * 0.24;
     rig.weaponRigGroup.position.set(-0.12, 1.26 + walkBob, 0.50 - kickZ);
@@ -6764,6 +8630,8 @@ export function buildProceduralRobloxBuddyAvatar(
   let pistolGroup: THREE.Group;
   let rifleGroup: THREE.Group;
   let bazookaGroup: THREE.Group;
+  let laserGroup: THREE.Group;
+  let gatlingGroup: THREE.Group;
   let bazookaFrontFlash: THREE.Group;
   let bazookaBackblastGroup: THREE.Group;
 
@@ -6771,6 +8639,8 @@ export function buildProceduralRobloxBuddyAvatar(
     pistolGroup = new THREE.Group();
     rifleGroup = new THREE.Group();
     bazookaGroup = new THREE.Group();
+    laserGroup = new THREE.Group();
+    gatlingGroup = new THREE.Group();
     bazookaFrontFlash = new THREE.Group();
     bazookaBackblastGroup = new THREE.Group();
     weaponRigGroup.visible = false;
@@ -6784,6 +8654,18 @@ export function buildProceduralRobloxBuddyAvatar(
     rifleGroup.scale.setScalar(1.08);
     bakeStaticGroupMeshes(rifleGroup, { minShadowCasterSpan: 0.35 });
     weaponRigGroup.add(rifleGroup);
+
+    laserGroup = buildProceduralLg88LaserRifle(addPart);
+    laserGroup.scale.setScalar(1.08);
+    laserGroup.visible = false;
+    bakeStaticGroupMeshes(laserGroup, { minShadowCasterSpan: 0.35 });
+    weaponRigGroup.add(laserGroup);
+
+    gatlingGroup = buildProceduralTitan6GatlingGun(addPart);
+    gatlingGroup.scale.setScalar(1.08);
+    gatlingGroup.visible = false;
+    bakeStaticGroupMeshes(gatlingGroup, { minShadowCasterSpan: 0.35 });
+    weaponRigGroup.add(gatlingGroup);
 
     const bz = buildProceduralLyoRocketLauncher(addPart);
     bazookaGroup = bz.bazookaGroup;
@@ -6889,6 +8771,952 @@ export function buildProceduralRobloxBuddyAvatar(
     pistolGroup,
     rifleGroup,
     bazookaGroup,
+    laserGroup,
+    gatlingGroup,
+    bazookaFrontFlash,
+    bazookaBackblastGroup,
+  };
+
+  if (!isSeatedRider) {
+    updateCharacterWeaponStance(rig, 'rifle', 0, false, false, 0, 0);
+  }
+
+  return rig;
+}
+
+let cachedShinobiHeadbandTex: THREE.CanvasTexture | null = null;
+function getShinobiHeadbandTexture(): THREE.CanvasTexture {
+  if (cachedShinobiHeadbandTex) return cachedShinobiHeadbandTex;
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 96;
+  const ctx = canvas.getContext('2d')!;
+
+  // Brushed metallic steel forehead plate
+  const grad = ctx.createLinearGradient(0, 0, 256, 96);
+  grad.addColorStop(0, '#8d99ae');
+  grad.addColorStop(0.5, '#cbd5e1');
+  grad.addColorStop(1, '#7c879b');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 256, 96);
+
+  // Dark border frame
+  ctx.strokeStyle = '#1e2430';
+  ctx.lineWidth = 8;
+  ctx.strokeRect(4, 4, 248, 88);
+
+  // Side rivets
+  ctx.fillStyle = '#1e2430';
+  for (const rx of [28, 228]) {
+    ctx.beginPath();
+    ctx.arc(rx, 48, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Center engraved spiral-leaf shinobi symbol (matching screen.png)
+  ctx.strokeStyle = '#141820';
+  ctx.lineWidth = 7;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.arc(124, 50, 20, 0.2, Math.PI * 1.65);
+  ctx.lineTo(156, 34);
+  ctx.lineTo(142, 64);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(124, 50, 9, 0, Math.PI * 1.45);
+  ctx.stroke();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  cachedShinobiHeadbandTex = tex;
+  return tex;
+}
+
+/**
+ * Builds the experimental "R15 Articulated Humanoid Rig (15-Part Hierarchical Joint Rig)"
+ * EXCLUSIVELY for the "Shinobi // Infiltrator" (`classId === 'Ninja'`) character class,
+ * matching the 3-view turnaround sheet (`screen.png`) with ~1.35x athletic humanoid proportions,
+ * anatomical joint pivots, spherical elbow/knee joints, dual crossed back katanas, and Lyo cel-shader + comic outline.
+ */
+export function buildProceduralShinobiR15Avatar(
+  bodyGroup: THREE.Group,
+  team: 'blue' | 'red',
+  windUniforms: LyoWindUniforms,
+  isSoftwareGl: boolean,
+  isSeatedRider = false,
+): RobloxBuddyRig {
+  const COL_SKIN = '#f2c69d';
+  const COL_GI_CHARCOAL = team === 'blue' ? '#252a34' : '#312329';
+  const COL_GI_DARK = '#1b1f27';
+  const COL_SCARF_DARK = team === 'blue' ? '#1e232d' : '#2b1b22';
+  const COL_STRAP_TAUPE = '#4a463f';
+  const COL_BANDAGE_CREAM = '#d9cdb4';
+  const COL_BANDAGE_SHADOW = '#a89c84';
+  const COL_LEG_WRAP = '#484742';
+  const COL_BRACER_ARMOR = '#2c313d';
+  const COL_STEEL = '#9aa6b8';
+  const COL_EYE_GLOW = team === 'blue' ? '#38bdf8' : '#ff4d4d';
+
+  const addPart: AddWeaponPartFn = (
+    parent,
+    geo,
+    colorHex,
+    pos,
+    rot = [0, 0, 0],
+    scale = [1, 1, 1],
+    strokeWidth = 0.02,
+    tex,
+  ): THREE.Mesh => {
+    const mat = new THREE.MeshStandardMaterial({
+      color: tex ? '#ffffff' : colorHex,
+      map: tex ?? null,
+      roughness: 0.55,
+      metalness: 0.08,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(pos[0], pos[1], pos[2]);
+    mesh.rotation.set(rot[0], rot[1], rot[2]);
+    mesh.scale.set(scale[0], scale[1], scale[2]);
+    mesh.castShadow = !isSoftwareGl;
+    mesh.receiveShadow = !isSoftwareGl;
+    upgradeMeshToLyoWorldMaterial(mesh, windUniforms);
+    if (strokeWidth > 0) {
+      const stroke = createLyoStrokeMesh(geo, strokeWidth);
+      if (stroke) mesh.add(stroke);
+    }
+    parent.add(mesh);
+    return mesh;
+  };
+
+  // ==========================================================================
+  // 1. LOWER TORSO (PELVIS + TIED NINJA OBI BELT SASH) — Root -> LowerTorso
+  // ==========================================================================
+  const lowerTorsoPivot = new THREE.Group();
+  lowerTorsoPivot.position.set(0, 1.18, 0);
+  bodyGroup.add(lowerTorsoPivot);
+
+  // Pelvis / Hip Block
+  addPart(
+    lowerTorsoPivot,
+    new THREE.BoxGeometry(0.66, 0.28, 0.40),
+    COL_GI_CHARCOAL,
+    [0, 0.08, 0],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.022,
+  );
+  // Layered Ninja Waist Sash (Obi)
+  addPart(
+    lowerTorsoPivot,
+    new THREE.BoxGeometry(0.70, 0.15, 0.44),
+    COL_STRAP_TAUPE,
+    [0, 0.21, 0],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.02,
+  );
+  addPart(
+    lowerTorsoPivot,
+    new THREE.BoxGeometry(0.71, 0.05, 0.45),
+    COL_GI_DARK,
+    [0, 0.21, 0],
+    [0, 0, 0],
+    [1, 1, 1],
+    0,
+  );
+  // Front Obi Knot + Two Angled Hanging Sash Tails (+Z Front, matching screen.png)
+  addPart(
+    lowerTorsoPivot,
+    new THREE.BoxGeometry(0.16, 0.15, 0.12),
+    COL_STRAP_TAUPE,
+    [-0.04, 0.19, 0.23],
+    [0, 0, 0.08],
+    [1, 1, 1],
+    0.018,
+  );
+  addPart(
+    lowerTorsoPivot,
+    new THREE.BoxGeometry(0.12, 0.44, 0.06),
+    COL_STRAP_TAUPE,
+    [-0.11, -0.04, 0.24],
+    [-0.08, 0, 0.16],
+    [1, 1, 1],
+    0.018,
+  );
+  addPart(
+    lowerTorsoPivot,
+    new THREE.BoxGeometry(0.12, 0.40, 0.06),
+    COL_STRAP_TAUPE,
+    [0.05, -0.02, 0.23],
+    [-0.06, 0, -0.18],
+    [1, 1, 1],
+    0.018,
+  );
+
+  // ==========================================================================
+  // 2. UPPER TORSO (CHEST + CROSSED X-STRAPS + BACK KATANAS + SCARF)
+  // ==========================================================================
+  const upperTorsoPivot = new THREE.Group();
+  upperTorsoPivot.position.set(0, 0.24, 0);
+  lowerTorsoPivot.add(upperTorsoPivot);
+
+  // Athletic V-Tapered Sleeveless Shinobi Gi Chest
+  addPart(
+    upperTorsoPivot,
+    new THREE.BoxGeometry(0.74, 0.72, 0.42),
+    COL_GI_CHARCOAL,
+    [0, 0.36, 0],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.024,
+  );
+  // Sleeveless Gi Shoulder Trim Flanges
+  for (const side of [-1, 1]) {
+    addPart(
+      upperTorsoPivot,
+      new THREE.BoxGeometry(0.12, 0.68, 0.45),
+      COL_GI_DARK,
+      [side * 0.34, 0.37, 0],
+      [0, 0, side * -0.06],
+      [1, 1, 1],
+      0.016,
+    );
+  }
+  // V-Neck Fishnet Mesh Undershirt Triangle (+Z Front)
+  addPart(
+    upperTorsoPivot,
+    new THREE.BoxGeometry(0.24, 0.22, 0.04),
+    '#3d4352',
+    [0, 0.56, 0.205],
+    [0, 0, Math.PI / 4],
+    [1, 1, 1],
+    0.012,
+  );
+  // Overlapping Gi Lapel Collar
+  addPart(
+    upperTorsoPivot,
+    new THREE.BoxGeometry(0.14, 0.62, 0.05),
+    COL_GI_DARK,
+    [-0.04, 0.35, 0.21],
+    [0, 0, -0.32],
+    [1, 1, 1],
+    0.014,
+  );
+
+  // Crossed X Leather Chest Straps (+Z Front) with Metallic Silver Buckles (matching screen.png)
+  for (const side of [-1, 1]) {
+    addPart(
+      upperTorsoPivot,
+      new THREE.BoxGeometry(0.10, 0.82, 0.055),
+      COL_STRAP_TAUPE,
+      [0, 0.36, 0.215],
+      [0, 0, side * 0.62],
+      [1, 1, 1],
+      0.015,
+    );
+    // Silver rectangular strap buckle on upper chest
+    addPart(
+      upperTorsoPivot,
+      new THREE.BoxGeometry(0.13, 0.09, 0.065),
+      COL_STEEL,
+      [side * 0.16, 0.54, 0.22],
+      [0, 0, side * 0.62],
+      [1, 1, 1],
+      0.012,
+    );
+    // Top shoulder harness loop connecting front and back straps
+    addPart(
+      upperTorsoPivot,
+      new THREE.BoxGeometry(0.11, 0.07, 0.46),
+      COL_STRAP_TAUPE,
+      [side * 0.27, 0.72, 0],
+      [0, 0, 0],
+      [1, 1, 1],
+      0.014,
+    );
+  }
+
+  // Back Armor Harness Plate (-Z Back) with 4 Rivets & Dual Crossed Katanas (matching screen.png Back T-Pose)
+  addPart(
+    upperTorsoPivot,
+    new THREE.BoxGeometry(0.46, 0.44, 0.07),
+    COL_STRAP_TAUPE,
+    [0, 0.38, -0.22],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.018,
+  );
+  for (const rx of [-0.17, 0.17]) {
+    for (const ry of [0.22, 0.52]) {
+      addPart(
+        upperTorsoPivot,
+        new THREE.SphereGeometry(0.024, 6, 6),
+        COL_STEEL,
+        [rx, ry, -0.26],
+        [0, 0, 0],
+        [1, 1, 1],
+        0,
+      );
+    }
+  }
+
+  // Dual Crossed Katana Scabbards (Saya) + Diamond-Wrapped Tsuka Hilts on Back (-Z)
+  const buildBackKatana = (side: -1 | 1): THREE.Group => {
+    const katanaGrp = new THREE.Group();
+    katanaGrp.position.set(0, 0.38, -0.27);
+    katanaGrp.rotation.z = side * 0.68; // Crossed at 40 deg X-angle across back
+    upperTorsoPivot.add(katanaGrp);
+
+    // Black Lacquered Scabbard (Saya) extending down past waist
+    addPart(
+      katanaGrp,
+      new THREE.CylinderGeometry(0.042, 0.036, 1.32, 10),
+      COL_GI_DARK,
+      [0, -0.18, 0],
+      [0, 0, 0],
+      [1, 1, 0.72],
+      0.016,
+    );
+    // Scabbard mounting rings
+    for (const ry of [0.16, -0.16]) {
+      addPart(
+        katanaGrp,
+        new THREE.CylinderGeometry(0.052, 0.052, 0.07, 10),
+        COL_STRAP_TAUPE,
+        [0, ry, 0],
+        [0, 0, 0],
+        [1, 1, 0.8],
+        0.01,
+      );
+    }
+
+    // Removable Hilt Group (hidden on right katana when unsheathed during melee slash!)
+    const hiltGrp = new THREE.Group();
+    katanaGrp.add(hiltGrp);
+
+    // Circular Tsuba Handguard
+    addPart(
+      hiltGrp,
+      new THREE.CylinderGeometry(0.095, 0.095, 0.035, 14),
+      COL_BRACER_ARMOR,
+      [0, 0.50, 0],
+      [0, 0, 0],
+      [1, 1, 1],
+      0.014,
+    );
+    // Tsuka Hilt Core
+    addPart(
+      hiltGrp,
+      new THREE.CylinderGeometry(0.038, 0.036, 0.44, 10),
+      COL_GI_DARK,
+      [0, 0.73, 0],
+      [0, 0, 0],
+      [1, 1, 0.78],
+      0.015,
+    );
+    // Diamond Tsuka-ito Wrap Bands along Hilt
+    for (let i = 0; i < 5; i++) {
+      addPart(
+        hiltGrp,
+        new THREE.BoxGeometry(0.082, 0.035, 0.068),
+        COL_BANDAGE_SHADOW,
+        [0, 0.56 + i * 0.075, 0],
+        [0, 0, i % 2 === 0 ? 0.25 : -0.25],
+        [1, 1, 1],
+        0,
+      );
+    }
+    // Kashira Pommel Cap
+    addPart(
+      hiltGrp,
+      new THREE.CylinderGeometry(0.044, 0.042, 0.05, 10),
+      COL_STEEL,
+      [0, 0.96, 0],
+      [0, 0, 0],
+      [1, 1, 0.8],
+      0.012,
+    );
+    return hiltGrp;
+  };
+  const backRightKatanaHilt = buildBackKatana(-1);
+  buildBackKatana(1);
+
+  // Billowing Wrapped Ninja Neck Scarf around Upper Chest / Collar
+  addPart(
+    upperTorsoPivot,
+    new THREE.TorusGeometry(0.28, 0.105, 10, 20),
+    COL_SCARF_DARK,
+    [0, 0.74, 0.02],
+    [Math.PI / 2 + 0.12, 0, 0],
+    [1.15, 0.95, 0.95],
+    0.02,
+  );
+  addPart(
+    upperTorsoPivot,
+    new THREE.TorusGeometry(0.24, 0.085, 10, 18),
+    COL_GI_CHARCOAL,
+    [0, 0.81, 0.01],
+    [Math.PI / 2 - 0.08, 0, 0],
+    [1.12, 0.92, 0.92],
+    0.018,
+  );
+
+  // ==========================================================================
+  // 3. NECK & HEAD (HOOD + FACE MASK + FOREHEAD PROTECTOR + GLOWING EYES)
+  // ==========================================================================
+  const neckPivot = new THREE.Group();
+  neckPivot.position.set(0, 0.78, 0);
+  upperTorsoPivot.add(neckPivot);
+
+  addPart(
+    neckPivot,
+    new THREE.CylinderGeometry(0.15, 0.17, 0.14, 14),
+    COL_GI_DARK,
+    [0, 0.05, 0],
+    [0, 0, 0],
+    [1, 1, 1],
+    0,
+  );
+
+  const headPivot = new THREE.Group();
+  headPivot.position.set(0, 0.08, 0);
+  neckPivot.add(headPivot);
+
+  // Core Head Mesh (Skin Tone around Eye Bridge — used for hitFlashTimer / freeze tint)
+  const headMesh = addPart(
+    headPivot,
+    new THREE.CylinderGeometry(0.32, 0.30, 0.52, 20),
+    COL_SKIN,
+    [0, 0.28, 0],
+    [0, 0, 0],
+    [1, 1, 0.96],
+    0.022,
+  );
+
+  // Wrapped Shinobi Hood Dome (Top, Sides & Back of Head)
+  addPart(
+    headPivot,
+    new THREE.SphereGeometry(0.355, 20, 16),
+    COL_GI_CHARCOAL,
+    [0, 0.36, -0.02],
+    [0, 0, 0],
+    [1.0, 0.96, 1.04],
+    0.022,
+  );
+  // Rear Hood Tie Band & Knot + Dual Hanging Hood Tails (-Z Back, matching screen.png)
+  addPart(
+    headPivot,
+    new THREE.BoxGeometry(0.14, 0.11, 0.10),
+    COL_GI_DARK,
+    [0, 0.32, -0.36],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.016,
+  );
+  for (const side of [-1, 1]) {
+    addPart(
+      headPivot,
+      new THREE.BoxGeometry(0.10, 0.24, 0.06),
+      COL_GI_CHARCOAL,
+      [side * 0.07, 0.19, -0.37],
+      [0.18, 0, side * -0.22],
+      [1, 1, 1],
+      0.015,
+    );
+  }
+
+  // Lower Pleated Ninja Face Mask covering Nose, Cheeks & Chin (+Z Front)
+  addPart(
+    headPivot,
+    new THREE.CylinderGeometry(0.335, 0.295, 0.30, 18),
+    COL_GI_DARK,
+    [0, 0.15, 0.03],
+    [0.08, 0, 0],
+    [1.0, 1.0, 1.04],
+    0.02,
+  );
+  // Mask center nose-bridge seam ridge
+  addPart(
+    headPivot,
+    new THREE.BoxGeometry(0.06, 0.25, 0.12),
+    COL_GI_CHARCOAL,
+    [0, 0.16, 0.31],
+    [-0.14, 0, 0],
+    [1, 1, 1],
+    0.012,
+  );
+
+  // Fierce Shinobi Eyes + Angled Dark Brows + Glowing Iris Highlight (+Z Front)
+  for (const side of [-1, 1]) {
+    // Crisp White Eye Sclera
+    addPart(
+      headPivot,
+      new THREE.BoxGeometry(0.125, 0.068, 0.04),
+      '#f8fafc',
+      [side * 0.115, 0.34, 0.305],
+      [0, side * 0.18, side * -0.12],
+      [1, 1, 1],
+      0.01,
+    );
+    // Dark Obsidian Pupil
+    addPart(
+      headPivot,
+      new THREE.BoxGeometry(0.062, 0.062, 0.045),
+      '#14171f',
+      [side * 0.105, 0.34, 0.312],
+      [0, side * 0.18, 0],
+      [1, 1, 1],
+      0,
+    );
+    // Glowing Shinobi Eye Glint (Emissive MeshBasicMaterial)
+    const glint = new THREE.Mesh(
+      new THREE.BoxGeometry(0.028, 0.026, 0.048),
+      new THREE.MeshBasicMaterial({ color: COL_EYE_GLOW }),
+    );
+    glint.position.set(side * 0.095, 0.35, 0.318);
+    headPivot.add(glint);
+
+    // Sharp Angled Ninja Eyebrow
+    addPart(
+      headPivot,
+      new THREE.BoxGeometry(0.145, 0.036, 0.05),
+      '#14171f',
+      [side * 0.115, 0.39, 0.315],
+      [0, side * 0.18, side * 0.28],
+      [1, 1, 1],
+      0,
+    );
+  }
+
+  // Forehead Protector Band + Brushed-Steel Hitai-ate Plate with Engraved Emblem (+Z Front)
+  addPart(
+    headPivot,
+    new THREE.CylinderGeometry(0.348, 0.345, 0.13, 20),
+    COL_GI_DARK,
+    [0, 0.46, -0.01],
+    [0, 0, 0],
+    [1.01, 1, 1.04],
+    0.016,
+  );
+  addPart(
+    headPivot,
+    new THREE.BoxGeometry(0.34, 0.125, 0.055),
+    '#ffffff',
+    [0, 0.46, 0.335],
+    [0.06, 0, 0],
+    [1, 1, 1],
+    0.016,
+    getShinobiHeadbandTexture(),
+  );
+
+  // ==========================================================================
+  // 4. 3-SEGMENT ARMS (ShoulderPivot -> UpperArm -> ElbowPivot -> LowerArm -> Hand)
+  // ==========================================================================
+  const buildArmR15 = (side: -1 | 1) => {
+    // side = -1 is Character's Anatomical RIGHT Arm; side = +1 is Character's Anatomical LEFT Arm
+    const shoulderPivot = new THREE.Group();
+    shoulderPivot.position.set(side * 0.44, 0.68, 0);
+    upperTorsoPivot.add(shoulderPivot);
+
+    // Rounded Muscular Deltoid Shoulder Cap
+    addPart(
+      shoulderPivot,
+      new THREE.SphereGeometry(0.145, 12, 10),
+      COL_SKIN,
+      [side * 0.02, -0.04, 0],
+      [0, 0, 0],
+      [1, 1.1, 1],
+      0.018,
+    );
+    // UpperArm Core (Skin + Cream Cloth Shinobi Bandage Wraps)
+    addPart(
+      shoulderPivot,
+      new THREE.CylinderGeometry(0.132, 0.118, 0.40, 14),
+      COL_SKIN,
+      [side * 0.02, -0.22, 0],
+      [0, 0, 0],
+      [1, 1, 1],
+      0.02,
+    );
+    // Cream-Tan Cloth Bandage Wraps on Bicep/Tricep (matching screen.png)
+    for (let i = 0; i < 4; i++) {
+      addPart(
+        shoulderPivot,
+        new THREE.CylinderGeometry(0.138 - i * 0.003, 0.135 - i * 0.003, 0.058, 14),
+        i % 2 === 0 ? COL_BANDAGE_CREAM : COL_BANDAGE_SHADOW,
+        [side * 0.02, -0.15 - i * 0.055, 0],
+        [0.08, 0, (i % 2 === 0 ? 1 : -1) * 0.14],
+        [1, 1, 1],
+        0.012,
+      );
+    }
+
+    // ElbowPivot at exact bottom of UpperArm (y = -0.42) + Spherical Joint Ball so no gap appears when bent!
+    const elbowPivot = new THREE.Group();
+    elbowPivot.position.set(side * 0.02, -0.42, 0);
+    shoulderPivot.add(elbowPivot);
+
+    addPart(
+      elbowPivot,
+      new THREE.SphereGeometry(0.116, 12, 10),
+      COL_SKIN,
+      [0, 0, 0],
+      [0, 0, 0],
+      [1, 1, 1],
+      0.014,
+    );
+
+    // LowerArm (Forearm + Dark Armored Shinobi Gauntlet / Bracer + Straps)
+    addPart(
+      elbowPivot,
+      new THREE.CylinderGeometry(0.126, 0.108, 0.38, 14),
+      COL_GI_CHARCOAL,
+      [0, -0.20, 0],
+      [0, 0, 0],
+      [1, 1, 1],
+      0.02,
+    );
+    // Raised Armored Outer Forearm Bracer Plate
+    addPart(
+      elbowPivot,
+      new THREE.BoxGeometry(0.08, 0.34, 0.18),
+      COL_BRACER_ARMOR,
+      [side * 0.09, -0.20, 0],
+      [0, 0, 0],
+      [1, 1, 1],
+      0.016,
+    );
+    // Dual Bracer Leather Straps
+    for (const sy of [-0.11, -0.29]) {
+      addPart(
+        elbowPivot,
+        new THREE.CylinderGeometry(0.134, 0.128, 0.045, 14),
+        COL_GI_DARK,
+        [0, sy, 0],
+        [0, 0, 0],
+        [1, 1, 1],
+        0.01,
+      );
+    }
+
+    // HandPivot (Wrist at bottom of LowerArm, y = -0.40) + Fingerless Shinobi Glove & Fingers
+    const handPivot = new THREE.Group();
+    handPivot.position.set(0, -0.40, 0);
+    elbowPivot.add(handPivot);
+
+    // Wrist Joint Sphere
+    addPart(
+      handPivot,
+      new THREE.SphereGeometry(0.095, 10, 8),
+      COL_GI_DARK,
+      [0, 0, 0],
+      [0, 0, 0],
+      [1, 1, 1],
+      0,
+    );
+    // Fingerless Shinobi Back-of-Hand Guard
+    addPart(
+      handPivot,
+      new THREE.BoxGeometry(0.16, 0.15, 0.18),
+      COL_BRACER_ARMOR,
+      [0, -0.08, 0],
+      [0, 0, 0],
+      [1, 1, 1],
+      0.016,
+    );
+    // Exposed Skin Fingers & Thumb (matching screen.png)
+    addPart(
+      handPivot,
+      new THREE.BoxGeometry(0.14, 0.09, 0.15),
+      COL_SKIN,
+      [0, -0.18, 0],
+      [0, 0, 0],
+      [1, 1, 1],
+      0.014,
+    );
+    addPart(
+      handPivot,
+      new THREE.BoxGeometry(0.06, 0.10, 0.07),
+      COL_SKIN,
+      [-side * 0.09, -0.12, 0.07],
+      [0.35, 0, side * 0.28],
+      [1, 1, 1],
+      0.012,
+    );
+
+    return { shoulderPivot, elbowPivot, handPivot };
+  };
+
+  const rightArmR15 = buildArmR15(-1); // Anatomical Right Arm (x < 0)
+  const leftArmR15 = buildArmR15(1);   // Anatomical Left Arm (x > 0)
+
+  // Unsheathed Melee Katana in Right Hand (visible during unarmed melee slash combo!)
+  const drawnKatanaGroup = new THREE.Group();
+  drawnKatanaGroup.position.set(0, -0.12, 0.08);
+  drawnKatanaGroup.rotation.set(Math.PI * 0.42, 0, 0);
+  drawnKatanaGroup.visible = false;
+  rightArmR15.handPivot.add(drawnKatanaGroup);
+
+  addPart(
+    drawnKatanaGroup,
+    new THREE.CylinderGeometry(0.034, 0.032, 0.34, 10),
+    COL_GI_DARK,
+    [0, -0.06, 0],
+    [0, 0, 0],
+    [1, 1, 0.8],
+    0.014,
+  );
+  addPart(
+    drawnKatanaGroup,
+    new THREE.CylinderGeometry(0.09, 0.09, 0.03, 12),
+    COL_BRACER_ARMOR,
+    [0, 0.12, 0],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.014,
+  );
+  // Gleaming Steel Katana Blade with Cyan/Crimson Energy Edge
+  addPart(
+    drawnKatanaGroup,
+    new THREE.BoxGeometry(0.026, 1.18, 0.075),
+    '#e2e8f0',
+    [0, 0.72, 0],
+    [0, 0, 0],
+    [1, 1, 1],
+    0.016,
+  );
+  const bladeTrail = new THREE.Mesh(
+    new THREE.BoxGeometry(0.014, 1.16, 0.095),
+    new THREE.MeshBasicMaterial({ color: COL_EYE_GLOW, transparent: true, opacity: 0.72 }),
+  );
+  bladeTrail.position.set(0, 0.72, 0.02);
+  drawnKatanaGroup.add(bladeTrail);
+
+  // ==========================================================================
+  // 5. 3-SEGMENT LEGS (HipPivot -> UpperLeg -> KneePivot -> LowerLeg -> Foot)
+  // ==========================================================================
+  const buildLegR15 = (side: -1 | 1) => {
+    // side = -1 is Anatomical RIGHT Leg; side = +1 is Anatomical LEFT Leg
+    const hipPivot = new THREE.Group();
+    hipPivot.position.set(side * 0.22, -0.02, 0);
+    lowerTorsoPivot.add(hipPivot);
+
+    if (!isSeatedRider) {
+      // Hip Joint Sphere
+      addPart(
+        hipPivot,
+        new THREE.SphereGeometry(0.155, 12, 10),
+        COL_GI_CHARCOAL,
+        [0, 0, 0],
+        [0, 0, 0],
+        [1, 1, 1],
+        0,
+      );
+      // UpperLeg (Baggy Shinobi Trousers Thigh, y = 0 to -0.52)
+      addPart(
+        hipPivot,
+        new THREE.CylinderGeometry(0.175, 0.195, 0.48, 14),
+        COL_GI_CHARCOAL,
+        [0, -0.25, 0],
+        [0, 0, 0],
+        [1, 1, 1.04],
+        0.022,
+      );
+      // Baggy Lower Thigh Flare above Knee (matching screen.png silhouette)
+      addPart(
+        hipPivot,
+        new THREE.SphereGeometry(0.195, 12, 10),
+        COL_GI_CHARCOAL,
+        [0, -0.44, 0],
+        [0, 0, 0],
+        [1.04, 0.65, 1.04],
+        0.018,
+      );
+    }
+
+    // KneePivot at exact bottom of UpperLeg (y = -0.52) + Spherical Knee Joint Ball!
+    const kneePivot = new THREE.Group();
+    kneePivot.position.set(0, -0.52, 0);
+    hipPivot.add(kneePivot);
+
+    if (!isSeatedRider) {
+      addPart(
+        kneePivot,
+        new THREE.SphereGeometry(0.138, 12, 10),
+        COL_GI_DARK,
+        [0, 0, 0],
+        [0, 0, 0],
+        [1, 1, 1],
+        0.014,
+      );
+      // LowerLeg (Shin with Criss-Cross Shinobi Bandage Puttees, y = 0 to -0.48)
+      addPart(
+        kneePivot,
+        new THREE.CylinderGeometry(0.138, 0.118, 0.44, 14),
+        COL_LEG_WRAP,
+        [0, -0.23, 0],
+        [0, 0, 0],
+        [1, 1, 1],
+        0.02,
+      );
+      for (let i = 0; i < 5; i++) {
+        addPart(
+          kneePivot,
+          new THREE.CylinderGeometry(0.144 - i * 0.003, 0.140 - i * 0.003, 0.052, 14),
+          i % 2 === 0 ? COL_STRAP_TAUPE : COL_GI_DARK,
+          [0, -0.08 - i * 0.075, 0],
+          [0.06, 0, (i % 2 === 0 ? 1 : -1) * 0.16],
+          [1, 1, 1],
+          0.012,
+        );
+      }
+    }
+
+    // FootPivot at exact bottom of LowerLeg (y = -0.48) -> Ground contact at y = -0.16 (1.18 - 0.02 - 0.52 - 0.48 - 0.16 = 0.00)
+    const footPivot = new THREE.Group();
+    footPivot.position.set(0, -0.48, 0);
+    kneePivot.add(footPivot);
+
+    if (!isSeatedRider) {
+      // Tactical Ninja Split-Toe Tabi Boot + Rubber Sole & Instep Strap
+      addPart(
+        footPivot,
+        new THREE.BoxGeometry(0.28, 0.14, 0.48),
+        COL_GI_CHARCOAL,
+        [0, -0.07, 0.08],
+        [0, 0, 0],
+        [1, 1, 1],
+        0.02,
+      );
+      // Instep Armor Strap
+      addPart(
+        footPivot,
+        new THREE.BoxGeometry(0.295, 0.07, 0.16),
+        COL_BRACER_ARMOR,
+        [0, -0.05, 0.06],
+        [0.22, 0, 0],
+        [1, 1, 1],
+        0.014,
+      );
+      // Split-Toe Cleft Seam on Front of Tabi Boot (matching screen.png Front T-Pose)
+      addPart(
+        footPivot,
+        new THREE.BoxGeometry(0.032, 0.12, 0.14),
+        COL_GI_DARK,
+        [0, -0.07, 0.27],
+        [0, 0, 0],
+        [1, 1, 1],
+        0,
+      );
+      // Dark Rubber Outsole
+      addPart(
+        footPivot,
+        new THREE.BoxGeometry(0.30, 0.04, 0.50),
+        '#14171f',
+        [0, -0.14, 0.08],
+        [0, 0, 0],
+        [1, 1, 1],
+        0.014,
+      );
+    }
+
+    return { hipPivot, kneePivot, footPivot };
+  };
+
+  const rightLegR15 = buildLegR15(-1);
+  const leftLegR15 = buildLegR15(1);
+
+  // ==========================================================================
+  // 6. TACTICAL WEAPON RIG GROUP (Mounted on UpperTorso so weapons track torso twist!)
+  // ==========================================================================
+  const weaponRigGroup = new THREE.Group();
+  weaponRigGroup.position.set(-0.18, 0.36, 0.56);
+  upperTorsoPivot.add(weaponRigGroup);
+
+  const pistolGroup = buildProceduralLyoPistol(addPart);
+  pistolGroup.scale.setScalar(1.32);
+  weaponRigGroup.add(pistolGroup);
+
+  const rifleGroup = buildProceduralLyoAssaultRifle(addPart);
+  rifleGroup.scale.setScalar(1.18);
+  weaponRigGroup.add(rifleGroup);
+
+  const { bazookaGroup, bazookaFrontFlash, bazookaBackblastGroup } =
+    buildProceduralLyoRocketLauncher(addPart);
+  bazookaGroup.scale.setScalar(1.15);
+  weaponRigGroup.add(bazookaGroup);
+
+  const laserGroup = buildProceduralLg88LaserRifle(addPart);
+  laserGroup.scale.setScalar(1.15);
+  laserGroup.visible = false;
+  weaponRigGroup.add(laserGroup);
+
+  const gatlingGroup = buildProceduralTitan6GatlingGun(addPart);
+  gatlingGroup.scale.setScalar(1.15);
+  gatlingGroup.visible = false;
+  weaponRigGroup.add(gatlingGroup);
+
+  bakeStaticGroupMeshes(pistolGroup, { minShadowCasterSpan: 0.3 });
+  bakeStaticGroupMeshes(rifleGroup, { minShadowCasterSpan: 0.3 });
+  bakeStaticGroupMeshes(laserGroup, { minShadowCasterSpan: 0.3 });
+  bakeStaticGroupMeshes(gatlingGroup, { minShadowCasterSpan: 0.3 });
+  bakeStaticGroupMeshes(bazookaGroup, {
+    excludeObjects: new Set<THREE.Object3D>([bazookaFrontFlash, bazookaBackblastGroup]),
+    minShadowCasterSpan: 0.3,
+  });
+
+  // Bake static R15 body/limb/head sub-groups to cut per-character draw calls from ~204 down to ~14
+  // while preserving all animated joint pivots, headMesh hit-flash material, and katana groups.
+  bakeStaticGroupMeshes(drawnKatanaGroup, { minShadowCasterSpan: 0.3 });
+  bakeStaticGroupMeshes(rightArmR15.shoulderPivot, {
+    excludeObjects: new Set<THREE.Object3D>([drawnKatanaGroup]),
+    minShadowCasterSpan: 0.3,
+  });
+  bakeStaticGroupMeshes(leftArmR15.shoulderPivot, { minShadowCasterSpan: 0.3 });
+  if (!isSeatedRider) {
+    bakeStaticGroupMeshes(rightLegR15.hipPivot, { minShadowCasterSpan: 0.3 });
+    bakeStaticGroupMeshes(leftLegR15.hipPivot, { minShadowCasterSpan: 0.3 });
+  }
+  bakeStaticGroupMeshes(headPivot, {
+    excludeObjects: new Set<THREE.Object3D>([headMesh]),
+    minShadowCasterSpan: 0.3,
+  });
+  bakeStaticGroupMeshes(backRightKatanaHilt, { minShadowCasterSpan: 0.3 });
+  bakeStaticGroupMeshes(bodyGroup, {
+    excludeObjects: new Set<THREE.Object3D>([
+      headPivot,
+      rightArmR15.shoulderPivot,
+      leftArmR15.shoulderPivot,
+      rightLegR15.hipPivot,
+      leftLegR15.hipPivot,
+      weaponRigGroup,
+      backRightKatanaHilt,
+    ]),
+    minShadowCasterSpan: 0.3,
+  });
+
+  const weaponMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.01, 0.01, 0.01),
+    new THREE.MeshBasicMaterial({ visible: false }),
+  );
+  weaponRigGroup.add(weaponMesh);
+
+  const rig: RobloxBuddyRig = {
+    headMesh,
+    leftArmPivot: rightArmR15.shoulderPivot,
+    rightArmPivot: leftArmR15.shoulderPivot,
+    leftLegPivot: leftLegR15.hipPivot,
+    rightLegPivot: rightLegR15.hipPivot,
+    weaponMesh,
+    weaponRigGroup,
+    pistolGroup,
+    rifleGroup,
+    bazookaGroup,
+    laserGroup,
+    gatlingGroup,
     bazookaFrontFlash,
     bazookaBackblastGroup,
   };
@@ -10270,7 +13098,9 @@ export function populateRealLyoDumpTruckFromGlb(
   });
 
   Object.defineProperty(bodyGroup, '__syncLyoDumpTruckCargo', {
-    value: (storedCrates: ReadonlyArray<'red' | 'super' | 'legend'>) => {
+    value: (
+      storedCrates: ReadonlyArray<'red' | 'super' | 'legend' | 'silver_metallic' | 'gold_metallic'>,
+    ) => {
       for (let i = 0; i < 4; i++) {
         const slotGrp = cargoSlotMeshes[i];
         const kind = storedCrates[i];
@@ -10314,11 +13144,13 @@ export function stepLyoDumpTruckAnimation(
 
 export function syncLyoDumpTruckCargoVisuals(
   bodyGroup: THREE.Group,
-  storedCrates: ReadonlyArray<'red' | 'super' | 'legend'>,
+  storedCrates: ReadonlyArray<'red' | 'super' | 'legend' | 'silver_metallic' | 'gold_metallic'>,
 ): void {
   const fn = (
     bodyGroup as unknown as {
-      __syncLyoDumpTruckCargo?: (crates: ReadonlyArray<'red' | 'super' | 'legend'>) => void;
+      __syncLyoDumpTruckCargo?: (
+        crates: ReadonlyArray<'red' | 'super' | 'legend' | 'silver_metallic' | 'gold_metallic'>,
+      ) => void;
     }
   ).__syncLyoDumpTruckCargo;
   if (fn) fn(storedCrates);
@@ -14072,6 +16904,8 @@ export function buildMilitaryBaseMasterplan(
     skinAccentMat: THREE.MeshBasicMaterial;
     radarNode: THREE.Object3D | undefined;
     turbineNode: THREE.Object3D | undefined;
+    lv3DishNode: THREE.Object3D | undefined;
+    lv3PlanarNode: THREE.Object3D | undefined;
     slideLv1Left: THREE.Group;
     slideLv1Right: THREE.Group;
     slideLv2Left: THREE.Group;
@@ -14091,6 +16925,7 @@ export function buildMilitaryBaseMasterplan(
   const charMat = new THREE.MeshBasicMaterial({ color: 0x1f1d1b });
 
   const plotControllers: CommanderPlotVisualController[] = [];
+  const gardenTreeHolders: Array<{ holder: THREE.Group; isPurple: boolean; scale: number }> = [];
 
   for (let pIdx = 0; pIdx < PLOT_CENTERS_Z.length; pIdx++) {
     const plotZ = PLOT_CENTERS_Z[pIdx];
@@ -14759,65 +17594,77 @@ export function buildMilitaryBaseMasterplan(
     const tier2Gates = buildPerimeterFenceTier(fenceLv2Group, 2);
     const tier3Gates = buildPerimeterFenceTier(fenceLv3Group, 3);
 
-    // --- C. Buildable Helipad at Left of Stacking Pad (lx = +10.2, relZ = -5.8) ---
+    // --- C. Buildable Helipad Opposite Crate Pad (lx = +6.8, relZ = -5.6, facing RIGHT +relZ) ---
     const helipadBlueprintGroup = new THREE.Group();
-    helipadBlueprintGroup.position.set(10.2, 0.04, -5.8);
+    helipadBlueprintGroup.position.set(6.8, 0.04, -5.6);
     plotRoot.add(helipadBlueprintGroup);
-    const heliBpRing = new THREE.Mesh(new THREE.RingGeometry(2.05, 2.28, 24), blueprintMat);
+    const heliBpRing = new THREE.Mesh(new THREE.RingGeometry(1.95, 2.18, 24), blueprintMat);
     heliBpRing.rotation.x = -Math.PI / 2;
     helipadBlueprintGroup.add(heliBpRing);
 
     const helipadBuiltGroup = new THREE.Group();
-    helipadBuiltGroup.position.set(10.2, 0, -5.8);
+    helipadBuiltGroup.position.set(6.8, 0, -5.6);
     helipadBuiltGroup.visible = false;
     plotRoot.add(helipadBuiltGroup);
-    addBasePart(helipadBuiltGroup, new THREE.BoxGeometry(5.0, 0.16, 5.0), COL_CONCRETE_DARK, [0, 0.08, 0], [0, 0, 0], [1, 1, 1], 0.022, undefined, false);
-    addBasePart(helipadBuiltGroup, new THREE.CylinderGeometry(2.15, 2.25, 0.06, 24), COL_STEEL, [0, 0.18, 0], [0, 0, 0], [1, 1, 1], 0.016, undefined, false);
-    const hRing = new THREE.Mesh(new THREE.RingGeometry(1.65, 1.92, 24), new THREE.MeshBasicMaterial({ color: new THREE.Color(COL_GOLD), side: THREE.DoubleSide }));
+    addBasePart(helipadBuiltGroup, new THREE.BoxGeometry(4.6, 0.14, 4.6), COL_CONCRETE_DARK, [0, 0.07, 0], [0, 0, 0], [1, 1, 1], 0.022, undefined, false);
+    addBasePart(helipadBuiltGroup, new THREE.CylinderGeometry(2.0, 2.1, 0.06, 24), COL_STEEL, [0, 0.16, 0], [0, 0, 0], [1, 1, 1], 0.016, undefined, false);
+    const hRing = new THREE.Mesh(new THREE.RingGeometry(1.55, 1.82, 24), new THREE.MeshBasicMaterial({ color: new THREE.Color(COL_GOLD), side: THREE.DoubleSide }));
     hRing.rotation.x = -Math.PI / 2;
-    hRing.position.set(0, 0.22, 0);
+    hRing.position.set(0, 0.20, 0);
     helipadBuiltGroup.add(hRing);
-    for (const hx of [-0.55, 0.55]) {
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.04, 1.65), hWhiteMat);
-      bar.position.set(hx, 0.22, 0);
+    // 'H' letter oriented facing RIGHT (+relZ, towards central driveway & Kiosk)
+    for (const hx of [-0.52, 0.52]) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(1.50, 0.04, 0.28), hWhiteMat);
+      bar.position.set(0, 0.20, hx);
       helipadBuiltGroup.add(bar);
     }
-    const hCross = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.04, 0.30), hWhiteMat);
-    hCross.position.set(0, 0.22, 0);
+    const hCross = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.04, 1.04), hWhiteMat);
+    hCross.position.set(0, 0.20, 0);
     helipadBuiltGroup.add(hCross);
+    // Directional exit chevron pointing RIGHT (+relZ)
+    const heliExitArrow = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.45, 3), new THREE.MeshBasicMaterial({ color: new THREE.Color(COL_GOLD) }));
+    heliExitArrow.rotation.x = Math.PI / 2;
+    heliExitArrow.position.set(0, 0.20, 2.02);
+    helipadBuiltGroup.add(heliExitArrow);
     bakeStaticGroupMeshes(helipadBuiltGroup, { minShadowCasterSpan: 0.65 });
 
-    // --- D. Buildable Vehicle Parking Bay right next to Helipad Circle (lx = +10.2, relZ = 0.0) ---
+    // --- D. Roofless Open-Air Vehicle Parking Bay Opposite Kiosk (lx = +13.8, relZ = -5.6, facing RIGHT +relZ) ---
     const parkingBlueprintGroup = new THREE.Group();
-    parkingBlueprintGroup.position.set(10.2, 0.04, 0.0);
+    parkingBlueprintGroup.position.set(13.8, 0.04, -5.6);
     plotRoot.add(parkingBlueprintGroup);
-    const parkBpOutline = new THREE.Mesh(new THREE.RingGeometry(2.15, 2.38, 4), blueprintMat);
+    const parkBpOutline = new THREE.Mesh(new THREE.RingGeometry(2.05, 2.28, 4), blueprintMat);
     parkBpOutline.rotation.x = -Math.PI / 2;
     parkBpOutline.rotation.z = Math.PI / 4;
     parkingBlueprintGroup.add(parkBpOutline);
 
     const parkingBuiltGroup = new THREE.Group();
-    parkingBuiltGroup.position.set(10.2, 0, 0.0);
+    parkingBuiltGroup.position.set(13.8, 0, -5.6);
     parkingBuiltGroup.visible = false;
     plotRoot.add(parkingBuiltGroup);
-    addBasePart(parkingBuiltGroup, new THREE.BoxGeometry(6.2, 0.14, 4.8), COL_CONCRETE_DARK, [0, 0.07, 0], [0, 0, 0], [1, 1, 1], 0.02, undefined, false);
-    for (const stallZ of [-2.1, 2.1]) {
-      const stallLine = new THREE.Mesh(new THREE.PlaneGeometry(5.4, 0.18), roadDashMat);
+    // Open-air (roofless) concrete vehicle pad (4.6m wide along lx, 5.6m long along relZ facing RIGHT +relZ)
+    addBasePart(parkingBuiltGroup, new THREE.BoxGeometry(4.6, 0.12, 5.6), COL_CONCRETE_DARK, [0, 0.06, 0], [0, 0, 0], [1, 1, 1], 0.02, undefined, false);
+    // Left & Right yellow stall lines running along relZ toward the +relZ exit
+    for (const stallX of [-2.05, 2.05]) {
+      const stallLine = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 5.0), roadDashMat);
       stallLine.rotation.x = -Math.PI / 2;
-      stallLine.position.set(0, 0.15, stallZ);
+      stallLine.position.set(stallX, 0.13, 0);
       parkingBuiltGroup.add(stallLine);
     }
-    // Parking Canopy Roof & Support Struts + Wheel Chock + Fuel Drums
-    for (const [px, pz] of [
-      [-2.6, -2.0],
-      [-2.6, 2.0],
-      [2.6, -2.0],
-      [2.6, 2.0],
-    ] as [number, number][]) {
-      addBasePart(parkingBuiltGroup, new THREE.CylinderGeometry(0.08, 0.08, 2.8, 8), COL_STEEL, [px, 1.4, pz], [0, 0, 0], [1, 1, 1], 0.012, undefined, false);
-    }
-    addBasePart(parkingBuiltGroup, new THREE.BoxGeometry(6.0, 0.16, 4.6), COL_OLIVE_ROOF, [0, 2.85, 0], [0, 0, 0.08], [1, 1, 1], 0.02, barracksRoofTex, false);
-    addBasePart(parkingBuiltGroup, new THREE.CylinderGeometry(0.26, 0.26, 0.78, 10), COL_FUEL_RUST, [-2.4, 0.52, -1.4], [0, 0, 0], [1, 1, 1], 0.014, undefined, false);
+    // Rear yellow boundary line + low wheel-stop curb at -relZ (back of bay near left fence)
+    const rearStallLine = new THREE.Mesh(new THREE.PlaneGeometry(4.28, 0.18), roadDashMat);
+    rearStallLine.rotation.x = -Math.PI / 2;
+    rearStallLine.position.set(0, 0.13, -2.5);
+    parkingBuiltGroup.add(rearStallLine);
+    addBasePart(parkingBuiltGroup, new THREE.BoxGeometry(3.0, 0.16, 0.24), COL_STEEL, [0, 0.16, -2.18], [0, 0, 0], [1, 1, 1], 0.012, undefined, false);
+    // Forward exit arrow on floor pointing RIGHT (+relZ, directly across toward Kiosk & exit driveway)
+    const bayExitStem = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 1.1), roadDashMat);
+    bayExitStem.rotation.x = -Math.PI / 2;
+    bayExitStem.position.set(0, 0.13, 1.65);
+    parkingBuiltGroup.add(bayExitStem);
+    const bayExitHead = new THREE.Mesh(new THREE.ConeGeometry(0.38, 0.52, 3), roadDashMat);
+    bayExitHead.rotation.x = Math.PI / 2;
+    bayExitHead.position.set(0, 0.13, 2.32);
+    parkingBuiltGroup.add(bayExitHead);
     bakeStaticGroupMeshes(parkingBuiltGroup, { minShadowCasterSpan: 0.65 });
 
     // --- E. 4 Customizable Garden Landscaping Presets at Plot Corners ---
@@ -14833,12 +17680,50 @@ export function buildMilitaryBaseMasterplan(
       gGrp.name = `Plot_${pIdx}_Garden_${presetId}`;
       gGrp.visible = presetId === 'sakura_grove';
       plotRoot.add(gGrp);
-      for (const [gx, gz] of gardenCorners) {
+      const gardenExcludeSet = new Set<THREE.Object3D>();
+      for (let cIdx = 0; cIdx < gardenCorners.length; cIdx++) {
+        const [gx, gz] = gardenCorners[cIdx];
         if (presetId === 'sakura_grove' || presetId === 'golden_park') {
-          const foliageCol = presetId === 'sakura_grove' ? '#f472b6' : '#facc15';
-          addBasePart(gGrp, new THREE.CylinderGeometry(0.75, 0.85, 0.28, 12), COL_CONCRETE, [gx, 0.14, gz], [0, 0, 0], [1, 1, 1], 0.015, undefined, false);
-          addBasePart(gGrp, new THREE.CylinderGeometry(0.16, 0.22, 1.45, 8), '#5c4033', [gx, 0.85, gz], [0, 0, 0], [1, 1, 1], 0.012, undefined, false);
-          addBasePart(gGrp, new THREE.IcosahedronGeometry(0.95, 1), foliageCol, [gx, 1.95, gz], [0, 0, 0], [1.1, 0.85, 1.1], 0.018, undefined, false);
+          const isSakura = presetId === 'sakura_grove';
+
+          // 1. Raised Japanese Cedar & Granite Garden Planter Box (Kotak Pot Taman Sudut Kayu Cedar & Granit)
+          addBasePart(gGrp, new THREE.BoxGeometry(2.32, 0.08, 2.12), COL_CONCRETE_DARK, [gx, 0.04, gz], [0, 0, 0], [1, 1, 1], 0.014, undefined, false);
+          addBasePart(gGrp, new THREE.BoxGeometry(2.32, 0.24, 0.16), '#8c532b', [gx, 0.16, gz - 0.98], [0, 0, 0], [1, 1, 1], 0.012, undefined, false);
+          addBasePart(gGrp, new THREE.BoxGeometry(2.32, 0.24, 0.16), '#8c532b', [gx, 0.16, gz + 0.98], [0, 0, 0], [1, 1, 1], 0.012, undefined, false);
+          addBasePart(gGrp, new THREE.BoxGeometry(0.16, 0.24, 1.80), '#8c532b', [gx - 1.08, 0.16, gz], [0, 0, 0], [1, 1, 1], 0.012, undefined, false);
+          addBasePart(gGrp, new THREE.BoxGeometry(0.16, 0.24, 1.80), '#8c532b', [gx + 1.08, 0.16, gz], [0, 0, 0], [1, 1, 1], 0.012, undefined, false);
+          // Dark Fertile Soil Bed
+          addBasePart(gGrp, new THREE.BoxGeometry(2.00, 0.06, 1.80), '#2d221b', [gx, 0.22, gz], [0, 0, 0], [1, 1, 1], 0.01, undefined, false);
+
+          // 2. Real Lyo Tree Trunk & Leaf-Card Cluster Canopy (cachedTreeMaterials #a369ff->#ff75d8 / #2cb84b->#ffd23f + windUniforms, scale 0.48)
+          const treeHolder = new THREE.Group();
+          treeHolder.name = `Plot_${pIdx}_GardenTree_${presetId}_${cIdx}`;
+          treeHolder.position.set(gx, 0.22, gz);
+          treeHolder.rotation.y = ((pIdx * 1.3 + cIdx * 1.57) % (Math.PI * 2));
+          gGrp.add(treeHolder);
+          gardenExcludeSet.add(treeHolder);
+
+          const treeScale = 0.48;
+          populateRealLyoTreeFromGlb(
+            treeHolder,
+            cachedLoadedLyoAssets
+              ? isSakura
+                ? cachedLoadedLyoAssets.tree1bGltf.scene
+                : cachedLoadedLyoAssets.tree1aGltf.scene
+              : null,
+            isSakura,
+            cachedLoadedLyoAssets
+              ? cachedLoadedLyoAssets.treeFoliageTex
+              : getSharedFallbackFoliageMaskTexture(),
+            windUniforms,
+            isSoftwareGl,
+            treeScale,
+          );
+          gardenTreeHolders.push({
+            holder: treeHolder,
+            isPurple: isSakura,
+            scale: treeScale,
+          });
         } else if (presetId === 'zen_rock') {
           addBasePart(gGrp, new THREE.CylinderGeometry(0.92, 1.02, 0.22, 12), '#d6d3d1', [gx, 0.11, gz], [0, 0, 0], [1, 1, 1], 0.015, undefined, false);
           addBasePart(gGrp, new THREE.DodecahedronGeometry(0.58, 0), '#78716c', [gx - 0.18, 0.52, gz], [0.2, 0.4, 0], [1, 1.25, 0.9], 0.016, undefined, false);
@@ -14847,7 +17732,10 @@ export function buildMilitaryBaseMasterplan(
           addSandbagWallSegment(gGrp, gx, gz, Math.PI / 4, 3, 2);
         }
       }
-      bakeStaticGroupMeshes(gGrp, { minShadowCasterSpan: 0.65 });
+      bakeStaticGroupMeshes(gGrp, {
+        excludeObjects: gardenExcludeSet,
+        minShadowCasterSpan: 0.65,
+      });
       gardenGroups[presetId] = gGrp;
     }
 
@@ -14868,6 +17756,8 @@ export function buildMilitaryBaseMasterplan(
       skinAccentMat,
       radarNode: lv2Building.getObjectByName('HQ_RotatingRadarDish'),
       turbineNode: lv1Building.getObjectByName('Barracks_VentTurbine'),
+      lv3DishNode: lv3Building.getObjectByName('LV3_SatelliteDish'),
+      lv3PlanarNode: lv3Building.getObjectByName('LV3_PlanarRadar'),
       slideLv1Left: tier1Gates.slideLeft,
       slideLv1Right: tier1Gates.slideRight,
       slideLv2Left: tier2Gates.slideLeft,
@@ -14886,6 +17776,13 @@ export function buildMilitaryBaseMasterplan(
 
   Object.defineProperty(baseGroup, '__plotControllers', {
     value: plotControllers,
+    configurable: true,
+    writable: true,
+    enumerable: false,
+  });
+
+  Object.defineProperty(baseGroup, '__gardenTreeHolders', {
+    value: gardenTreeHolders,
     configurable: true,
     writable: true,
     enumerable: false,
@@ -14924,10 +17821,8 @@ export function buildMilitaryBaseMasterplan(
         const pc = plotControllers[pi];
         if (pc.radarNode) pc.radarNode.rotation.y += safeDt * 1.35;
         if (pc.turbineNode) pc.turbineNode.rotation.y += safeDt * 4.2;
-        const lv3Dish = pc.lv3Building.getObjectByName('LV3_SatelliteDish');
-        const lv3Planar = pc.lv3Building.getObjectByName('LV3_PlanarRadar');
-        if (lv3Dish) lv3Dish.rotation.y += safeDt * 1.35;
-        if (lv3Planar) lv3Planar.rotation.y -= safeDt * 1.85;
+        if (pc.lv3DishNode) pc.lv3DishNode.rotation.y += safeDt * 1.35;
+        if (pc.lv3PlanarNode) pc.lv3PlanarNode.rotation.y -= safeDt * 1.85;
 
         // Per-Plot Automatic Sliding Gate: opens ONLY when this plot's owner or their built character is within 7.5m
         const authDist = perPlotAuthorizedGateDistances
@@ -15089,6 +17984,32 @@ export function stepMilitaryBaseMasterplanAnimation(
     }
   ).__stepMilitaryBaseMasterplan;
   if (fn) fn(dt, minGateDistanceMeters, perPlotAuthorizedGateDistances);
+}
+
+export function populateMilitaryBaseGardenTreesFromGlb(
+  baseGroup: THREE.Group,
+  assets: LoadedLyoAssets,
+  windUniforms: LyoWindUniforms,
+  isSoftwareGl: boolean,
+): void {
+  const holders = (
+    baseGroup as unknown as {
+      __gardenTreeHolders?: Array<{ holder: THREE.Group; isPurple: boolean; scale: number }>;
+    }
+  ).__gardenTreeHolders;
+  if (!holders) return;
+  for (const item of holders) {
+    const glbScene = item.isPurple ? assets.tree1bGltf.scene : assets.tree1aGltf.scene;
+    populateRealLyoTreeFromGlb(
+      item.holder,
+      glbScene,
+      item.isPurple,
+      assets.treeFoliageTex,
+      windUniforms,
+      isSoftwareGl,
+      item.scale,
+    );
+  }
 }
 
 // ============================================================================
@@ -16430,8 +19351,8 @@ export function buildSelfServiceTacticalKioskMesh(
   const COL_KAI_ORANGE = '#ea580c';
   const COL_BLACK_PORT = '#111318';
 
-  const kx = -0.28; // Kiosk column & head center X
-  const sx = 0.30; // Digital Luggage Scale Platform center X
+  const kx = 0.0; // Kiosk column & head centered at local origin (0, 0, 0) so getWorldPosition() is exact
+  const sx = 0.58; // Digital Luggage Scale Platform center X beside the Kiosk
 
   // -------------------------------------------------------------------------
   // 1. KIOSK BASE PLATE (550 x 700 footprint on Left)
@@ -16462,7 +19383,7 @@ export function buildSelfServiceTacticalKioskMesh(
   addKioskPart(new THREE.CylinderGeometry(0.018, 0.018, 0.025, 8), COL_BLACK_PORT, [kx + 0.04, 0.125, -0.142], [Math.PI / 2, 0, 0], [1, 1, 1], 0);
   addKioskPart(new THREE.CylinderGeometry(0.018, 0.018, 0.025, 8), COL_BLACK_PORT, [kx + 0.04, 0.088, -0.142], [Math.PI / 2, 0, 0], [1, 1, 1], 0);
   // Black Power/Data Cable connecting pedestal rear port to Digital Luggage Scale Platform
-  addKioskPart(new THREE.BoxGeometry(0.36, 0.022, 0.024), COL_BLACK_PORT, [0.02, 0.022, -0.13], [0, -0.12, 0], [1, 1, 1], 0);
+  addKioskPart(new THREE.BoxGeometry(0.36, 0.022, 0.024), COL_BLACK_PORT, [kx + 0.30, 0.022, -0.13], [0, -0.12, 0], [1, 1, 1], 0);
 
   // -------------------------------------------------------------------------
   // 3. FRONT ANGLED DIGITAL CONTROL / KEYPAD MODULE ON PEDESTAL COLUMN
@@ -16564,6 +19485,266 @@ export function buildSelfServiceTacticalKioskMesh(
 
   // Immediately merge all static parts of the Kiosk + Digital Luggage Scale Platform into a single mesh!
   bakeStaticGroupMeshes(staticPartsGroup, { minShadowCasterSpan: 0.35 });
+
+  // -------------------------------------------------------------------------
+  // 6. SIDE PLATFORM 3D HOLOGRAM PROJECTOR & ACTIVE BUILD SHAPE TURNTABLE
+  //    ("di kioks bagian sebelah ini, akan muncul hologram bentuk dari senjata,
+  //      squad atau item yang sedang di bangun dan keterangan box yang telah di capai misal 1/5")
+  // -------------------------------------------------------------------------
+  const holoRoot = new THREE.Group();
+  holoRoot.position.set(sx * S, 0.116 * S, 0);
+  kioskRoot.add(holoRoot);
+
+  const holoSolidMat = new THREE.MeshBasicMaterial({
+    color: 0x00d2ff,
+    transparent: true,
+    opacity: 0.36,
+    depthWrite: false,
+  });
+  const holoWireMat = new THREE.MeshBasicMaterial({
+    color: 0x67e8f9,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.92,
+  });
+  const holoRingMat = new THREE.MeshBasicMaterial({
+    color: 0x00d2ff,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.85,
+  });
+  const holoBeamMat = new THREE.MeshBasicMaterial({
+    color: 0x00d2ff,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.14,
+    depthWrite: false,
+  });
+
+  // Glowing Projector Ring & Beam on the Scale Platform Surface
+  const emitterRing = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.39, 24), holoRingMat);
+  emitterRing.rotation.x = -Math.PI / 2;
+  emitterRing.position.y = 0.015;
+  holoRoot.add(emitterRing);
+
+  const emitterCoreDisc = new THREE.Mesh(new THREE.CircleGeometry(0.26, 20), holoBeamMat);
+  emitterCoreDisc.rotation.x = -Math.PI / 2;
+  emitterCoreDisc.position.y = 0.012;
+  holoRoot.add(emitterCoreDisc);
+
+  const emitterBeam = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.42, 0.28, 1.25, 16, 1, true),
+    holoBeamMat,
+  );
+  emitterBeam.position.y = 0.64;
+  holoRoot.add(emitterBeam);
+
+  const holoTurntable = new THREE.Group();
+  holoTurntable.position.set(0, 1.05, 0);
+  holoRoot.add(holoTurntable);
+
+  const addRawHoloPart: AddWeaponPartFn = (
+    parent,
+    geo,
+    _colorHex,
+    pos,
+    rot = [0, 0, 0],
+    scale = [1, 1, 1],
+  ): THREE.Mesh => {
+    const m = new THREE.Mesh(geo, holoSolidMat);
+    m.position.set(pos[0], pos[1], pos[2]);
+    m.rotation.set(rot[0], rot[1], rot[2]);
+    m.scale.set(scale[0], scale[1], scale[2]);
+    parent.add(m);
+    return m;
+  };
+
+  const bakeHoloShapeGroup = (srcGroup: THREE.Object3D, targetScale = 1.0): THREE.Group => {
+    srcGroup.updateMatrixWorld(true);
+    const invRoot = srcGroup.matrixWorld.clone().invert();
+    const geos: THREE.BufferGeometry[] = [];
+    const relMat = new THREE.Matrix4();
+
+    srcGroup.traverse((child) => {
+      if (!(child instanceof THREE.Mesh) || !child.visible) return;
+      let g = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone();
+      for (const attrName of Object.keys(g.attributes)) {
+        if (attrName !== 'position') {
+          g.deleteAttribute(attrName);
+        }
+      }
+      relMat.multiplyMatrices(invRoot, child.matrixWorld);
+      g.applyMatrix4(relMat);
+      geos.push(g);
+    });
+
+    const outGrp = new THREE.Group();
+    if (geos.length === 0) return outGrp;
+    const merged = mergeGeometries(geos, false);
+    if (!merged) return outGrp;
+
+    merged.computeBoundingBox();
+    if (merged.boundingBox) {
+      const center = new THREE.Vector3();
+      merged.boundingBox.getCenter(center);
+      merged.translate(-center.x, -center.y, -center.z);
+    }
+    if (targetScale !== 1.0) {
+      merged.scale(targetScale, targetScale, targetScale);
+    }
+
+    const solidMesh = new THREE.Mesh(merged, holoSolidMat);
+    const wireMesh = new THREE.Mesh(merged, holoWireMat);
+    wireMesh.scale.setScalar(1.015);
+    outGrp.add(solidMesh, wireMesh);
+    outGrp.visible = false;
+    holoTurntable.add(outGrp);
+    return outGrp;
+  };
+
+  // Build 1:1 3D Hologram Shapes for every Kiosk recipe category
+  const pistolSrc = buildProceduralLyoPistol(addRawHoloPart);
+  pistolSrc.rotation.set(-0.18, 0, 0.35);
+
+  const rifleSrc = buildProceduralLyoAssaultRifle(addRawHoloPart);
+  rifleSrc.rotation.set(-0.18, 0, 0.35);
+
+  const { bazookaGroup: bazookaSrc, bazookaFrontFlash, bazookaBackblastGroup } =
+    buildProceduralLyoRocketLauncher(addRawHoloPart);
+  bazookaSrc.remove(bazookaFrontFlash);
+  bazookaSrc.remove(bazookaBackblastGroup);
+  bazookaSrc.rotation.set(-0.18, 0, 0.35);
+
+  const laserSrc = buildProceduralLg88LaserRifle(addRawHoloPart);
+  laserSrc.rotation.set(-0.18, 0, 0.35);
+
+  const gatlingSrc = buildProceduralTitan6GatlingGun(addRawHoloPart);
+  gatlingSrc.rotation.set(-0.18, 0, 0.35);
+
+  // Grenade 3D Shape
+  const grenadeSrc = new THREE.Group();
+  addRawHoloPart(grenadeSrc, new THREE.SphereGeometry(0.24, 10, 8), '#00d2ff', [0, 0, 0], [0, 0, 0], [0.88, 1.18, 0.88]);
+  addRawHoloPart(grenadeSrc, new THREE.CylinderGeometry(0.09, 0.11, 0.14, 8), '#00d2ff', [0, 0.31, 0]);
+  addRawHoloPart(grenadeSrc, new THREE.BoxGeometry(0.06, 0.34, 0.12), '#00d2ff', [0.12, 0.14, 0], [0, 0, -0.22]);
+  addRawHoloPart(grenadeSrc, new THREE.TorusGeometry(0.075, 0.018, 6, 12), '#00d2ff', [-0.08, 0.34, 0]);
+
+  // Land Mine 3D Shape
+  const mineSrc = new THREE.Group();
+  addRawHoloPart(mineSrc, new THREE.CylinderGeometry(0.34, 0.38, 0.12, 14), '#00d2ff', [0, 0, 0]);
+  addRawHoloPart(mineSrc, new THREE.CylinderGeometry(0.20, 0.24, 0.08, 12), '#00d2ff', [0, 0.08, 0]);
+  for (let a = 0; a < 4; a++) {
+    const ang = (a * Math.PI) / 2 + Math.PI / 4;
+    addRawHoloPart(
+      mineSrc,
+      new THREE.BoxGeometry(0.05, 0.09, 0.05),
+      '#00d2ff',
+      [Math.cos(ang) * 0.24, 0.08, Math.sin(ang) * 0.24],
+    );
+  }
+
+  // Cluster Bomb 3D Shape
+  const clusterSrc = new THREE.Group();
+  addRawHoloPart(clusterSrc, new THREE.CylinderGeometry(0.16, 0.16, 0.62, 10), '#00d2ff', [0, 0, 0], [0, 0, Math.PI / 2]);
+  addRawHoloPart(clusterSrc, new THREE.ConeGeometry(0.16, 0.24, 10), '#00d2ff', [0.42, 0, 0], [0, 0, -Math.PI / 2]);
+  addRawHoloPart(clusterSrc, new THREE.BoxGeometry(0.18, 0.44, 0.03), '#00d2ff', [-0.28, 0, 0]);
+  addRawHoloPart(clusterSrc, new THREE.BoxGeometry(0.18, 0.03, 0.44), '#00d2ff', [-0.28, 0, 0]);
+
+  // Skyshield Turret 3D Shape
+  const turretSrc = new THREE.Group();
+  addRawHoloPart(turretSrc, new THREE.CylinderGeometry(0.32, 0.40, 0.20, 8), '#00d2ff', [0, -0.22, 0]);
+  addRawHoloPart(turretSrc, new THREE.BoxGeometry(0.38, 0.28, 0.42), '#00d2ff', [0, 0.02, 0]);
+  addRawHoloPart(turretSrc, new THREE.CylinderGeometry(0.035, 0.035, 0.56, 8), '#00d2ff', [-0.12, 0.04, 0.34], [Math.PI / 2, 0, 0]);
+  addRawHoloPart(turretSrc, new THREE.CylinderGeometry(0.035, 0.035, 0.56, 8), '#00d2ff', [0.12, 0.04, 0.34], [Math.PI / 2, 0, 0]);
+  addRawHoloPart(turretSrc, new THREE.CylinderGeometry(0.16, 0.05, 0.08, 10), '#00d2ff', [0, 0.24, -0.06], [0.45, 0, 0]);
+
+  // Nuclear Launcher 3D Shape
+  const nukeSrc = new THREE.Group();
+  addRawHoloPart(nukeSrc, new THREE.BoxGeometry(0.56, 0.16, 0.56), '#00d2ff', [0, -0.24, 0]);
+  addRawHoloPart(nukeSrc, new THREE.BoxGeometry(0.42, 0.34, 0.58), '#00d2ff', [0, 0.06, 0], [-0.42, 0, 0]);
+  addRawHoloPart(nukeSrc, new THREE.ConeGeometry(0.12, 0.28, 8), '#00d2ff', [0, 0.22, 0.32], [Math.PI / 2 - 0.42, 0, 0]);
+
+  // Buddy Squad Character 3D Shape
+  const buddySrc = new THREE.Group();
+  // Head + Helmet/Visor
+  addRawHoloPart(buddySrc, new THREE.SphereGeometry(0.21, 10, 8), '#00d2ff', [0, 0.36, 0]);
+  addRawHoloPart(buddySrc, new THREE.BoxGeometry(0.30, 0.10, 0.18), '#00d2ff', [0, 0.40, 0.08]);
+  // Torso + Backpack
+  addRawHoloPart(buddySrc, new THREE.BoxGeometry(0.34, 0.38, 0.24), '#00d2ff', [0, 0.0, 0]);
+  addRawHoloPart(buddySrc, new THREE.BoxGeometry(0.24, 0.28, 0.14), '#00d2ff', [0, 0.02, -0.18]);
+  // Arms + Held Weapon
+  addRawHoloPart(buddySrc, new THREE.BoxGeometry(0.11, 0.30, 0.11), '#00d2ff', [-0.24, 0.0, 0.04], [-0.35, 0, 0]);
+  addRawHoloPart(buddySrc, new THREE.BoxGeometry(0.11, 0.30, 0.11), '#00d2ff', [0.24, 0.0, 0.08], [-0.65, 0, 0]);
+  addRawHoloPart(buddySrc, new THREE.BoxGeometry(0.08, 0.10, 0.42), '#00d2ff', [0.24, 0.02, 0.26]);
+  // Legs
+  addRawHoloPart(buddySrc, new THREE.BoxGeometry(0.13, 0.26, 0.14), '#00d2ff', [-0.10, -0.32, 0]);
+  addRawHoloPart(buddySrc, new THREE.BoxGeometry(0.13, 0.26, 0.14), '#00d2ff', [0.10, -0.32, 0]);
+
+  // Tank 3D Shape
+  const tankSrc = new THREE.Group();
+  addRawHoloPart(tankSrc, new THREE.BoxGeometry(0.56, 0.18, 0.78), '#00d2ff', [0, -0.10, 0]);
+  addRawHoloPart(tankSrc, new THREE.BoxGeometry(0.14, 0.18, 0.84), '#00d2ff', [-0.32, -0.12, 0]);
+  addRawHoloPart(tankSrc, new THREE.BoxGeometry(0.14, 0.18, 0.84), '#00d2ff', [0.32, -0.12, 0]);
+  addRawHoloPart(tankSrc, new THREE.BoxGeometry(0.38, 0.18, 0.42), '#00d2ff', [0, 0.08, -0.04]);
+  addRawHoloPart(tankSrc, new THREE.CylinderGeometry(0.045, 0.045, 0.58, 8), '#00d2ff', [0, 0.09, 0.38], [Math.PI / 2, 0, 0]);
+
+  // Plane 3D Shape
+  const planeSrc = new THREE.Group();
+  addRawHoloPart(planeSrc, new THREE.CylinderGeometry(0.09, 0.13, 0.78, 8), '#00d2ff', [0, 0, 0], [Math.PI / 2, 0, 0]);
+  addRawHoloPart(planeSrc, new THREE.ConeGeometry(0.09, 0.26, 8), '#00d2ff', [0, 0, 0.52], [Math.PI / 2, 0, 0]);
+  addRawHoloPart(planeSrc, new THREE.BoxGeometry(0.88, 0.035, 0.28), '#00d2ff', [0, 0, -0.02]);
+  addRawHoloPart(planeSrc, new THREE.BoxGeometry(0.035, 0.22, 0.18), '#00d2ff', [-0.14, 0.11, -0.32]);
+  addRawHoloPart(planeSrc, new THREE.BoxGeometry(0.035, 0.22, 0.18), '#00d2ff', [0.14, 0.11, -0.32]);
+
+  // Dump Truck 3D Shape
+  const truckSrc = new THREE.Group();
+  addRawHoloPart(truckSrc, new THREE.BoxGeometry(0.48, 0.26, 0.28), '#00d2ff', [0, 0.02, 0.26]);
+  addRawHoloPart(truckSrc, new THREE.BoxGeometry(0.52, 0.24, 0.52), '#00d2ff', [0, 0.06, -0.16]);
+  addRawHoloPart(truckSrc, new THREE.BoxGeometry(0.46, 0.10, 0.78), '#00d2ff', [0, -0.10, 0]);
+  for (const [wx, wz] of [
+    [-0.26, 0.24],
+    [0.26, 0.24],
+    [-0.26, -0.24],
+    [0.26, -0.24],
+  ] as [number, number][]) {
+    addRawHoloPart(truckSrc, new THREE.CylinderGeometry(0.11, 0.11, 0.08, 10), '#00d2ff', [wx, -0.16, wz], [0, 0, Math.PI / 2]);
+  }
+
+  // Base HQ Upgrade 3D Shape
+  const upgradeSrc = new THREE.Group();
+  addRawHoloPart(upgradeSrc, new THREE.BoxGeometry(0.56, 0.36, 0.44), '#00d2ff', [0, -0.06, 0]);
+  addRawHoloPart(upgradeSrc, new THREE.BoxGeometry(0.34, 0.22, 0.30), '#00d2ff', [0, 0.22, 0]);
+  addRawHoloPart(upgradeSrc, new THREE.CylinderGeometry(0.14, 0.04, 0.10, 10), '#00d2ff', [0, 0.38, 0], [0.35, 0, 0]);
+
+  const holoModels: Record<KioskSideHologramModelKind, THREE.Group> = {
+    pistol_uzi: bakeHoloShapeGroup(pistolSrc, 1.35),
+    assault_plasma: bakeHoloShapeGroup(rifleSrc, 1.05),
+    bazooka: bakeHoloShapeGroup(bazookaSrc, 0.82),
+    supazooka: bakeHoloShapeGroup(bazookaSrc, 0.94),
+    laser_gun: bakeHoloShapeGroup(laserSrc, 0.96),
+    gatling_mortar: bakeHoloShapeGroup(gatlingSrc, 0.92),
+    hand_grenade: bakeHoloShapeGroup(grenadeSrc, 1.35),
+    land_mine: bakeHoloShapeGroup(mineSrc, 1.35),
+    cluster_bomb: bakeHoloShapeGroup(clusterSrc, 1.25),
+    skyshield_turret: bakeHoloShapeGroup(turretSrc, 1.18),
+    nuclear_launcher: bakeHoloShapeGroup(nukeSrc, 1.18),
+    buddy_unit: bakeHoloShapeGroup(buddySrc, 1.15),
+    tank: bakeHoloShapeGroup(tankSrc, 1.08),
+    plane: bakeHoloShapeGroup(planeSrc, 1.08),
+    truck: bakeHoloShapeGroup(truckSrc, 1.12),
+    upgrade: bakeHoloShapeGroup(upgradeSrc, 1.15),
+  };
+  holoModels.buddy_unit.visible = true;
+
+  kioskRoot.userData.sideHologram = {
+    holoRoot,
+    holoTurntable,
+    holoModels,
+    holoSolidMat,
+    holoWireMat,
+    holoRingMat,
+    holoBeamMat,
+    activeModelKind: 'buddy_unit' as KioskSideHologramModelKind,
+  };
 
   return kioskRoot;
 }

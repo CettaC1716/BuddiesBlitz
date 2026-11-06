@@ -5,8 +5,11 @@ import {
   KioskBaseGoldUpgradeId,
   CrateSlotType,
   WorldCrateKind,
-} from '../game/rules';
-import { HudSnapshot } from '../game/FactoryPlaygroundCanvas';
+  MAX_KIOSK_BUILD_QUEUE,
+  evaluateNuclearLauncherAccess,
+  evaluateClusterBombAccess,
+} from '../game/buddiesBlitzRules';
+import { HudSnapshot } from '../game/BuddiesBlitzArena';
 import { soundEngine } from '../game/audio';
 
 interface TacticalKioskModalProps {
@@ -14,11 +17,13 @@ interface TacticalKioskModalProps {
   onClose: () => void;
   hud: HudSnapshot;
   onSelectRecipe: (recipeId: KioskBuildPriorityRecipeId) => void;
+  onRemoveQueueIndex?: (index: number) => void;
+  onClearQueue?: () => void;
   onUpgradeBase: (upgradeId: KioskBaseGoldUpgradeId) => void;
   onBuyCrateAirdrop: (crateKind: WorldCrateKind) => void;
 }
 
-type KioskPageIndex = 0 | 1 | 2 | 3;
+type KioskPageIndex = 0 | 1 | 2 | 3 | 4 | 5;
 
 type KioskCardIllustrationId =
   | 'ar99_rifle'
@@ -31,9 +36,14 @@ type KioskCardIllustrationId =
   | 't800_cyborg'
   | 'shinobi_infiltrator'
   | 'tactical_veteran'
-  | 'hq_fortification'
-  | 'cr02_super_drop'
-  | 'cr03_legend_drop';
+  | 'hq_super_command'
+  | 'hq_tactical_comms'
+  | 'lg88_laser_rifle'
+  | 'nuclear_launcher'
+  | 'titan6_gatling'
+  | 'hg04_grenade'
+  | 'tm89_mine'
+  | 'cb24_cluster';
 
 interface KioskGridCardItem {
   id: string;
@@ -45,6 +55,7 @@ interface KioskGridCardItem {
   upgradeId?: KioskBaseGoldUpgradeId;
   crateKind?: WorldCrateKind;
   inspectDetail: string;
+  isSilhouetteLocked?: boolean;
 }
 
 function renderShieldCrestSvg(pageIndex: KioskPageIndex) {
@@ -78,14 +89,24 @@ function renderShieldCrestSvg(pageIndex: KioskPageIndex) {
       {/* Inner Shield Face */}
       <path
         d="M48 16 L75 26 L75 49 C75 68 61 81 48 89 C35 81 21 68 21 49 L21 26 Z"
-        fill={pageIndex === 0 || pageIndex === 2 ? '#f4f6f8' : pageIndex === 1 ? '#2e332b' : '#263238'}
+        fill={
+          pageIndex === 0 || pageIndex === 2
+            ? '#f4f6f8'
+            : pageIndex === 1
+            ? '#2e332b'
+            : '#262b30'
+        }
         stroke="#0d0f12"
         strokeWidth="3"
       />
       {/* Subtle Right-Side Inner Shadow */}
       <path
         d="M48 16 L75 26 L75 49 C75 68 61 81 48 89 Z"
-        fill={pageIndex === 0 || pageIndex === 2 ? 'rgba(160,172,184,0.38)' : 'rgba(0,0,0,0.28)'}
+        fill={
+          pageIndex === 0 || pageIndex === 2
+            ? 'rgba(160,172,184,0.38)'
+            : 'rgba(0,0,0,0.28)'
+        }
       />
 
       {pageIndex === 0 && (
@@ -103,7 +124,6 @@ function renderShieldCrestSvg(pageIndex: KioskPageIndex) {
       {pageIndex === 1 && (
         /* Page 1: VEHICLE HANGAR Winged Military Tank Crest (1:1 Image 2) */
         <g stroke="#0d0f12" strokeWidth="2.2" strokeLinejoin="round">
-          {/* Left & Right Stylized Silver Wings */}
           <path
             d="M44 50 L14 36 L19 44 L15 48 L23 53 L19 57 L42 58 Z"
             fill="#cfd6dc"
@@ -112,12 +132,9 @@ function renderShieldCrestSvg(pageIndex: KioskPageIndex) {
             d="M52 50 L82 36 L77 44 L81 48 L73 53 L77 57 L54 58 Z"
             fill="#aab4bd"
           />
-          {/* Tank Turret & Barrel */}
           <rect x="39" y="40" width="18" height="8" rx="2" fill="#768557" />
           <rect x="48" y="42" width="20" height="4" rx="1" fill="#768557" />
-          {/* Tank Hull */}
           <polygon points="31,48 65,48 69,55 27,55" fill="#8ca063" />
-          {/* Caterpillar Tracks */}
           <rect x="29" y="55" width="38" height="8" rx="4" fill="#3a3f45" />
           <circle cx="35" cy="59" r="2" fill="#cfd6dc" />
           <circle cx="43" cy="59" r="2" fill="#cfd6dc" />
@@ -129,45 +146,65 @@ function renderShieldCrestSvg(pageIndex: KioskPageIndex) {
       {pageIndex === 2 && (
         /* Page 2: SQUAD BUILD Tactical Soldier Helmet & Goggles Crest (1:1 Image 3) */
         <g stroke="#0d0f12" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round">
-          {/* Lower Vertical Crosshair Line & Chin Strap */}
           <line x1="48" y1="62" x2="48" y2="85" strokeWidth="2.6" />
           <path d="M33 54 C35 66, 61 66, 63 54" fill="none" strokeWidth="2.6" />
-          {/* Olive Tactical Helmet Dome */}
           <path
             d="M27 48 C26 28, 70 28, 69 48 L67 49 L29 49 Z"
             fill="#6d7453"
           />
-          {/* Helmet Side Ear Guards */}
           <path d="M27 46 L25 53 L31 53 L31 47 Z" fill="#555b40" />
           <path d="M69 46 L71 53 L65 53 L65 47 Z" fill="#555b40" />
-          {/* Front NVG Mount Shroud */}
           <polygon points="48,30 56,37 53,45 43,45 40,37" fill="#555b40" />
           <rect x="45" y="36" width="6" height="6" rx="1" fill="#7a8260" strokeWidth="1.8" />
-          {/* Dark Tactical Goggles */}
           <path
             d="M31 46 L65 46 L63 57 L52 57 L48 53 L44 57 L33 57 Z"
             fill="#262b30"
           />
-          {/* Goggle Lens Glare */}
           <polygon points="53,48 58,48 55,55 50,55" fill="#7c8792" stroke="none" />
         </g>
       )}
 
       {pageIndex === 3 && (
-        /* Page 3: BASE & SUPPLY Fortified Command Star Crest */
+        /* Page 3: BASE UPGRADE Double-Chevron Command Rank Crest (1:1 Reference Image) */
         <g stroke="#0d0f12" strokeWidth="2.4" strokeLinejoin="round">
           <polygon
-            points="48,26 54,41 70,41 57,51 62,67 48,57 34,67 39,51 26,41 42,41"
-            fill="#f5b82e"
+            points="48,26 70,41 70,51 48,37 26,51 26,41"
+            fill="#b8ab83"
           />
-          <rect x="34" y="66" width="28" height="8" rx="1.5" fill="#2bb3b1" />
+          <polygon
+            points="48,26 26,41 26,51 48,37"
+            fill="#d2c69e"
+          />
+          <polygon
+            points="48,43 70,58 70,68 48,54 26,68 26,58"
+            fill="#b8ab83"
+          />
+          <polygon
+            points="48,43 26,58 26,68 48,54"
+            fill="#d2c69e"
+          />
+          <polygon
+            points="48,60 64,70 48,80 32,70"
+            fill="#887e5e"
+          />
+        </g>
+      )}
+
+      {(pageIndex === 4 || pageIndex === 5) && (
+        /* Page 4 & 5: STRATEGIC ORDNANCE & TACTICAL EXPLOSIVES Crest */
+        <g stroke="#0d0f12" strokeWidth="2.2" strokeLinejoin="round">
+          <circle cx="48" cy="51" r="18" fill="#f5b82e" />
+          <path d="M48 51 L38 35 A18 18 0 0 1 58 35 Z" fill="#0d0f12" />
+          <path d="M48 51 L66 52 A18 18 0 0 1 56 67 Z" fill="#0d0f12" />
+          <path d="M48 51 L40 67 A18 18 0 0 1 30 52 Z" fill="#0d0f12" />
+          <circle cx="48" cy="51" r="5.5" fill="#00f5ff" stroke="#0d0f12" strokeWidth="2" />
         </g>
       )}
     </svg>
   );
 }
 
-const KIOSK_SPRITE_IMAGE_PATHS: Partial<Record<KioskCardIllustrationId, string>> = {
+const KIOSK_SPRITE_IMAGE_PATHS: Record<KioskCardIllustrationId, string> = {
   ar99_rifle: '/assets/kiosk/ar99_rifle.png',
   p12_handgun: '/assets/kiosk/p12_handgun.png',
   vx20_bazooka: '/assets/kiosk/vx20_bazooka.png',
@@ -178,6 +215,14 @@ const KIOSK_SPRITE_IMAGE_PATHS: Partial<Record<KioskCardIllustrationId, string>>
   t800_cyborg: '/assets/kiosk/t800_cyborg.png',
   shinobi_infiltrator: '/assets/kiosk/shinobi_infiltrator.png',
   tactical_veteran: '/assets/kiosk/tactical_veteran.png',
+  hq_super_command: '/assets/kiosk/hq_super_command.png',
+  hq_tactical_comms: '/assets/kiosk/hq_tactical_comms.png',
+  lg88_laser_rifle: '/assets/kiosk/lg88_laser_rifle.png',
+  nuclear_launcher: '/assets/kiosk/nuclear_launcher.png',
+  titan6_gatling: '/assets/kiosk/titan6_gatling.png',
+  hg04_grenade: '/assets/kiosk/hg04_grenade.png',
+  tm89_mine: '/assets/kiosk/tm89_mine.png',
+  cb24_cluster: '/assets/kiosk/cb24_cluster.png',
 };
 
 const SQUAD_BUST_ILLUSTRATION_IDS = new Set<KioskCardIllustrationId>([
@@ -187,70 +232,58 @@ const SQUAD_BUST_ILLUSTRATION_IDS = new Set<KioskCardIllustrationId>([
   'tactical_veteran',
 ]);
 
+const BASE_HOUSE_ILLUSTRATION_IDS = new Set<KioskCardIllustrationId>([
+  'hq_super_command',
+  'hq_tactical_comms',
+]);
+
 function renderComicCardIllustration(
   kind: KioskCardIllustrationId,
   altText: string,
-  isLargeTwoCardLayout = false,
+  isSilhouetteLocked = false,
 ) {
   const spriteSrc = KIOSK_SPRITE_IMAGE_PATHS[kind];
-  if (spriteSrc) {
-    const isSquadBust = SQUAD_BUST_ILLUSTRATION_IDS.has(kind);
-    return (
+  const isSquadBust = SQUAD_BUST_ILLUSTRATION_IDS.has(kind);
+  const isBaseHouse = BASE_HOUSE_ILLUSTRATION_IDS.has(kind);
+
+  return (
+    <div
+      className={`relative w-full flex items-center justify-center select-none pointer-events-none ${
+        isSilhouetteLocked ? 'h-[118px] sm:h-[132px]' : ''
+      }`}
+    >
       <img
         src={spriteSrc}
-        alt={altText}
+        alt={isSilhouetteLocked ? 'Surprise Locked Weapon' : altText}
         draggable={false}
         className={`w-full ${
-          isLargeTwoCardLayout
-            ? 'h-[126px] sm:h-[146px] object-contain'
+          isSilhouetteLocked
+            ? 'h-[96px] sm:h-[108px] object-contain brightness-0 contrast-200 drop-shadow-[0_2px_0_rgba(0,0,0,0.35)]'
             : isSquadBust
             ? 'h-[92px] sm:h-[104px] object-contain object-bottom -mb-2.5'
+            : isBaseHouse
+            ? 'h-[82px] sm:h-[92px] object-contain'
             : 'h-[78px] sm:h-[88px] object-contain'
-        } select-none pointer-events-none`}
+        } transition-all duration-300 select-none pointer-events-none`}
       />
-    );
-  }
-
-  switch (kind) {
-    case 'hq_fortification':
-      return (
-        <svg viewBox="0 0 240 96" className="w-full h-[78px] sm:h-[88px] select-none">
-          <g stroke="#0d0f12" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round">
-            {/* Command Fortress Bastion */}
-            <polygon points="48,78 58,34 182,34 192,78" fill="#5c6949" />
-            <rect x="76" y="18" width="88" height="18" rx="2" fill="#394048" />
-            {/* Radar Dish & Neon Bastion Shield Strip */}
-            <rect x="62" y="46" width="116" height="8" fill="#2bb3b1" />
-            <rect x="98" y="58" width="44" height="20" fill="#262b30" />
-            {/* Hazard Stripes on Gate */}
-            <polygon points="42,74 198,74 202,84 38,84" fill="#dfa028" />
-          </g>
-        </svg>
-      );
-
-    case 'cr02_super_drop':
-    case 'cr03_legend_drop':
-    default: {
-      const isLegend = kind === 'cr03_legend_drop';
-      const crateColor = isLegend ? '#f5b82e' : '#2bb3b1';
-      return (
-        <svg viewBox="0 0 240 96" className="w-full h-[78px] sm:h-[88px] select-none">
-          <g stroke="#0d0f12" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round">
-            {/* Parachute Canopy */}
-            <path d="M74 32 C74 6, 166 6, 166 32 Z" fill="#5c6949" />
-            <line x1="82" y1="32" x2="102" y2="48" strokeWidth="2" />
-            <line x1="158" y1="32" x2="138" y2="48" strokeWidth="2" />
-            <line x1="120" y1="32" x2="120" y2="48" strokeWidth="2" />
-            {/* Armored Supply Crate */}
-            <rect x="92" y="46" width="56" height="38" rx="3" fill={crateColor} />
-            <line x1="92" y1="46" x2="148" y2="84" strokeWidth="2.4" />
-            <line x1="148" y1="46" x2="92" y2="84" strokeWidth="2.4" />
-            <rect x="108" y="58" width="24" height="14" rx="2" fill="#323840" />
-          </g>
-        </svg>
-      );
-    }
-  }
+      {isSilhouetteLocked && (
+        <div
+          data-nuclear-silhouette-lock="true"
+          data-silhouette-lock-id={kind}
+          className="absolute inset-0 flex items-center justify-center"
+        >
+          <div className="w-12 h-12 rounded-full bg-[#0d0f12] border-[3px] border-[#f5b82e] shadow-[0_3.5px_0_#0d0f12] flex items-center justify-center">
+            <span
+              className="text-[28px] font-black leading-none text-[#f5b82e]"
+              style={{ fontFamily: "'Space Grotesk', 'Inter', system-ui, sans-serif" }}
+            >
+              ?
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function renderSlotHologramPills(slots: readonly CrateSlotType[]) {
@@ -276,6 +309,8 @@ export const TacticalKioskModal: React.FC<TacticalKioskModalProps> = ({
   onClose,
   hud,
   onSelectRecipe,
+  onRemoveQueueIndex,
+  onClearQueue,
   onUpgradeBase,
   onBuyCrateAirdrop,
 }) => {
@@ -284,14 +319,22 @@ export const TacticalKioskModal: React.FC<TacticalKioskModalProps> = ({
     0: 'ar99_rifle',
     1: 'st01_minitank',
     2: 't800_cyborg',
-    3: 'hq_fortification',
+    3: 'hq_super_command',
+    4: 'lg88_laser_rifle',
+    5: 'tm89_mine',
   });
   const [isInspectOpen, setIsInspectOpen] = useState<boolean>(false);
 
   const bLv = hud.baseBuildingLevel;
   const fLv = hud.baseFenceLevel;
   const comboMaxed = bLv >= 3 && fLv >= 3;
-  const comboCost = bLv === 1 && fLv === 1 ? 1200 : 2500;
+  const superCommandCost = comboMaxed ? 800 : 1200;
+  const commsCost = bLv === 1 ? 750 : bLv === 2 ? 1500 : 500;
+  const nukeAccess = evaluateNuclearLauncherAccess(bLv);
+  const clusterAccess = evaluateClusterBombAccess(
+    bLv,
+    Boolean(hud.controlMode === 'tank' && hud.equippedWeapon.toLowerCase().includes('plane')),
+  );
 
   const pages: Record<
     KioskPageIndex,
@@ -413,40 +456,105 @@ export const TacticalKioskModal: React.FC<TacticalKioskModalProps> = ({
       ],
     },
     3: {
-      headerTitle: 'BASE & SUPPLY',
+      headerTitle: 'BASE UPGRADE',
       headerSubtitle:
-        'Fortify Command Center walls, expand satellite Radar range, or call orbital crate airdrops.',
+        'Upgrade central command facilities, tactical quarters, defense barriers, and operations hubs to higher tiers.',
       cards: [
         {
-          id: 'hq_fortification',
-          title: 'HQ-LV3 BASE FORTIFICATION',
-          tagLine: comboMaxed
-            ? '[COMMAND + FENCE // MAX LV.3]'
-            : `[UPGRADE // ${comboCost} GOLD]`,
-          illustration: 'hq_fortification',
+          id: 'hq_super_command',
+          title: '3-STORY SUPER COMMAND',
+          tagLine: bLv >= 3 ? '[AKTIF // HQ LV.3 TERBUKA]' : '[HQ // STRATEGIC // TIER 3]',
+          illustration: 'hq_super_command',
           actionKind: 'upgrade_base',
-          upgradeId: 'upgrade_base_combo',
-          inspectDetail: `HP Markas: ${hud.baseBuildingHp}/${hud.baseBuildingMaxHp} · Pagar: ${hud.baseFenceHp}/${hud.baseFenceMaxHp} · Radar Lv.${bLv}: ${
+          upgradeId: 'upgrade_super_command_lv3',
+          inspectDetail: `${
+            comboMaxed
+              ? 'MAX LV.3 AKTIF (Nuclear Launcher & Cluster Bomb Terbuka!)'
+              : `Biaya Upgrade Langsung Lv.3: ${superCommandCost} GOLD`
+          } · HP Markas: ${hud.baseBuildingHp}/${hud.baseBuildingMaxHp} · Pagar: ${hud.baseFenceHp}/${hud.baseFenceMaxHp}`,
+        },
+        {
+          id: 'hq_tactical_comms',
+          title: 'CENTRAL TACTICAL COMMS',
+          tagLine: bLv >= 2 ? `[AKTIF // RADAR LV.${bLv}]` : '[OPERATIONS // TIER 2]',
+          illustration: 'hq_tactical_comms',
+          actionKind: 'upgrade_base',
+          upgradeId: 'upgrade_building_only',
+          inspectDetail: `Biaya Upgrade Bertahap: ${commsCost} GOLD · Radar Lv.${bLv}: ${
             bLv >= 3 ? 'MAX 280m (Full Peta)' : bLv === 2 ? '152m -> MAX 280m' : '92m -> 152m'
           }`,
         },
+      ],
+    },
+    4: {
+      headerTitle: 'SPECIAL ARMORY',
+      headerSubtitle:
+        'Equip your primary arsenal, heavy ordnance, or tactical defense turret for the upcoming battle.',
+      cards: [
         {
-          id: 'cr02_super_drop',
-          title: 'CR-02 SUPER CRATE DROP',
-          tagLine: '[AIRDROP // 350 GOLD]',
-          illustration: 'cr02_super_drop',
-          actionKind: 'buy_crate',
-          crateKind: 'super',
-          inspectDetail: 'Orbital Airdrop: 1x Peti Biru (Super Crate) jatuh di atas Crate Pad',
+          id: 'lg88_laser_rifle',
+          title: 'LG-88 PHOTON LANCE',
+          tagLine: '[ENERGY // TIER 4]',
+          illustration: 'lg88_laser_rifle',
+          actionKind: 'recipe',
+          recipeId: 'laser_gun',
+          inspectDetail: 'Directed-Energy Photon Lance Rifle (Efek Laser + Api Target) · Hologram Pad: 1x Biru + 1x Merah',
         },
         {
-          id: 'cr03_legend_drop',
-          title: 'CR-03 LEGEND CRATE DROP',
-          tagLine: '[AIRDROP // 750 GOLD]',
-          illustration: 'cr03_legend_drop',
-          actionKind: 'buy_crate',
-          crateKind: 'legend',
-          inspectDetail: 'Orbital Airdrop: 1x Peti Emas (Legend Crate) jatuh di atas Crate Pad',
+          id: 'titan6_gatling',
+          title: 'TITAN-6 ROTARY GATLING',
+          tagLine: '[HEAVY // TIER 4]',
+          illustration: 'titan6_gatling',
+          actionKind: 'recipe',
+          recipeId: 'gatling_mortar',
+          inspectDetail: '6-Barrel 7.62mm Rotary Gatling Gun · Hologram Pad: 2x Biru + 2x Merah',
+        },
+        {
+          id: 'hg04_grenade',
+          title: 'HG-04 FRAG GRENADE',
+          tagLine: '[TACTICAL // TIER 2]',
+          illustration: 'hg04_grenade',
+          actionKind: 'recipe',
+          recipeId: 'hand_grenade',
+          inspectDetail: 'Delay 3.5s Fragmentation Hand Grenade · Hologram Pad: 1x Peti Merah',
+        },
+        {
+          id: 'nuclear_launcher',
+          title: nukeAccess.isRevealed ? 'TACTICAL NUKE LAUNCHER' : '',
+          tagLine: nukeAccess.isRevealed ? '[TURRET // TIER 5]' : '',
+          illustration: 'nuclear_launcher',
+          actionKind: 'recipe',
+          recipeId: 'nuclear_launcher',
+          isSilhouetteLocked: !nukeAccess.isRevealed,
+          inspectDetail: nukeAccess.statusMessage,
+        },
+      ],
+    },
+    5: {
+      headerTitle: 'TACTICAL EXPLOSIVES',
+      headerSubtitle:
+        'Deploy pressure-activated anti-vehicle land mines and multi-bomblet cluster dispensers.',
+      cards: [
+        {
+          id: 'tm89_mine',
+          title: 'TM-89 ANTI-VEHICLE MINE',
+          tagLine: '[ORDNANCE // TIER 2]',
+          illustration: 'tm89_mine',
+          actionKind: 'recipe',
+          recipeId: 'land_mine',
+          inspectDetail: 'Heavy Anti-Vehicle Pressure Land Mine · Hologram Pad: 1x Peti Biru',
+        },
+        {
+          id: 'cb24_cluster',
+          title: clusterAccess.isRevealed ? 'CB-24 CLUSTER BOMB' : '',
+          tagLine: clusterAccess.isRevealed ? '[KHUSUS PESAWAT // TIER 3]' : '',
+          illustration: 'cb24_cluster',
+          actionKind: 'recipe',
+          recipeId: 'cluster_bomb',
+          isSilhouetteLocked: !clusterAccess.isRevealed,
+          inspectDetail: clusterAccess.isRevealed
+            ? `Khusus Pesawat Tempur (Lyo Plane) · 24x Submunition Cluster Bomb · ${clusterAccess.statusMessage}`
+            : clusterAccess.statusMessage,
         },
       ],
     },
@@ -462,12 +570,12 @@ export const TacticalKioskModal: React.FC<TacticalKioskModalProps> = ({
 
   const handlePrevPage = () => {
     soundEngine.playUiClick();
-    setPageIndex((prev) => ((prev + 3) % 4) as KioskPageIndex);
+    setPageIndex((prev) => ((prev + 5) % 6) as KioskPageIndex);
   };
 
   const handleNextPage = () => {
     soundEngine.playUiClick();
-    setPageIndex((prev) => ((prev + 1) % 4) as KioskPageIndex);
+    setPageIndex((prev) => ((prev + 1) % 6) as KioskPageIndex);
   };
 
   const handleSelectCard = (card: KioskGridCardItem) => {
@@ -476,15 +584,18 @@ export const TacticalKioskModal: React.FC<TacticalKioskModalProps> = ({
       ...prev,
       [pageIndex]: card.id,
     }));
-    if (card.actionKind === 'recipe' && card.recipeId) {
-      onSelectRecipe(card.recipeId);
-    }
   };
+
+  const buildQueue = hud.buildQueue ?? [];
+  const isQueueFull = buildQueue.length >= MAX_KIOSK_BUILD_QUEUE;
 
   const handleExecuteBuild = () => {
     soundEngine.playUiClick();
     if (selectedCard.actionKind === 'recipe' && selectedCard.recipeId) {
       onSelectRecipe(selectedCard.recipeId);
+      if (!selectedCard.isSilhouetteLocked && !isQueueFull) {
+        onClose();
+      }
     } else if (selectedCard.actionKind === 'upgrade_base' && selectedCard.upgradeId) {
       onUpgradeBase(selectedCard.upgradeId);
     } else if (selectedCard.actionKind === 'buy_crate' && selectedCard.crateKind) {
@@ -574,8 +685,8 @@ export const TacticalKioskModal: React.FC<TacticalKioskModalProps> = ({
             </p>
           </div>
 
-          {/* 2x2 Grid of 4 Cards (1:1 Match with Reference Images) */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-3.5 mt-4">
+          {/* 2x2 Grid of 4 Slots (When a page has only 2 cards, bottom row stays empty without shrinking modal height) */}
+          <div className="grid grid-cols-2 grid-rows-2 gap-3 sm:gap-3.5 mt-4">
             {currentPage.cards.map((card) => {
               const isSelected = selectedCard.id === card.id;
               return (
@@ -618,35 +729,109 @@ export const TacticalKioskModal: React.FC<TacticalKioskModalProps> = ({
                       </div>
                     )}
 
-                    {/* Card Title & Bracketed Tier Classification */}
-                    <div className={isSelected ? 'pr-6' : ''}>
-                      <div
-                        className={`${
-                          card.title.length >= 26
-                            ? 'text-[10.5px] sm:text-[11.5px]'
-                            : 'text-[12.5px] sm:text-[14px]'
-                        } font-black uppercase tracking-tight leading-[1.1] text-[#0d0f12]`}
-                        style={{ fontFamily: "'Space Grotesk', 'Inter', system-ui, sans-serif" }}
-                      >
-                        {card.title}
+                    {/* Card Title & Bracketed Tier Classification (Hidden completely when isSilhouetteLocked is true so it is a pure surprise silhouette + ?) */}
+                    {!card.isSilhouetteLocked && (
+                      <div className={isSelected ? 'pr-6' : ''}>
+                        <div
+                          className={`${
+                            card.title.length >= 26
+                              ? 'text-[10.5px] sm:text-[11.5px]'
+                              : 'text-[12.5px] sm:text-[14px]'
+                          } font-black uppercase tracking-tight leading-[1.1] text-[#0d0f12]`}
+                          style={{ fontFamily: "'Space Grotesk', 'Inter', system-ui, sans-serif" }}
+                        >
+                          {card.title}
+                        </div>
+                        <div className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-tight text-[#1c2026] mt-0.5">
+                          {card.tagLine}
+                        </div>
                       </div>
-                      <div className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-tight text-[#1c2026] mt-0.5">
-                        {card.tagLine}
-                      </div>
-                    </div>
+                    )}
 
                     {/* High-Detail Comic Tactical Illustration */}
-                    <div className="mt-1.5 flex items-end justify-center">
+                    <div
+                      className={`${
+                        card.isSilhouetteLocked ? 'my-auto' : 'mt-1.5'
+                      } flex items-center justify-center`}
+                    >
                       {renderComicCardIllustration(
                         card.illustration,
                         card.title,
-                        currentPage.cards.length === 2,
+                        Boolean(card.isSilhouetteLocked),
                       )}
                     </div>
                   </div>
                 </button>
               );
             })}
+            {Array.from({ length: Math.max(0, 4 - currentPage.cards.length) }).map((_, emptyIdx) => (
+              <div
+                key={`empty-slot-${emptyIdx}`}
+                aria-hidden="true"
+                className="invisible pointer-events-none select-none border-[2.5px] border-transparent p-2.5"
+              >
+                <div className="h-[34px] sm:h-[38px]" />
+                <div className="mt-1.5 h-[78px] sm:h-[88px]" />
+              </div>
+            ))}
+          </div>
+
+          {/* 6-Slot Continuous Build Queue Strip (Max 6 Antrian) */}
+          <div
+            data-kiosk-build-queue="true"
+            className="mt-3 px-2.5 py-2 bg-[#f4f6f8] border-[2.5px] border-[#0d0f12] shadow-[0_2px_0_#0d0f12]"
+          >
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <span className="text-[10.5px] font-black uppercase tracking-tight text-[#0d0f12]">
+                ANTRIAN BUILD OTOMATIS ({buildQueue.length}/{MAX_KIOSK_BUILD_QUEUE})
+              </span>
+              {buildQueue.length > 0 && onClearQueue && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.playUiClick();
+                    onClearQueue();
+                  }}
+                  className="text-[9.5px] font-black uppercase px-1.5 py-0.5 bg-white hover:bg-[#fee2e2] border border-[#0d0f12] text-[#0d0f12] cursor-pointer"
+                >
+                  HAPUS SEMUA
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-6 gap-1.5">
+              {Array.from({ length: MAX_KIOSK_BUILD_QUEUE }).map((_, qIdx) => {
+                const qRecipeId = buildQueue[qIdx];
+                const qSpec = qRecipeId ? KIOSK_BUILD_PRIORITY_RECIPES[qRecipeId] : null;
+                const isFrontActive = qIdx === 0 && Boolean(qSpec);
+                return (
+                  <button
+                    key={`queue-slot-${qIdx}`}
+                    type="button"
+                    disabled={!qSpec}
+                    onClick={() => {
+                      if (qSpec && onRemoveQueueIndex) {
+                        soundEngine.playUiClick();
+                        onRemoveQueueIndex(qIdx);
+                      }
+                    }}
+                    title={
+                      qSpec
+                        ? `${qIdx === 0 ? '[SEDANG DIBANGUN] ' : `[ANTRIAN #${qIdx + 1}] `}${qSpec.name} (Klik untuk hapus)`
+                        : `Slot Antrian #${qIdx + 1} Kosong`
+                    }
+                    className={`h-7 px-1 border-[2px] border-[#0d0f12] flex items-center justify-center text-[9px] font-black uppercase truncate transition-colors ${
+                      isFrontActive
+                        ? 'bg-[#2bb3b1] text-[#0d0f12] shadow-[0_1.5px_0_#0d0f12] cursor-pointer'
+                        : qSpec
+                          ? 'bg-white hover:bg-[#fee2e2] text-[#0d0f12] cursor-pointer'
+                          : 'bg-[#e5e9ee] text-[#7a8490] border-dashed cursor-default'
+                    }`}
+                  >
+                    {qSpec ? `${qIdx + 1}.${qSpec.name.split(' ')[0]}` : `#${qIdx + 1}`}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Optional Inspect Drawer (Toggled by INSPECT button or when Kiosk Status Toast is active) */}
@@ -654,9 +839,13 @@ export const TacticalKioskModal: React.FC<TacticalKioskModalProps> = ({
             <div className="mt-3 px-3 py-2 bg-[#f0f4f6] border-[2.5px] border-[#0d0f12] shadow-[0_2px_0_#0d0f12] flex flex-col gap-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-black uppercase tracking-tight text-[#0d0f12]">
-                  {selectedCard.title}
+                  {selectedCard.isSilhouetteLocked
+                    ? '??? [SENJATA PENGHANCUR RAHASIA]'
+                    : selectedCard.title}
                 </span>
-                {selectedRecipeSpec && renderSlotHologramPills(selectedRecipeSpec.slotHologramColors)}
+                {selectedRecipeSpec &&
+                  !selectedCard.isSilhouetteLocked &&
+                  renderSlotHologramPills(selectedRecipeSpec.slotHologramColors)}
               </div>
               <div className="text-[11px] font-bold text-[#1c2026]">
                 {selectedCard.inspectDetail}
@@ -719,11 +908,17 @@ export const TacticalKioskModal: React.FC<TacticalKioskModalProps> = ({
                 type="button"
                 data-kiosk-build="true"
                 onClick={handleExecuteBuild}
-                className="h-12 px-7 sm:px-9 bg-[#e2e6ea] hover:bg-[#2bb3b1] active:translate-y-0.5 border-[3.5px] border-[#0d0f12] font-black text-xl sm:text-2xl uppercase tracking-tight text-[#0d0f12] shadow-[3px_4px_0_#0d0f12] -skew-x-6 cursor-pointer transition-all"
+                className={`h-12 px-7 sm:px-9 active:translate-y-0.5 border-[3.5px] border-[#0d0f12] font-black text-xl sm:text-2xl uppercase tracking-tight shadow-[3px_4px_0_#0d0f12] -skew-x-6 cursor-pointer transition-all ${
+                  selectedCard.isSilhouetteLocked
+                    ? 'bg-[#262b30] text-[#f5b82e] hover:bg-[#343b42]'
+                    : 'bg-[#e2e6ea] hover:bg-[#2bb3b1] text-[#0d0f12]'
+                }`}
                 style={{ fontFamily: "'Space Grotesk', 'Inter', system-ui, sans-serif" }}
               >
                 <span className="inline-block skew-x-6">
-                  {selectedCard.actionKind === 'upgrade_base'
+                  {selectedCard.isSilhouetteLocked
+                    ? 'LOCKED LV.3'
+                    : selectedCard.actionKind === 'upgrade_base'
                     ? 'UPGRADE'
                     : selectedCard.actionKind === 'buy_crate'
                     ? 'AIRDROP'

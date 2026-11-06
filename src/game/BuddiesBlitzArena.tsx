@@ -92,17 +92,47 @@ import {
   chooseNextPadSlotIndexForHologram,
   getRemainingNeededCrateKindsForHologram,
   evaluatePadHologramState,
+  MAX_KIOSK_BUILD_QUEUE,
+  enqueueKioskBuildRecipe,
+  removeKioskBuildQueueAtIndex,
+  advanceKioskBuildQueueOnCraft,
+  isCrateInsideOtherOrEnemyBase,
   selectSmartCrateForAiHarvester,
+  KioskSideHologramModelKind,
+  evaluateKioskSideHologramDisplay,
+  evaluatePadCancelKickShatterDrops,
+  isUnitInPersonalCommandCenterArea,
   KioskBaseGoldUpgradeId,
   applyCommanderBaseGoldUpgrade,
   purchaseCrateAirdropWithGold,
+  computeLandMineGrassYOffset,
   isPointVisibleOnCommandCenterRadar,
-} from './rules';
+  evaluateNuclearLauncherAccess,
+  evaluateClusterBombAccess,
+  NuclearStrikePhase,
+  NuclearStrikeSequenceState,
+  createInitialNuclearStrikeState,
+  beginNuclearStrikeTargeting,
+  updateNuclearStrikeTargetCursor,
+  confirmNuclearStrikeTargetAndLaunch,
+  stepNuclearStrikeSequence,
+  computeNuclearStrikeCameraPose,
+  SUPPLY_DROP_LOCATIONS,
+  SupplyDropScheduleState,
+  createInitialSupplyDropScheduleState,
+  stepSupplyDropSchedule,
+  canDamageWorldCrate,
+  evaluateSpecialMetallicCratePadBoost,
+  formatBuddyRoleUiLabel,
+  stepFollowerSmoothYaw,
+  evaluateAutonomousFollowerEscortStep,
+} from './buddiesBlitzRules';
 import {
   evaluateOuterEmbankmentSdf,
   evaluateRoadNetworkSdf,
   evaluateNwLakeSdf,
   evaluateSeHarborSdf,
+  evaluateLyoGrassMask,
 } from './planetCurvature';
 import {
   soundEngine,
@@ -147,6 +177,8 @@ import {
   buildMilitaryBaseMasterplan,
   syncMilitaryBasePlotsVisuals,
   stepMilitaryBaseMasterplanAnimation,
+  populateMilitaryBaseGardenTreesFromGlb,
+  getSharedFallbackFoliageMaskTexture,
   buildProceduralSkyshieldTurret,
   getBaseSkyshieldTurrets,
   SkyshieldTurretController,
@@ -157,716 +189,83 @@ import {
   buildCraftedWeaponPickupMesh,
   buildTeamBuddiesDropPickupMesh,
   buildSelfServiceTacticalKioskMesh,
-} from './lyoAssetsAndShaders';
+  buildProceduralNuclearMissileMesh,
+  buildProceduralNuclearLauncherTurret,
+  NuclearLauncherTurretRig,
+} from './buddiesBlitzShadersAndAssets';
+import {
+  GameState,
+  PlayMode,
+  EditorToolId,
+  PlacedMapProp,
+  ArenaMapLayout,
+  RadarDot,
+  FloatingWorldPrompt,
+  HudSnapshot,
+  BuddiesBlitzArenaProps,
+  FactoryPlaygroundCanvasProps,
+  WorldCrate,
+  WorldPickup,
+  DestructibleTree,
+  ActiveMapPropPhysics,
+  DebrisChunk3D,
+  TankVehicle,
+  BuddyUnit,
+  Projectile,
+  ExplosionParticle,
+  ActiveLaserBeam3D,
+  ActiveOrdnanceDevice3D,
+  StaticWorldStructureObb,
+  BUILD_ORDER_CYCLE,
+  COMMAND_CYCLE,
+  BLUE_BUDDY_ROTATION,
+} from './buddiesBlitzTypes';
+import {
+  evaluatePlayerCommandCenterRadarAndMinimapDots,
+  applyGrassChunkSyncedFogOfWar3D,
+} from './buddiesBlitzMinimap';
+import {
+  buildArenaNavGrids,
+  computeUnitAStarSteeringDirection,
+  evaluateSquadAiUnitPerceptionAndDecision,
+  getCommanderDefendStationCoords,
+} from './buddiesBlitzSquadAi';
+import {
+  createGroundLockAuraTexture,
+  createHudLockReticleTexture,
+  computePlayerMuzzleAndAimDirection,
+  buildArenaRaycastColliders,
+} from './buddiesBlitzCombat';
+import {
+  MAP_STORAGE_KEY,
+  buildTeamBaseQuadrant,
+  DEFAULT_ARENA_MAP_LAYOUT,
+  cloneDefaultLayout,
+  loadSavedArenaLayout,
+  getPropBaseHeight,
+  createBillboardSign,
+  buildStaticWorldStructuresList,
+} from './buddiesBlitzWorldBuilder';
 
-
-export type GameState = 'title' | 'playing' | 'paused' | 'gameover';
-export type PlayMode = 'sandbox' | 'editor' | 'match';
-
-export type EditorToolId =
-  | 'sculpt_raise'
-  | 'sculpt_lower'
-  | 'sculpt_flatten'
-  | 'move_blue_hq'
-  | 'move_blue_pad'
-  | 'move_red_hq'
-  | 'move_red_pad'
-  | 'move_drop_zone'
-  | 'dump_truck'
-  | 'forklift'
-  | 'crane'
-  | 'chimney'
-  | 'giant_tank'
-  | 'tank_1a'
-  | 'tank_1b'
-  | 'pipe_cluster'
-  | 'pipe_cluster_1b'
-  | 'giant_pipe'
-  | 'giant_pipe_1b'
-  | 'power_core'
-  | 'concrete_fence'
-  | 'concrete_fence_1b'
-  | 'concrete_pipe'
-  | 'barricade'
-  | 'lamppost_1a'
-  | 'explosive_barrel'
-  | 'barrel_1c'
-  | 'pallet_1a'
-  | 'h_beam'
-  | 'fuel_cell'
-  | 'circuit_module'
-  | 'hydrant'
-  | 'tree_gold'
-  | 'tree_purple'
-  | 'turbine'
-  | 'bench'
-  | 'wheelbarrow'
-  | 'river_rock'
-  | 'flower_cluster';
-
-export interface PlacedMapProp {
-  id: number;
-  kind:
-    | 'tree_purple'
-    | 'tree_gold'
-    | 'turbine'
-    | 'power_core'
-    | 'concrete_fence'
-    | 'concrete_fence_1b'
-    | 'concrete_pipe'
-    | 'barricade'
-    | 'explosive_barrel'
-    | 'barrel_1c'
-    | 'pallet_1a'
-    | 'h_beam'
-    | 'fuel_cell'
-    | 'circuit_module'
-    | 'hydrant'
-    | 'lamppost_1a'
-    | 'lamppost_1b'
-    | 'bench'
-    | 'chimney'
-    | 'giant_tank'
-    | 'dump_truck'
-    | 'forklift'
-    | 'crane'
-    | 'recycle_bin'
-    | 'traffic_cone'
-    | 'wheelbarrow'
-    | 'tank_1a'
-    | 'tank_1b'
-    | 'pipe_cluster'
-    | 'pipe_cluster_1b'
-    | 'giant_pipe'
-    | 'giant_pipe_1b'
-    | 'river_rock'
-    | 'flower_cluster';
-  x: number;
-  z: number;
-  rotY: number;
-  scale: number;
-}
-
-export interface ArenaMapLayout {
-  blueHq: { x: number; z: number };
-  bluePad: { x: number; z: number };
-  redHq: { x: number; z: number };
-  redPad: { x: number; z: number };
-  centerDropZone: { x: number; z: number };
-  props: PlacedMapProp[];
-  sculptData?: number[];
-}
-
-export const MAP_STORAGE_KEY = 'lyo_arena_map_layout_v36';
-
-/**
- * Single 180°-Rotationally Symmetric Base Section Generator (`buildTeamBaseQuadrant`):
- * - `sign = +1` ('blue'): South Base Complex `(4 Individual Base Plots at x = [-45, -15, +15, +45], z > 0)`
- * - `sign = -1` ('red') : North Base Complex `(4 Individual Base Plots at x = [+45, +15, -15, -45], z < 0)`
- * Base plots are kept 100% clear of construction & industrial props ("clear area base dari asset asset kontruksi maupun industri"),
- * and fire hydrants are placed neatly along the roadside ("hydran di simpan di pinggir jalan").
- */
-export function buildTeamBaseQuadrant(
-  team: 'blue' | 'red',
-  sign: 1 | -1 = team === 'blue' ? 1 : -1,
-  startId: number = team === 'blue' ? 100 : 200,
-): PlacedMapProp[] {
-  const rotOffset = Math.PI / 2 + (sign === -1 ? Math.PI : 0);
-  let nextId = startId;
-  const placeWorld = (
-    kind: PlacedMapProp['kind'],
-    wx: number,
-    wz: number,
-    lRotY: number,
-    scale = 1.0,
-  ): PlacedMapProp => ({
-    id: nextId++,
-    kind,
-    x: Number((sign * wx).toFixed(2)),
-    z: Number((sign * wz).toFixed(2)),
-    rotY: Number((lRotY + rotOffset).toFixed(4)),
-    scale,
-  });
-
-  return [
-    // Fire Hydrants placed neatly along the roadside ("hydran di simpan di pinggir jalan")
-    // at the Complex Divider Road & Collector Road curb corners (outside all 4 Base Plots):
-    placeWorld('hydrant', -55.2, 56.8, 0.0, 1.05),
-    placeWorld('hydrant', -25.2, 56.8, 0.0, 1.05),
-    placeWorld('hydrant', 4.8, 56.8, 0.0, 1.05),
-    placeWorld('hydrant', 34.8, 56.8, 0.0, 1.05),
-
-    // Symmetric Outer Lawn Trees flanking the 4-Plot Complex outside x = ±66.5
-    placeWorld('tree_purple', 66.5, 74.5, -0.45, 1.12),
-    placeWorld('tree_gold', 66.5, 91.5, 0.25, 1.10),
-    placeWorld('tree_purple', -66.5, 74.5, 0.55, 1.12),
-    placeWorld('tree_gold', -66.5, 91.5, -0.35, 1.10),
-  ];
-}
-
-export const DEFAULT_ARENA_MAP_LAYOUT: ArenaMapLayout = {
-  // 100% 1:1 North-South Mirror-Symmetric 3-Part Arena (North Base Complex - Central Warzone - South Base Complex):
-  // - Bagian 3 Selatan (Blue Team Base Complex, sign = +1): 4 Plots at x = [-45, -15, +15, +45], z = +86.0
-  // - Bagian 1 Utara   (Red Team Base Complex,  sign = -1): 4 Plots at x = [+45, +15, -15, -45], z = -86.0
-  blueHq: { x: 0.0, z: 86.0 },
-  bluePad: { x: -39.2, z: 75.8 },
-  redHq: { x: 0.0, z: -86.0 },
-  redPad: { x: 39.2, z: -75.8 },
-  centerDropZone: { x: 0, z: 0 },
-  props: [
-    // =========================================================================
-    // 1. BAGIAN 3: BASE SELATAN (BLUE TEAM, sign = +1, Gate Menghadap Utara) &
-    //    BAGIAN 1: BASE UTARA   (RED TEAM,  sign = -1, Gate Menghadap Selatan)
-    // =========================================================================
-    ...buildTeamBaseQuadrant('blue', 1, 100),
-    ...buildTeamBaseQuadrant('red', -1, 200),
-
-    // =========================================================================
-    // 2. BAGIAN 2 TENGAH: HUTAN TENGAH WARZONE (100% North-South Mirrored)
-    //    (Central Drop Zone at (0,0); Mirrored Central Forest & Rocks)
-    // =========================================================================
-    { id: 502, kind: 'giant_pipe', x: -5.5, z: -22.5, rotY: 0.0, scale: 1.12 },
-    { id: 503, kind: 'giant_pipe', x: -5.5, z: 22.5, rotY: 0.0, scale: 1.12 },
-    { id: 504, kind: 'pipe_cluster', x: 7.5, z: -5.6, rotY: 0.0, scale: 1.08 },
-    { id: 505, kind: 'pipe_cluster', x: 7.5, z: 5.6, rotY: Math.PI, scale: 1.08 },
-    { id: 506, kind: 'tree_purple', x: -4.5, z: -7.2, rotY: 0.35, scale: 1.08 },
-    { id: 507, kind: 'tree_purple', x: -4.5, z: 7.2, rotY: -0.35, scale: 1.08 },
-    { id: 508, kind: 'tree_gold', x: 3.2, z: -7.2, rotY: 0.65, scale: 1.08 },
-    { id: 509, kind: 'tree_gold', x: 3.2, z: 7.2, rotY: -0.65, scale: 1.08 },
-    { id: 510, kind: 'tree_purple', x: 12.5, z: -5.5, rotY: 0.15, scale: 1.08 },
-    { id: 511, kind: 'tree_purple', x: 12.5, z: 5.5, rotY: -0.15, scale: 1.08 },
-    { id: 512, kind: 'tree_gold', x: 16.5, z: 0.0, rotY: 0.45, scale: 1.10 },
-
-    // North-Central (z < 0) & South-Central (z > 0) Mirrored Dense Warzone Forest Groves
-    { id: 550, kind: 'tree_gold', x: -9.5, z: -28.0, rotY: 0.25, scale: 1.14 },
-    { id: 551, kind: 'tree_purple', x: -2.5, z: -24.5, rotY: -0.45, scale: 1.12 },
-    { id: 552, kind: 'tree_gold', x: 6.5, z: -25.5, rotY: 0.75, scale: 1.15 },
-    { id: 553, kind: 'tree_purple', x: 11.0, z: -32.5, rotY: -0.65, scale: 1.10 },
-    { id: 554, kind: 'tree_gold', x: 2.5, z: -41.5, rotY: 0.35, scale: 1.12 },
-    { id: 555, kind: 'tree_purple', x: -8.5, z: -38.5, rotY: 0.95, scale: 1.08 },
-    { id: 556, kind: 'tree_gold', x: 9.5, z: -42.0, rotY: -0.25, scale: 1.12 },
-    { id: 557, kind: 'flower_cluster', x: 0.0, z: -35.0, rotY: 0.4, scale: 1.35 },
-    { id: 558, kind: 'river_rock', x: -3.5, z: -33.0, rotY: 0.8, scale: 1.40 },
-
-    { id: 560, kind: 'tree_gold', x: -9.5, z: 28.0, rotY: -0.25, scale: 1.14 },
-    { id: 561, kind: 'tree_purple', x: -2.5, z: 24.5, rotY: 0.45, scale: 1.12 },
-    { id: 562, kind: 'tree_gold', x: 6.5, z: 25.5, rotY: -0.75, scale: 1.15 },
-    { id: 563, kind: 'tree_purple', x: 11.0, z: 32.5, rotY: 0.65, scale: 1.10 },
-    { id: 564, kind: 'tree_gold', x: 2.5, z: 41.5, rotY: -0.35, scale: 1.12 },
-    { id: 565, kind: 'tree_purple', x: -8.5, z: 38.5, rotY: -0.95, scale: 1.08 },
-    { id: 566, kind: 'tree_gold', x: 9.5, z: 42.0, rotY: 0.25, scale: 1.12 },
-    { id: 567, kind: 'flower_cluster', x: 0.0, z: 35.0, rotY: -0.4, scale: 1.35 },
-    { id: 568, kind: 'river_rock', x: -3.5, z: 33.0, rotY: -0.8, scale: 1.40 },
-
-    // East-Central & Widened East Warzone Forest Pockets (between x=+19 and East Ring Highway x=+70, mirrored in Z)
-    { id: 570, kind: 'tree_gold', x: 28.5, z: 0.0, rotY: 0.45, scale: 1.14 },
-    { id: 571, kind: 'tree_purple', x: 25.5, z: -8.5, rotY: -0.35, scale: 1.12 },
-    { id: 572, kind: 'tree_purple', x: 25.5, z: 8.5, rotY: 0.35, scale: 1.12 },
-    { id: 573, kind: 'tree_gold', x: 28.0, z: -14.5, rotY: -0.55, scale: 1.12 },
-    { id: 574, kind: 'tree_gold', x: 28.0, z: 14.5, rotY: 0.55, scale: 1.12 },
-    { id: 575, kind: 'flower_cluster', x: 26.5, z: -4.2, rotY: 0.6, scale: 1.32 },
-    { id: 576, kind: 'flower_cluster', x: 26.5, z: 4.2, rotY: -0.6, scale: 1.32 },
-    { id: 577, kind: 'tree_purple', x: 38.5, z: -6.5, rotY: 0.25, scale: 1.14 },
-    { id: 578, kind: 'tree_purple', x: 38.5, z: 6.5, rotY: -0.25, scale: 1.14 },
-    { id: 579, kind: 'tree_gold', x: 46.5, z: 0.0, rotY: -0.4, scale: 1.16 },
-    { id: 590, kind: 'tree_gold', x: 31.0, z: -36.5, rotY: 0.35, scale: 1.14 },
-    { id: 591, kind: 'tree_gold', x: 31.0, z: 36.5, rotY: -0.35, scale: 1.14 },
-    { id: 592, kind: 'tree_purple', x: 54.5, z: -34.0, rotY: -0.45, scale: 1.14 },
-    { id: 593, kind: 'tree_purple', x: 54.5, z: 34.0, rotY: 0.45, scale: 1.14 },
-    { id: 594, kind: 'tree_gold', x: 60.5, z: -28.0, rotY: 0.55, scale: 1.12 },
-    { id: 595, kind: 'tree_gold', x: 60.5, z: 28.0, rotY: -0.55, scale: 1.12 },
-    { id: 596, kind: 'flower_cluster', x: 52.0, z: -38.5, rotY: 0.5, scale: 1.32 },
-    { id: 597, kind: 'flower_cluster', x: 52.0, z: 38.5, rotY: -0.5, scale: 1.32 },
-    { id: 598, kind: 'river_rock', x: 48.0, z: -8.5, rotY: 0.7, scale: 1.35 },
-    { id: 599, kind: 'river_rock', x: 48.0, z: 8.5, rotY: -0.7, scale: 1.35 },
-
-    // =========================================================================
-    // 3. BAGIAN 2 SISI KIRI (X: -104.5..-20, Z: -48..+48): LOBBY AREA BARAT (TOKO SKIN & TAMAN),
-    //    WIND FARM & DANAU OASIS
-    //    - Widened West Lobby Shopping Plaza (x in [-104.5, -76.5], z in [-38.0, +38.0], y = +1.40m)
-    //      with ornamental Lobby trees, benches, and flowers between the 3 Storefront Boutiques!
-    // =========================================================================
-    { id: 490, kind: 'tree_purple', x: -100.5, z: -26.5, rotY: 0.25, scale: 1.08 },
-    { id: 491, kind: 'tree_gold', x: -100.5, z: 26.5, rotY: -0.25, scale: 1.08 },
-    { id: 494, kind: 'flower_cluster', x: -96.5, z: -32.5, rotY: 0.4, scale: 1.32 },
-    { id: 495, kind: 'flower_cluster', x: -96.5, z: 32.5, rotY: -0.4, scale: 1.32 },
-
-    { id: 301, kind: 'turbine', x: -59.5, z: -36.5, rotY: 0.45, scale: 1.25 },
-    { id: 302, kind: 'turbine', x: -59.5, z: 36.5, rotY: 0.45, scale: 1.25 },
-    { id: 303, kind: 'turbine', x: -34.5, z: -38.5, rotY: 0.30, scale: 1.25 },
-    { id: 304, kind: 'turbine', x: -34.5, z: 38.5, rotY: 0.30, scale: 1.25 },
-    { id: 305, kind: 'turbine', x: -84.0, z: -43.5, rotY: 0.35, scale: 1.24 },
-    { id: 306, kind: 'turbine', x: -84.0, z: 43.5, rotY: 0.35, scale: 1.24 },
-
-    // Oasis Lake Shoreline Boulders (river_rock mirrored N/S around center (-31.0, 0.0))
-    { id: 310, kind: 'river_rock', x: -41.2, z: -4.5, rotY: 0.2, scale: 1.45 },
-    { id: 311, kind: 'river_rock', x: -41.2, z: 4.5, rotY: -0.2, scale: 1.45 },
-    { id: 312, kind: 'river_rock', x: -38.5, z: -10.2, rotY: 1.1, scale: 1.35 },
-    { id: 313, kind: 'river_rock', x: -38.5, z: 10.2, rotY: -1.1, scale: 1.35 },
-    { id: 314, kind: 'river_rock', x: -31.0, z: -12.6, rotY: 2.0, scale: 1.50 },
-    { id: 315, kind: 'river_rock', x: -31.0, z: 12.6, rotY: -2.0, scale: 1.50 },
-    { id: 316, kind: 'river_rock', x: -23.2, z: -9.2, rotY: 0.6, scale: 1.40 },
-    { id: 317, kind: 'river_rock', x: -23.2, z: 9.2, rotY: -0.6, scale: 1.40 },
-    { id: 318, kind: 'river_rock', x: -21.2, z: -3.5, rotY: 1.4, scale: 1.35 },
-    { id: 319, kind: 'river_rock', x: -21.2, z: 3.5, rotY: -1.4, scale: 1.35 },
-
-    // Lakeside Wildflower & Shrub Clusters (flower_cluster mirrored N/S)
-    { id: 320, kind: 'flower_cluster', x: -42.0, z: 0.0, rotY: 0.0, scale: 1.35 },
-    { id: 321, kind: 'flower_cluster', x: -35.0, z: -12.2, rotY: 0.8, scale: 1.30 },
-    { id: 322, kind: 'flower_cluster', x: -35.0, z: 12.2, rotY: -0.8, scale: 1.30 },
-    { id: 323, kind: 'flower_cluster', x: -25.5, z: -11.5, rotY: 1.5, scale: 1.35 },
-    { id: 324, kind: 'flower_cluster', x: -25.5, z: 11.5, rotY: -1.5, scale: 1.35 },
-    { id: 325, kind: 'flower_cluster', x: -21.5, z: 0.0, rotY: 1.2, scale: 1.30 },
-
-    // Lakeside & Wind Farm Trees (tree-1a.glb & tree-1b.glb mirrored N/S)
-    { id: 330, kind: 'tree_gold', x: -42.5, z: -7.8, rotY: 0.3, scale: 1.12 },
-    { id: 331, kind: 'tree_gold', x: -42.5, z: 7.8, rotY: -0.3, scale: 1.12 },
-    { id: 332, kind: 'tree_purple', x: -28.5, z: -15.2, rotY: -0.5, scale: 1.10 },
-    { id: 333, kind: 'tree_purple', x: -28.5, z: 15.2, rotY: 0.5, scale: 1.10 },
-    { id: 334, kind: 'tree_gold', x: -48.5, z: -36.5, rotY: 0.6, scale: 1.10 },
-    { id: 335, kind: 'tree_gold', x: -48.5, z: 36.5, rotY: -0.6, scale: 1.10 },
-    { id: 336, kind: 'tree_purple', x: -84.0, z: -48.0, rotY: -0.3, scale: 1.12 },
-    { id: 337, kind: 'tree_purple', x: -84.0, z: 48.0, rotY: 0.3, scale: 1.12 },
-
-    // =========================================================================
-    // 4. BAGIAN 2 SISI KANAN (X: +76..+110, Z: -46..+46): DERMAGA PELABUHAN TIMUR
-    //    Clean, spacious harbor dock apron with Quay Crane, 2 Forklifts parked neatly
-    //    by the container bays, and North/South perimeter concrete barriers.
-    // =========================================================================
-    { id: 401, kind: 'crane', x: 105.8, z: 0.0, rotY: Math.PI / 2, scale: 1.38 },
-    // Forklifts parked neatly beside the North & South Container Bays:
-    { id: 430, kind: 'forklift', x: 88.5, z: -29.5, rotY: 0.0, scale: 1.18 },
-    { id: 431, kind: 'forklift', x: 88.5, z: 29.5, rotY: Math.PI, scale: 1.18 },
-    // Short Concrete Barriers at the North & South ends of the Harbor Dock:
-    { id: 432, kind: 'concrete_fence_1b', x: 98.5, z: -43.8, rotY: 0.0, scale: 1.18 },
-    { id: 433, kind: 'concrete_fence_1b', x: 103.0, z: -43.8, rotY: 0.0, scale: 1.18 },
-    { id: 434, kind: 'concrete_fence_1b', x: 98.5, z: 43.8, rotY: 0.0, scale: 1.18 },
-    { id: 435, kind: 'concrete_fence_1b', x: 103.0, z: 43.8, rotY: 0.0, scale: 1.18 },
-
-    // =========================================================================
-    // 5. FOREST GROVE & ROADSIDE PARK BENCHES (`bench`, Back-to-Back & Side-by-Side),
-    //    PUBLIC RECYCLE BINS NEXT TO BENCHES ("tong sampah simpan juga di tempat umum dekat kursi"),
-    //    & ROAD-TURN 2-BRANCH (`lamppost_1b`) + STRAIGHT ROAD (`lamppost_1a`) STREET LAMPS
-    // =========================================================================
-    { id: 520, kind: 'bench', x: 2.0, z: -32.7, rotY: Math.PI, scale: 1.35 },
-    { id: 521, kind: 'bench', x: 2.0, z: -31.3, rotY: 0.0, scale: 1.35 },
-    { id: 580, kind: 'recycle_bin', x: 4.3, z: -32.0, rotY: -Math.PI / 2, scale: 1.08 },
-    { id: 522, kind: 'bench', x: 2.0, z: 31.3, rotY: Math.PI, scale: 1.35 },
-    { id: 523, kind: 'bench', x: 2.0, z: 32.7, rotY: 0.0, scale: 1.35 },
-    { id: 581, kind: 'recycle_bin', x: 4.3, z: 32.0, rotY: -Math.PI / 2, scale: 1.08 },
-    { id: 524, kind: 'bench', x: 23.8, z: 0.0, rotY: Math.PI / 2, scale: 1.35 },
-    { id: 525, kind: 'bench', x: 25.2, z: 0.0, rotY: -Math.PI / 2, scale: 1.35 },
-    { id: 582, kind: 'recycle_bin', x: 24.5, z: -2.3, rotY: 0.0, scale: 1.08 },
-    { id: 583, kind: 'recycle_bin', x: 24.5, z: 2.3, rotY: Math.PI, scale: 1.08 },
-    { id: 526, kind: 'bench', x: -44.2, z: -2.0, rotY: -Math.PI / 2, scale: 1.35 },
-    { id: 527, kind: 'bench', x: -44.2, z: 2.0, rotY: -Math.PI / 2, scale: 1.35 },
-    { id: 584, kind: 'recycle_bin', x: -44.2, z: -4.2, rotY: -Math.PI / 2, scale: 1.08 },
-    { id: 585, kind: 'recycle_bin', x: -44.2, z: 4.2, rotY: -Math.PI / 2, scale: 1.08 },
-    { id: 528, kind: 'bench', x: -9.5, z: -44.6, rotY: 0.0, scale: 1.35 },
-    { id: 529, kind: 'bench', x: -9.5, z: 44.6, rotY: Math.PI, scale: 1.35 },
-    { id: 586, kind: 'recycle_bin', x: -12.0, z: -44.6, rotY: 0.0, scale: 1.08 },
-    { id: 587, kind: 'recycle_bin', x: -12.0, z: 44.6, rotY: Math.PI, scale: 1.08 },
-
-    // B. 2-Branch Street Lamps (`lamppost_1b`) placed cleanly outside the 8 Symmetric Road Turns/Bends ("di jalan belokan"):
-    { id: 530, kind: 'lamppost_1b', x: -6.2, z: -7.2, rotY: 0.0, scale: 1.15 },
-    { id: 531, kind: 'lamppost_1b', x: -6.2, z: 7.2, rotY: Math.PI / 2, scale: 1.15 },
-    { id: 532, kind: 'lamppost_1b', x: 25.8, z: -30.8, rotY: Math.PI / 2, scale: 1.15 },
-    { id: 533, kind: 'lamppost_1b', x: 25.8, z: 30.8, rotY: 0.0, scale: 1.15 },
-    { id: 534, kind: 'lamppost_1b', x: -61.2, z: -43.2, rotY: 0.0, scale: 1.15 },
-    { id: 535, kind: 'lamppost_1b', x: -61.2, z: 43.2, rotY: Math.PI / 2, scale: 1.15 },
-    { id: 536, kind: 'lamppost_1b', x: 61.2, z: -43.2, rotY: -Math.PI / 2, scale: 1.15 },
-    { id: 537, kind: 'lamppost_1b', x: 61.2, z: 43.2, rotY: Math.PI, scale: 1.15 },
-
-    // C. Well-Spaced Single-Arm Street Lamps (`lamppost_1a`) on grass shoulders overhanging INTO straight road segments:
-    { id: 538, kind: 'lamppost_1a', x: 0.0, z: -45.2, rotY: 0.0, scale: 1.15 },
-    { id: 539, kind: 'lamppost_1a', x: 0.0, z: 45.2, rotY: Math.PI, scale: 1.15 },
-    { id: 540, kind: 'lamppost_1a', x: -64.8, z: -78.0, rotY: -Math.PI / 2, scale: 1.15 },
-    { id: 541, kind: 'lamppost_1a', x: -64.8, z: 78.0, rotY: -Math.PI / 2, scale: 1.15 },
-    { id: 542, kind: 'lamppost_1a', x: 64.8, z: -78.0, rotY: Math.PI / 2, scale: 1.15 },
-    { id: 543, kind: 'lamppost_1a', x: 64.8, z: 78.0, rotY: Math.PI / 2, scale: 1.15 },
-
-    // =========================================================================
-    // 6. BAGIAN TIMUR UTARA & SELATAN (X: +75.5..+101.5, |Z|: 46..104):
-    //    AREA TANAH ALAT-ALAT KONSTRUKSI (Clean, unobstructed sandy yards with
-    //    procedural Excavator, Steel Girder stack & Brick/Cement Pallet stack along x = 92..93)
-    // =========================================================================
-    // South Construction Yard perimeter barricades along the outer eastern edge:
-    { id: 608, kind: 'barricade', x: 96.5, z: 63.5, rotY: Math.PI / 2, scale: 1.10 },
-    { id: 609, kind: 'barricade', x: 96.5, z: 80.5, rotY: Math.PI / 2, scale: 1.10 },
-
-    // North Construction Yard perimeter barricades (100% North-South Mirrored):
-    { id: 618, kind: 'barricade', x: 96.5, z: -63.5, rotY: Math.PI / 2, scale: 1.10 },
-    { id: 619, kind: 'barricade', x: 96.5, z: -80.5, rotY: Math.PI / 2, scale: 1.10 },
-  ],
+export type {
+  GameState,
+  PlayMode,
+  EditorToolId,
+  PlacedMapProp,
+  ArenaMapLayout,
+  RadarDot,
+  FloatingWorldPrompt,
+  HudSnapshot,
+  BuddiesBlitzArenaProps,
+  FactoryPlaygroundCanvasProps,
+};
+export {
+  MAP_STORAGE_KEY,
+  buildTeamBaseQuadrant,
+  DEFAULT_ARENA_MAP_LAYOUT,
 };
 
-export interface RadarDot {
-  id: string;
-  kind: 'player' | 'ally' | 'enemy' | 'crate_red' | 'crate_super' | 'crate_legend' | 'tank_blue' | 'tank_red';
-  x: number;
-  z: number;
-}
-
-export interface FloatingWorldPrompt {
-  id: string;
-  keyLabel: 'E' | 'F' | 'G' | 'B';
-  actionLabel: string;
-  subLabel?: string;
-  actionEvent: string;
-  xPct: number;
-  yPct: number;
-  accent: 'white' | 'yellow' | 'lime' | 'cyan';
-  iconType: 'hand' | 'machine';
-}
-
-export interface HudSnapshot {
-  hp: number;
-  maxHp: number;
-  score: number;
-  bestScore: number;
-  speedKmh: number;
-  isBoosting: boolean;
-  isGrabMode: boolean;
-  grabbedPropName: string | null;
-  collectedItems: string[];
-  powerCoreActivated: boolean;
-  enemiesDefeated: number;
-  totalEnemies: number;
-  lightingPreset: LightingPresetKey;
-  cameraFovMode: 'webgl35' | 'roblox18';
-  outcome: 'victory' | 'defeat' | null;
-  clearTimeSec: number;
-  // Team Buddies 3D World State
-  controlMode: 'buddy' | 'tank';
-  activeClass: BuddyClassId;
-  equippedWeapon: string;
-  ammo: number;
-  carryingCrate: 'none' | WorldCrateKind;
-  tankStoredCrates: number;
-  padSlots: CrateSlotType[];
-  padShape: string;
-  padOutputName: string;
-  padIsMerged: boolean;
-  padIsSuper: boolean;
-  buildOrder: BuildOrderTarget;
-  buildOrderLabel: string;
-  buildOrderTargetCrates: number;
-  teamCommand: TeamCommandMode;
-  alliedBuddiesCount: number;
-  personalSquadCount: number;
-  personalSquadMax: number;
-  personalSquadClasses: BuddyClassId[];
-  activePersonalBuddyIndex: number;
-  blueHumanCount: number;
-  blueAiCommanderCount: number;
-  redHumanCount: number;
-  redAiCommanderCount: number;
-  skyshieldBuiltCount: number;
-  blueBaseHp: number;
-  redBaseHp: number;
-  // Self-Service Tactical Kiosk & Warzone Gold Economy
-  gold: number;
-  activePriorityRecipe: KioskBuildPriorityRecipeId;
-  padHologramColors: CrateSlotType[];
-  baseBuildingLevel: 1 | 2 | 3;
-  baseBuildingHp: number;
-  baseBuildingMaxHp: number;
-  baseFenceLevel: 1 | 2 | 3;
-  baseFenceHp: number;
-  baseFenceMaxHp: number;
-  baseHasParkingBay: boolean;
-  baseHasHelipad: boolean;
-  isNearKiosk: boolean;
-  kioskStatusMessage: string | null;
-  contextHint: string;
-  radarDots: RadarDot[];
-  floatingPrompts: FloatingWorldPrompt[];
-  // Map Editor State
-  editorObjectCount: number;
-  editorCursorX: number;
-  editorCursorZ: number;
-  editorRotDeg: number;
-  editorScale: number;
-}
-
-interface FactoryPlaygroundCanvasProps {
-  gameState: GameState;
-  playMode: PlayMode;
-  editorTool: EditorToolId;
-  editorBrushRadius?: number;
-  lightingPreset: LightingPresetKey;
-  cameraFovMode: 'webgl35' | 'roblox18';
-  resetTrigger: number;
-  onHudUpdate: (snapshot: HudSnapshot) => void;
-  onGameOver: (outcome: 'victory' | 'defeat', finalSnapshot: HudSnapshot) => void;
-  onTogglePause: () => void;
-  onMapSaved?: (message: string) => void;
-}
-
-interface WorldCrate {
-  id: number;
-  kind: WorldCrateKind;
-  mesh: THREE.Group;
-  boxVisualGroup: THREE.Group;
-  parachuteMesh: THREE.Mesh;
-  x: number;
-  y: number;
-  z: number;
-  vx: number;
-  vy: number;
-  vz: number;
-  rotY: number;
-  rotVelY: number;
-  hp: number;
-  state: 'falling' | 'grounded' | 'carried' | 'thrown' | 'stacked';
-  carrierId: number | null;
-  squashTimer: number;
-}
-
-interface WorldPickup {
-  id: number;
-  kind: Exclude<TeamBuddiesDropItemKind, 'crate'>;
-  weaponName: string;
-  mesh: THREE.Group;
-  x: number;
-  y: number;
-  z: number;
-  vx: number;
-  vy: number;
-  vz: number;
-  bobPhase: number;
-  collected: boolean;
-  remainingAmmo?: number;
-  secondaryId?: Exclude<BuddySecondaryItemId, 'none'>;
-  secondaryCount?: number;
-  missionItemId?: Exclude<BuddyMissionItemId, 'none'>;
-  scoreValue?: number;
-  hp: number;
-  isFromDeathDrop: boolean;
-  lifeRemainingSec: number;
-  totalLifeSec: number;
-}
-
-interface DestructibleTree {
-  id: number;
-  propId: number;
-  isPurple: boolean;
-  scale: number;
-  mesh: THREE.Group;
-  x: number;
-  z: number;
-  hp: number;
-  maxHp: number;
-  alive: boolean;
-  hitFlashTimer: number;
-  jiggleTimer: number;
-  jiggleIntensity: number;
-  jiggleDirX: number;
-  jiggleDirZ: number;
-}
-
-interface ActiveMapPropPhysics {
-  id: number;
-  kind: PlacedMapProp['kind'];
-  wrapper: THREE.Group;
-  x: number;
-  z: number;
-  vx: number;
-  vz: number;
-  rotY: number;
-  rotVelY: number;
-  scale: number;
-  category: ColliderCategory;
-  materialTag: CollisionMaterialTag;
-  radius: number;
-  halfX?: number;
-  halfZ?: number;
-  heightY: number;
-  mass: number;
-  restitution: number;
-  destructible: boolean;
-  hp: number;
-  maxHp: number;
-  shootImpulse: number;
-  canJiggleOnHit: boolean;
-  alive: boolean;
-  jiggleTimer: number;
-  jiggleDirX: number;
-  jiggleDirZ: number;
-}
-
-interface DebrisChunk3D {
-  active: boolean;
-  mesh: THREE.Mesh;
-  mat: THREE.MeshToonMaterial;
-  pos: THREE.Vector3;
-  vel: THREE.Vector3;
-  rotVel: THREE.Vector3;
-  life: number;
-  maxLife: number;
-  baseScale: THREE.Vector3;
-}
-
-interface TankVehicle {
-  id: number;
-  vehicleKind?: 'tank' | 'plane' | 'truck';
-  mapPropId?: number;
-  isSuper: boolean;
-  team: 'blue' | 'red';
-  root: THREE.Group;
-  bodyGroup: THREE.Group;
-  turretGroup: THREE.Group;
-  barrelGroup: THREE.Group;
-  riderGroup: THREE.Group;
-  muzzleFlash: THREE.Mesh;
-  x: number;
-  z: number;
-  vx: number;
-  vz: number;
-  hullYaw: number;
-  turretYaw: number;
-  currentDriveSpeed: number;
-  altitude?: number;
-  targetAltitude?: number;
-  verticalSpeed?: number;
-  forwardSpeed?: number;
-  steerAngle?: number;
-  bodyPitchRad?: number;
-  bodyRollRad?: number;
-  dumpAnimTimer?: number;
-  dumpReleasedInCycle?: boolean;
-  dumpTargetMode?: 'pad' | 'ground';
-  recoilTimer: number;
-  hp: number;
-  maxHp: number;
-  storedCrates: ('red' | 'super' | 'legend')[];
-  occupiedByPlayer: boolean;
-  occupiedByAiId: number | null;
-  hitFlashTimer?: number;
-  hitReactionTimer?: number;
-  hitReactionDirX?: number;
-  hitReactionDirZ?: number;
-  stunTimer?: number;
-  stunMesh?: THREE.Mesh;
-  lowHpSmokeTimer?: number;
-  navPath?: Array<{ x: number; z: number }>;
-  navWaypointIndex?: number;
-  navLastGoalX?: number;
-  navLastGoalZ?: number;
-  navRepathTimer?: number;
-  navStuckTimer?: number;
-  navLastProgressX?: number;
-  navLastProgressZ?: number;
-}
-
-interface BuddyUnit {
-  id: number;
-  team: 'blue' | 'red';
-  ownerCommanderId: number;
-  isStarterCommanderUnit: boolean;
-  isPlayer: boolean;
-  classId: BuddyClassId;
-  root: THREE.Group;
-  bodyGroup: THREE.Group;
-  rig: RobloxBuddyRig;
-  headMesh: THREE.Mesh;
-  leftArmPivot: THREE.Group;
-  rightArmPivot: THREE.Group;
-  leftLegPivot: THREE.Group;
-  rightLegPivot: THREE.Group;
-  weaponMesh: THREE.Mesh;
-  overheadCrateGroup: THREE.Group;
-  overheadCrateBox: THREE.Mesh;
-  saluteSign: {
-    sprite: THREE.Sprite;
-    updateText: (title: string, subtitle: string, accentHex: string, progressRatio?: number) => void;
-  };
-  teamRing: THREE.Mesh;
-  x: number;
-  y: number;
-  z: number;
-  vx: number;
-  vy: number;
-  vz: number;
-  jumpOffset: number;
-  isGrounded: boolean;
-  yaw: number;
-  hp: number;
-  maxHp: number;
-  weaponId: LyoWeaponId;
-  weaponName: string;
-  weaponRecoil: number;
-  punchTimer: number;
-  punchHand: 'left' | 'right';
-  kickTimer: number;
-  ammo: number;
-  carryingCrate: 'none' | WorldCrateKind;
-  secondaryItem: BuddySecondaryItemId;
-  secondaryCount: number;
-  missionItem: BuddyMissionItemId;
-  walkCycle: number;
-  shootCooldown: number;
-  hitFlashTimer: number;
-  hitReactionTimer?: number;
-  hitReactionDirX?: number;
-  hitReactionDirZ?: number;
-  stunTimer?: number;
-  stunMesh?: THREE.Mesh;
-  isFrozen: boolean;
-  frozenTimer: number;
-  saluteTimer: number;
-  aiTargetCrateId: number | null;
-  alive: boolean;
-  respawnTimer: number;
-  navPath?: Array<{ x: number; z: number }>;
-  navWaypointIndex?: number;
-  navLastGoalX?: number;
-  navLastGoalZ?: number;
-  navRepathTimer?: number;
-  navStuckTimer?: number;
-  navLastProgressX?: number;
-  navLastProgressZ?: number;
-}
-
-interface Projectile {
-  active: boolean;
-  isPlayerTeam: boolean;
-  weaponType: string;
-  mesh: THREE.Mesh;
-  has3dShells?: boolean;
-  bossShell?: THREE.Object3D;
-  playerShell?: THREE.Object3D;
-  fodderShell?: THREE.Object3D;
-  pos: THREE.Vector3;
-  vel: THREE.Vector3;
-  life: number;
-  damage: number;
-}
-
-interface ExplosionParticle {
-  active: boolean;
-  mesh: THREE.Mesh;
-  vel: THREE.Vector3;
-  life: number;
-  maxLife: number;
-}
-
-const BUILD_ORDER_CYCLE: BuildOrderTarget[] = [
-  '1x1x1',
-  '2x1x1',
-  '1x1x2',
-  '2x2x1',
-  '2x1x2',
-  '2x2x2',
-  'upgrade_building',
-  'upgrade_fence',
-  'build_parking',
-  'build_helipad',
-];
-const COMMAND_CYCLE: TeamCommandMode[] = ['HARVEST', 'ATTACK', 'DEFEND', 'FOLLOW'];
-const BLUE_BUDDY_ROTATION: BuddyClassId[] = ['Infuntry', 'Ninja', 'Medic', 'Commando', 'Cyborg', 'Stealthy', 'SuperBuddie'];
-
-export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = ({
+export const BuddiesBlitzArena: React.FC<BuddiesBlitzArenaProps> = ({
   gameState,
   playMode,
   editorTool,
@@ -963,6 +362,73 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
 
+    // Direct 60 FPS DOM Overlay for Contextual Floating Prompts (Static Anchor, No Bobbing, No Jitter, Zero React Re-render)
+    const promptOverlay = document.createElement('div');
+    promptOverlay.setAttribute('aria-label', 'Contextual 3D Floating Prompts Direct DOM');
+    promptOverlay.style.position = 'fixed';
+    promptOverlay.style.inset = '0';
+    promptOverlay.style.pointerEvents = 'none';
+    promptOverlay.style.zIndex = '25';
+    promptOverlay.style.overflow = 'hidden';
+    container.appendChild(promptOverlay);
+
+    const createPromptButton = (htmlContent: string, title: string, actionDetail?: string) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.tabIndex = -1;
+      btn.title = title;
+      btn.setAttribute('aria-label', title);
+      btn.style.position = 'absolute';
+      btn.style.left = '0px';
+      btn.style.top = '0px';
+      btn.style.margin = '0';
+      btn.style.padding = '0';
+      btn.style.border = 'none';
+      btn.style.background = 'transparent';
+      btn.style.outline = 'none';
+      btn.style.cursor = 'pointer';
+      btn.style.pointerEvents = 'auto';
+      btn.style.userSelect = 'none';
+      btn.style.display = 'none';
+      btn.style.willChange = 'transform';
+      btn.style.transition = 'none';
+      btn.innerHTML = htmlContent;
+      if (actionDetail) {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          window.dispatchEvent(new CustomEvent('buddy-action', { detail: actionDetail }));
+        };
+      }
+      promptOverlay.appendChild(btn);
+      return btn;
+    };
+
+    const POLYGON_ICON_HTML = `<svg viewBox="0 0 64 64" style="width:24px; height:24px; filter:drop-shadow(0 1.5px 3px rgba(0,0,0,0.35)); display:block; pointer-events:none;" aria-hidden="true"><polygon points="15,10 46,5 60,22 60,48 45,60 18,57 5,40" fill="#ffffff" /><polygon points="18,14 45,9 57,24 57,46 44,56 20,53 9,39" fill="#14161d" /><polygon points="22,20 44,16 54,27 54,44 43,53 22,50 14,38" fill="#ffffff" /><circle cx="34.5" cy="34.5" r="7.5" fill="#14161d" /></svg>`;
+    const HAND_ICON_HTML = `<span style="font-size:18px; line-height:1; filter:drop-shadow(0 1.5px 0 #14161d) drop-shadow(0 0 1px #ffffff); display:inline-block; user-select:none; pointer-events:none;">✋</span>`;
+
+    const kioskPromptBtn = createPromptButton(POLYGON_ICON_HTML, 'KIOSK [B]');
+    kioskPromptBtn.onclick = (e) => {
+      e.stopPropagation();
+      soundEngine.playUiClick();
+      emitHudImmediately();
+      window.dispatchEvent(new CustomEvent('toggle-kiosk-ui'));
+    };
+    const cratePromptBtn = createPromptButton(HAND_ICON_HTML, 'AMBIL [E]', 'pickupOrThrow');
+    const padCraftPromptBtn = createPromptButton(POLYGON_ICON_HTML, 'TENDANG BATAL [F]', 'kickOrCraft');
+    const padDepositPromptBtn = createPromptButton(HAND_ICON_HTML, 'ISI PAD [E]', 'pickupOrThrow');
+
+    let isKioskPromptActive = false;
+    let activeCratePromptId: number | null = null;
+    let isPadCraftPromptActive = false;
+    let isPadDepositPromptActive = false;
+    let isKioskModalOpenCanvas = false;
+
+    const onKioskUiToggled = () => { isKioskModalOpenCanvas = !isKioskModalOpenCanvas; };
+    const onKioskUiClosed = () => { isKioskModalOpenCanvas = false; };
+    window.addEventListener('toggle-kiosk-ui', onKioskUiToggled);
+    window.addEventListener('close-kiosk-ui', onKioskUiClosed);
+    let updateDirectDomPrompts: () => void = () => {};
+
     // 2. Scene, Camera & Authentic Long Hoang (Lyo) Warm Afternoon Sun Lighting
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#8cdcf0');
@@ -1053,6 +519,32 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
     const matRedCrate = makeToonMat('#ff3b30');
     const matSuperCrate = makeToonMat('#00d2ff');
     const matLegendCrate = makeToonMat('#ffd700');
+    const matSilverMetallicCrate = new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0,
+      metalness: 0.92,
+      roughness: 0.14,
+      emissive: 0x38bdf8,
+      emissiveIntensity: 0.18,
+    });
+    const matGoldMetallicCrate = new THREE.MeshStandardMaterial({
+      color: 0xfbbf24,
+      metalness: 0.94,
+      roughness: 0.12,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 0.24,
+    });
+    const getCrateFallbackMaterial = (kind: WorldCrateKind): THREE.Material =>
+      kind === 'medical'
+        ? matWhite
+        : kind === 'gold_metallic'
+          ? matGoldMetallicCrate
+          : kind === 'silver_metallic'
+            ? matSilverMetallicCrate
+            : kind === 'legend'
+              ? matLegendCrate
+              : kind === 'super'
+                ? matSuperCrate
+                : matRedCrate;
     const matBlueTeam = makeToonMat('#2979ff');
     const matRedTeam = makeToonMat('#ff3b30');
     const matTankHighlight = makeToonMat('#b8ff3c');
@@ -1097,50 +589,6 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       depthWrite: false,
     });
 
-    // Helper: Dynamic 3D Billboard Text Sign (for Base HP & Stacking Pad Hologram Preview)
-    const createBillboardSign = (widthWorld: number, heightWorld: number) => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 128;
-      const ctx = canvas.getContext('2d')!;
-      const tex = new THREE.CanvasTexture(canvas);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
-      const sprite = new THREE.Sprite(mat);
-      sprite.scale.set(widthWorld, heightWorld, 1);
-      sprite.renderOrder = 10;
-
-      const updateText = (title: string, subtitle: string, accentHex: string, ratio = 1) => {
-        ctx.clearRect(0, 0, 512, 128);
-        ctx.fillStyle = '#11121a';
-        ctx.beginPath();
-        ctx.roundRect(8, 8, 496, 112, 22);
-        ctx.fill();
-        ctx.lineWidth = 6;
-        ctx.strokeStyle = accentHex;
-        ctx.stroke();
-
-        if (ratio >= 0) {
-          ctx.fillStyle = '#272935';
-          ctx.fillRect(24, 82, 464, 22);
-          ctx.fillStyle = accentHex;
-          ctx.fillRect(24, 82, Math.max(0, Math.min(1, ratio)) * 464, 22);
-        }
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '900 30px "Barlow", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(title, 256, 44);
-
-        ctx.fillStyle = accentHex;
-        ctx.font = '800 22px "JetBrains Mono", monospace';
-        ctx.fillText(subtitle, 256, 72);
-        tex.needsUpdate = true;
-      };
-
-      return { sprite, updateText };
-    };
-
     // =========================================================================
     // 4. TOLAN'S WORLD CURVED PLANET ENVIRONMENT, PONDS, FLORA & SKY SUNBEAMS
     // =========================================================================
@@ -1174,6 +622,46 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
     const centerDropZoneGroup = buildDropZonePad(0, 0, matRedCrate);
     const westSuperDropZoneGroup = buildDropZonePad(-53.5, 0.0, matSuperCrate);
     const eastSuperDropZoneGroup = buildDropZonePad(60.0, 0.0, matSuperCrate);
+
+    // 4A-2. Dynamic Supply Drop Ground Beacon Ring (Central Oasis & Harbor Dock)
+    const supplyDropBeaconGroup = new THREE.Group();
+    const supplyBeaconOuterRingGeo = new THREE.RingGeometry(3.4, 4.1, 36);
+    supplyBeaconOuterRingGeo.rotateX(-Math.PI / 2);
+    const supplyBeaconOuterRingMat = new THREE.MeshBasicMaterial({
+      color: 0xfacc15,
+      transparent: true,
+      opacity: 0.85,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const supplyBeaconOuterRing = new THREE.Mesh(supplyBeaconOuterRingGeo, supplyBeaconOuterRingMat);
+    supplyDropBeaconGroup.add(supplyBeaconOuterRing);
+
+    const supplyBeaconInnerDiscGeo = new THREE.RingGeometry(1.1, 1.55, 28);
+    supplyBeaconInnerDiscGeo.rotateX(-Math.PI / 2);
+    const supplyBeaconInnerDiscMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.72,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const supplyBeaconInnerRing = new THREE.Mesh(supplyBeaconInnerDiscGeo, supplyBeaconInnerDiscMat);
+    supplyDropBeaconGroup.add(supplyBeaconInnerRing);
+
+    const supplyBeaconBeamGeo = new THREE.CylinderGeometry(0.32, 1.25, 16.0, 16, 1, true);
+    const supplyBeaconBeamMat = new THREE.MeshBasicMaterial({
+      color: 0xfef08a,
+      transparent: true,
+      opacity: 0.26,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const supplyBeaconBeam = new THREE.Mesh(supplyBeaconBeamGeo, supplyBeaconBeamMat);
+    supplyBeaconBeam.position.y = 8.0;
+    supplyDropBeaconGroup.add(supplyBeaconBeam);
+    supplyDropBeaconGroup.visible = false;
+    scene.add(supplyDropBeaconGroup);
 
     // =========================================================================
     // 4B. CURVED PLANET INFINITE GRASS + FLOATING DANDELION SEEDS SHADER
@@ -1215,7 +703,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       commanderIdx: number,
     ) => {
       const teamMat = team === 'blue' ? matBlueTeam : matRedTeam;
-      const baseYaw = team === 'blue' ? Math.PI / 2 : -Math.PI / 2;
+      const baseYaw = team === 'blue' ? 0 : Math.PI;
       const padGroup = new THREE.Group();
       padGroup.position.set(padX, 0.04, padZ);
       padGroup.rotation.y = baseYaw;
@@ -1241,14 +729,15 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         padStaticGroup.add(arrow);
       });
 
-      // 1:1 KAI Self-Service Ticketing Kiosk + Digital Luggage Scale Platform placed flush & parallel right beside the Stacking Pad
-      // and merged into the same static geometry group for minimal draw calls!
-      const kioskMesh = buildSelfServiceTacticalKioskMesh(windUniforms, isSoftwareGl);
-      kioskMesh.position.set(0.0, 0.0, -3.45);
-      kioskMesh.rotation.y = -Math.PI / 2;
-      padStaticGroup.add(kioskMesh);
-
+      // 1:1 KAI Self-Service Ticketing Kiosk + Digital Luggage Scale Platform placed flush against the perimeter fence
+      // with generous clear distance from the Crate Pad so placing crates is unobstructed!
       bakeStaticGroupMeshes(padStaticGroup);
+
+      const kioskMesh = buildSelfServiceTacticalKioskMesh(windUniforms, isSoftwareGl);
+      kioskMesh.position.set(1.22, 0.0, -6.48);
+      kioskMesh.rotation.y = -Math.PI / 2;
+      padGroup.add(kioskMesh);
+      padGroup.updateMatrixWorld(true);
 
       const mergedCage = new THREE.Mesh(
         new THREE.BoxGeometry(3.85, 2.95, 3.85),
@@ -1314,9 +803,15 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       padSign.sprite.position.set(0, 4.5, 0);
       padGroup.add(padSign.sprite);
 
+      const kioskHoloSign = createBillboardSign(3.6, 0.98);
+      kioskHoloSign.sprite.position.set(-0.65, 4.35, 0.28);
+      kioskMesh.add(kioskHoloSign.sprite);
+
       return {
         commanderIdx,
         padGroup,
+        kioskMesh,
+        kioskHoloSign,
         padX,
         padZ,
         worldX: padX,
@@ -1343,10 +838,10 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       hpSign.sprite.position.set(-1.8, 8.8, -1.2);
       baseGroup.add(hpSign.sprite);
 
-      // Build 4 Compact 2x2 Stacking Pads (Pad P1..P4) on the right bay (relZ = +5.8) of the 4 Individual Base Plots at x = sign * [-39.2, -9.2, +20.8, +50.8], z = sign * 75.8
-      const padOffsetsX = [-39.2, -9.2, 20.8, 50.8];
+      // Build 4 Compact 2x2 Stacking Pads (Pad P1..P4) flush against the right fence (relZ = +7.3) of the 4 Individual Base Plots at x = sign * [-37.7, -7.7, +22.3, +52.3], z = sign * 77.8
+      const padOffsetsX = [-37.7, -7.7, 22.3, 52.3];
       const commanderPads = padOffsetsX.map((ox, idx) =>
-        buildSingleStackingPadMesh(team, hqX + sign * ox, hqZ - sign * 10.2, idx),
+        buildSingleStackingPadMesh(team, hqX + sign * ox, hqZ - sign * 8.2, idx),
       );
       const primaryPad = commanderPads[0];
 
@@ -1355,6 +850,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         hpSign,
         commanderPads,
         padGroup: primaryPad.padGroup,
+        kioskMesh: primaryPad.kioskMesh,
         hqX,
         hqZ,
         padX: primaryPad.padX,
@@ -1367,33 +863,22 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       };
     };
 
-    const blueBase = buildBaseHqAndPad('blue', 0.0, 86.0, -39.2, 75.8);
-    const redBase = buildBaseHqAndPad('red', 0.0, -86.0, 39.2, -75.8);
+    const blueBase = buildBaseHqAndPad('blue', 0.0, 86.0, -37.7, 77.8);
+    const redBase = buildBaseHqAndPad('red', 0.0, -86.0, 37.7, -77.8);
+
+    const INTERACT_ENTER_RADIUS = 2.6;
+    const INTERACT_EXIT_RADIUS = 2.9;
+    const scratchKioskWorldPos = new THREE.Vector3();
+    const getBlueKioskWorldCenter = (padIdx = 0): THREE.Vector3 => {
+      const pad = blueBase.commanderPads[padIdx] ?? blueBase.commanderPads[0];
+      pad.kioskMesh.updateWorldMatrix(true, false);
+      return pad.kioskMesh.getWorldPosition(scratchKioskWorldPos);
+    };
 
     // =========================================================================
     // 6. MAP LAYOUT STATE & REAL .GLB PROP / TREE BUILDER (8-10 UNIT TALL TREES!)
     // =========================================================================
-    const cloneDefaultLayout = (): ArenaMapLayout =>
-      JSON.parse(JSON.stringify(DEFAULT_ARENA_MAP_LAYOUT));
-
-    const loadSavedLayout = (): ArenaMapLayout => {
-      try {
-        const raw = localStorage.getItem(MAP_STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw) as ArenaMapLayout;
-          if (parsed && Array.isArray(parsed.props) && parsed.blueHq && parsed.redHq) {
-            if (Array.isArray(parsed.sculptData) && parsed.sculptData.length > 0) {
-              restoreTerrainSculptGrid(parsed.sculptData);
-            }
-            return parsed;
-          }
-        }
-      } catch {
-        // Ignore storage errors
-      }
-      resetTerrainSculptGrid();
-      return cloneDefaultLayout();
-    };
+    const loadSavedLayout = (): ArenaMapLayout => loadSavedArenaLayout();
 
     let currentMapLayout: ArenaMapLayout = loadSavedLayout();
     const trees: DestructibleTree[] = [];
@@ -1405,69 +890,6 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
     let nextEntityId = 500;
     let editorRotY = 0;
     let editorScale = 1.0;
-
-    const getPropBaseHeight = (kind: PlacedMapProp['kind']): number => {
-      switch (kind) {
-        case 'turbine':
-          return 17.5;
-        case 'chimney':
-          return 15.6;
-        case 'crane':
-          return 18.5;
-        case 'giant_tank':
-          return 9.2;
-        case 'lamppost_1a':
-        case 'lamppost_1b':
-          return 7.4;
-        case 'dump_truck':
-          return 3.8;
-        case 'forklift':
-          return 3.15;
-        case 'power_core':
-          return 7.8;
-        case 'pipe_cluster':
-        case 'pipe_cluster_1b':
-          return 3.4;
-        case 'giant_pipe':
-          return 3.3;
-        case 'giant_pipe_1b':
-          return 3.85;
-        case 'tank_1a':
-        case 'tank_1b':
-          return 3.4;
-        case 'concrete_fence':
-          return 2.85;
-        case 'concrete_fence_1b':
-          return 2.05;
-        case 'concrete_pipe':
-          return 2.35;
-        case 'h_beam':
-          return 2.45;
-        case 'barricade':
-          return 1.85;
-        case 'explosive_barrel':
-        case 'barrel_1c':
-          return 1.75;
-        case 'hydrant':
-          return 1.65;
-        case 'recycle_bin':
-          return 1.60;
-        case 'bench':
-          return 1.75;
-        case 'wheelbarrow':
-          return 1.45;
-        case 'pallet_1a':
-          return 1.35;
-        case 'fuel_cell':
-          return 1.25;
-        case 'circuit_module':
-          return 1.15;
-        case 'traffic_cone':
-          return 1.08;
-        default:
-          return 2.2;
-      }
-    };
 
     const registerMapPropPhysics = (prop: PlacedMapProp, wrapper: THREE.Group) => {
       const spec = getPropCollisionSpec(prop.kind, prop.scale);
@@ -1517,17 +939,19 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         grp.add(shadow);
         scene.add(grp);
 
-        if (loadedLyoAssets) {
-          populateRealLyoTreeFromGlb(
-            grp,
-            isPurple ? loadedLyoAssets.tree1bGltf.scene : loadedLyoAssets.tree1aGltf.scene,
-            isPurple,
-            loadedLyoAssets.treeFoliageTex,
-            windUniforms,
-            isSoftwareGl,
-            prop.scale,
-          );
-        }
+        populateRealLyoTreeFromGlb(
+          grp,
+          loadedLyoAssets
+            ? isPurple
+              ? loadedLyoAssets.tree1bGltf.scene
+              : loadedLyoAssets.tree1aGltf.scene
+            : null,
+          isPurple,
+          loadedLyoAssets ? loadedLyoAssets.treeFoliageTex : getSharedFallbackFoliageMaskTexture(),
+          windUniforms,
+          isSoftwareGl,
+          prop.scale,
+        );
 
         trees.push({
           id: nextEntityId++,
@@ -1559,7 +983,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         );
         mainRock.scale.set(1.28 * sc, 0.74 * sc, 1.08 * sc);
         mainRock.position.y = 0.24 * sc;
-        mainRock.frustumCulled = false;
+        mainRock.frustumCulled = true;
         rockGrp.add(mainRock);
 
         const mossCap = new THREE.Mesh(
@@ -1568,7 +992,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         );
         mossCap.scale.set(0.96 * sc, 0.4 * sc, 0.84 * sc);
         mossCap.position.set(0, 0.5 * sc, 0);
-        mossCap.frustumCulled = false;
+        mossCap.frustumCulled = true;
         rockGrp.add(mossCap);
 
         const sidePebble = new THREE.Mesh(
@@ -1577,9 +1001,12 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         );
         sidePebble.scale.set(0.62 * sc, 0.46 * sc, 0.58 * sc);
         sidePebble.position.set(0.65 * sc, 0.14 * sc, 0.32 * sc);
-        sidePebble.frustumCulled = false;
+        sidePebble.frustumCulled = true;
         rockGrp.add(sidePebble);
 
+        bakeStaticGroupMeshes(rockGrp, { minShadowCasterSpan: 0.45 });
+        rockGrp.position.set(prop.x, getTerrainElevation(prop.x, prop.z), prop.z);
+        rockGrp.rotation.y = prop.rotY;
         rockGrp.userData.propId = prop.id;
         rockGrp.userData.worldX = prop.x;
         rockGrp.userData.worldZ = prop.z;
@@ -1607,7 +1034,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
 
           const stem = new THREE.Mesh(stemGeo, stemMat);
           stem.position.set(bx, h * 0.5, bz);
-          stem.frustumCulled = false;
+          stem.frustumCulled = true;
           cluster.add(stem);
 
           const head = new THREE.Mesh(
@@ -1615,15 +1042,18 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
             new THREE.MeshBasicMaterial({ color: colors[(prop.id + i) % colors.length] }),
           );
           head.position.set(bx, h, bz);
-          head.frustumCulled = false;
+          head.frustumCulled = true;
           cluster.add(head);
 
           const center = new THREE.Mesh(centerGeo, centerMat);
           center.position.set(bx, h + 0.05, bz);
-          center.frustumCulled = false;
+          center.frustumCulled = true;
           cluster.add(center);
         }
+        bakeStaticGroupMeshes(cluster, { minShadowCasterSpan: 0.45 });
         cluster.scale.setScalar(sc);
+        cluster.position.set(prop.x, getTerrainElevation(prop.x, prop.z), prop.z);
+        cluster.rotation.y = prop.rotY;
         cluster.userData.propId = prop.id;
         cluster.userData.worldX = prop.x;
         cluster.userData.worldZ = prop.z;
@@ -1721,10 +1151,10 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       blueBase.baseGroup.position.set(layout.blueHq.x, 0, layout.blueHq.z);
       blueBase.baseGroup.rotation.y = Math.PI / 2;
 
-      const padOffsetsX = [-39.2, -9.2, 20.8, 50.8];
+      const padOffsetsX = [-37.7, -7.7, 22.3, 52.3];
       blueBase.commanderPads.forEach((cp, idx) => {
         cp.padX = layout.blueHq.x + padOffsetsX[idx];
-        cp.padZ = layout.blueHq.z - 10.2;
+        cp.padZ = layout.blueHq.z - 8.2;
         cp.worldX = cp.padX;
         cp.worldZ = cp.padZ;
         cp.padGroup.position.set(cp.padX, 0.04, cp.padZ);
@@ -1740,7 +1170,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
 
       redBase.commanderPads.forEach((cp, idx) => {
         cp.padX = layout.redHq.x - padOffsetsX[idx];
-        cp.padZ = layout.redHq.z + 10.2;
+        cp.padZ = layout.redHq.z + 8.2;
         cp.worldX = cp.padX;
         cp.worldZ = cp.padZ;
         cp.padGroup.position.set(cp.padX, 0.04, cp.padZ);
@@ -1806,8 +1236,13 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       bodyGroup.scale.setScalar(1.16);
       root.add(bodyGroup);
 
-      // Build the full 4-View Blueprint Roblox-Style Avatar Character + 3 Tactical Weapons
-      const rig = buildProceduralRobloxBuddyAvatar(bodyGroup, team, windUniforms, isSoftwareGl, false);
+      const rig = buildProceduralRobloxBuddyAvatar(
+        bodyGroup,
+        team,
+        windUniforms,
+        isSoftwareGl,
+        false,
+      );
       const {
         headMesh,
         leftArmPivot,
@@ -1819,7 +1254,6 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       headMesh.userData.defaultMat = headMesh.material;
 
       // Overhead Carried 3D Crate (visible when carrying a crate above the head!)
-      // Note: bodyGroup has scale 1.16, so local size 0.84 -> 0.97m world size at y=2.46 (matches ground crate visually without perspective bloat)
       const overheadCrateGroup = new THREE.Group();
       overheadCrateGroup.position.set(0, 2.46, 0);
       overheadCrateGroup.visible = false;
@@ -1858,11 +1292,9 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
           : 'LyoPistol';
       const initialSecondaryItem: BuddySecondaryItemId = startUnarmed
         ? 'none'
-        : classId === 'Commando' || classId === 'Cyborg'
-          ? 'cluster_bomb'
-          : classId === 'Stealthy' || classId === 'Ninja'
-            ? 'land_mine'
-            : 'hand_grenade';
+        : classId === 'Stealthy' || classId === 'Ninja'
+          ? 'land_mine'
+          : 'hand_grenade';
       const initialSecondaryCount = initialSecondaryItem === 'none' ? 0 : 2;
       updateCharacterWeaponStance(rig, initialWeaponId, 0, false, false, 0, 0);
 
@@ -1920,6 +1352,12 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         frozenTimer: 0,
         saluteTimer: 0,
         aiTargetCrateId: null,
+        assignedRole: team === 'blue' && ownerCommanderId === 0 ? teamCommand : 'HARVEST',
+        followerReactionTimer: 0,
+        followerIdleLookTimer: 1.5,
+        followerIdleLookYaw: team === 'blue' ? Math.PI / 2 : -Math.PI / 2,
+        followerStrafeTimer: 0.8,
+        followerStrafeSign: 1,
         alive: true,
         respawnTimer: 0,
       };
@@ -2227,8 +1665,10 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         loadedLyoAssets = assets;
         document.body.dataset.assetsLoaded = 'true';
 
-        // 1. Rebuild all trees (8-10 units tall with lush canopies) & real .glb props from currentMapLayout
+        // 1. Rebuild all trees (8-10 units tall with lush canopies), courtyard garden trees & real .glb props from currentMapLayout
         rebuildMapFromLayout(currentMapLayout);
+        populateMilitaryBaseGardenTreesFromGlb(blueBase.baseGroup, assets, windUniforms, isSoftwareGl);
+        populateMilitaryBaseGardenTreesFromGlb(redBase.baseGroup, assets, windUniforms, isSoftwareGl);
 
         // 2. Populate any active Tanks & Dump Trucks with real player.glb or dump-truck.glb (without concrete pipes!)
         tanks.forEach((t) => {
@@ -2348,11 +1788,14 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
     let redCommanderBases: IndividualCommanderBaseState[] = createIndividualCommanderBasesState('red');
     let buildOrder: BuildOrderTarget = '1x1x2';
     let activePriorityRecipe: KioskBuildPriorityRecipeId = 'buddy_infantry';
+    let blueBuildQueue: KioskBuildPriorityRecipeId[] = ['buddy_infantry'];
     let useCustomHologramRecipe = true;
     let gold = 1500;
     let kioskStatusMessage: string | null = null;
     let kioskStatusTimer = 0;
     let warzoneGoldSpawnTimer = 0;
+    let supplyDropSchedule: SupplyDropScheduleState = createInitialSupplyDropScheduleState();
+    let supplyDropBeaconLingeringTimer = 0;
     let teamCommand: TeamCommandMode = 'HARVEST';
     let blueBaseHp = 2000;
     let redBaseHp = 2000;
@@ -2481,10 +1924,50 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
           ? isLocalPlayerPad && !useCustomHologramRecipe
             ? `PILIH RESEP DI KIOSK [B] · [E] ISI PAD`
             : `0/${targetMax} PETI · [B] KIOSK · [E] ISI PAD`
-          : `[F] RAKIT (${ev.totalCrates}/${targetMax} PETI) · [B] KIOSK`,
+          : `[F] TENDANG BATAL (${ev.totalCrates}/${targetMax} PETI) · [B] KIOSK`,
         ev.legendCount > 0 ? '#ffd700' : ev.isSuper ? '#00d2ff' : '#b4ff39',
         clamp(ev.totalCrates / Math.max(1, targetMax), 0, 1),
       );
+
+      // Update Kiosk Side Platform 3D Hologram Shape + Progress Counter ("misal 1/5")
+      const kioskHoloState = evaluateKioskSideHologramDisplay(
+        isLocalPlayerPad ? useCustomHologramRecipe : false,
+        activePriorityRecipe,
+        activeOrder,
+        slots,
+        isLocalPlayerPad ? blueBuildQueue : [],
+      );
+      const sideHolo = padMeshObj.kioskMesh?.userData?.sideHologram as
+        | {
+            holoRoot: THREE.Group;
+            holoTurntable: THREE.Group;
+            holoModels: Record<KioskSideHologramModelKind, THREE.Group>;
+            holoSolidMat: THREE.MeshBasicMaterial;
+            holoWireMat: THREE.MeshBasicMaterial;
+            holoRingMat: THREE.MeshBasicMaterial;
+            holoBeamMat: THREE.MeshBasicMaterial;
+            activeModelKind: KioskSideHologramModelKind;
+          }
+        | undefined;
+      if (sideHolo) {
+        sideHolo.holoRoot.visible = kioskHoloState.visible;
+        for (const [mKey, mGrp] of Object.entries(sideHolo.holoModels)) {
+          mGrp.visible = mKey === kioskHoloState.modelKind;
+        }
+        sideHolo.activeModelKind = kioskHoloState.modelKind;
+        sideHolo.holoSolidMat.color.setHex(kioskHoloState.hologramColorInt);
+        sideHolo.holoWireMat.color.setHex(kioskHoloState.hologramColorInt);
+        sideHolo.holoRingMat.color.setHex(kioskHoloState.hologramColorInt);
+        sideHolo.holoBeamMat.color.setHex(kioskHoloState.hologramColorInt);
+      }
+      if (padMeshObj.kioskHoloSign) {
+        padMeshObj.kioskHoloSign.updateText(
+          kioskHoloState.titleText,
+          kioskHoloState.subtitleText,
+          kioskHoloState.hologramHexColor,
+          kioskHoloState.progressRatio,
+        );
+      }
     };
 
     const syncPadVisuals = (
@@ -2525,7 +2008,8 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       z: number,
       startGrounded = false,
     ) => {
-      if (worldCrates.length >= 38) return;
+      const isSpecialMetallic = kind === 'silver_metallic' || kind === 'gold_metallic';
+      if (!isSpecialMetallic && worldCrates.length >= 38) return;
       const wx = wrapPlanetCoord(x);
       const wz = wrapPlanetCoord(z);
       const groundY = getTerrainElevation(wx, wz) + 0.65;
@@ -2540,13 +2024,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       addOutlinedPart(
         boxVisualGroup,
         new THREE.BoxGeometry(1.25, 1.25, 1.25),
-        kind === 'medical'
-          ? matWhite
-          : kind === 'legend'
-            ? matLegendCrate
-            : kind === 'super'
-              ? matSuperCrate
-              : matRedCrate,
+        getCrateFallbackMaterial(kind),
         [0, 0, 0],
       );
       if (loadedLyoAssets) {
@@ -2570,6 +2048,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       worldCrates.push({
         id: nextEntityId++,
         kind,
+        indestructible: isSpecialMetallic,
         mesh: g,
         boxVisualGroup,
         parachuteMesh,
@@ -2581,7 +2060,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         vz: 0,
         rotY: 0,
         rotVelY: 0,
-        hp: kind === 'legend' ? 45 : kind === 'super' ? 35 : 22,
+        hp: isSpecialMetallic ? 999999 : kind === 'legend' ? 45 : kind === 'super' ? 35 : 22,
         state: startGrounded ? 'grounded' : 'falling',
         carrierId: null,
         squashTimer: 0,
@@ -2598,6 +2077,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       secondaryCount?: number;
       missionItemId?: Exclude<BuddyMissionItemId, 'none'>;
       scoreValue?: number;
+      healAmount?: number;
       hp?: number;
       isFromDeathDrop?: boolean;
       despawnTimerSec?: number;
@@ -2665,6 +2145,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         secondaryCount: options?.secondaryCount,
         missionItemId: options?.missionItemId,
         scoreValue: options?.scoreValue,
+        healAmount: options?.healAmount,
         hp: options?.hp ?? 18,
         isFromDeathDrop: Boolean(options?.isFromDeathDrop || totalLife > 0),
         lifeRemainingSec: totalLife > 0 ? totalLife : 999999,
@@ -2771,8 +2252,8 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
               'blue',
               false,
               blueClasses[cmdId % blueClasses.length],
-              pad.padX,
-              pad.padZ - 4.5,
+              pad.padX - 3.6,
+              pad.padZ - 2.8,
               cmdId,
               cmdId % 2 === 0,
             ),
@@ -2792,8 +2273,8 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
               'red',
               false,
               redClasses[cmdId % redClasses.length],
-              pad.padX,
-              pad.padZ + 4.5,
+              pad.padX + 3.6,
+              pad.padZ + 2.8,
               cmdId,
               cmdId % 2 === 0,
             ),
@@ -2840,9 +2321,13 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       score = 0;
       gold = playModeRef.current === 'sandbox' ? 2500 : 1200;
       activePriorityRecipe = 'buddy_infantry';
+      blueBuildQueue = ['buddy_infantry'];
       useCustomHologramRecipe = true;
       kioskStatusMessage = null;
       kioskStatusTimer = 0;
+      supplyDropSchedule = createInitialSupplyDropScheduleState();
+      supplyDropBeaconLingeringTimer = 0;
+      supplyDropBeaconGroup.visible = false;
       enemiesDefeated = 0;
       mountedTank = null;
       ridingTramCarIdx = null;
@@ -2858,13 +2343,13 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         });
       }
 
-      // 3. Main Player Character (Commander 0 / P1) starts UNARMED ('unarmed') in front of Personal Stacking Pad P1 (-45.0, 75.8)
+      // 3. Main Player Character (Commander 0 / P1) starts UNARMED ('unarmed') in the open courtyard beside Personal Stacking Pad P1
       playerUnit = createBuddyCharacterUnit(
         'blue',
         true,
         'Infuntry',
-        blueBase.commanderPads[0].padX,
-        blueBase.commanderPads[0].padZ - 4.5,
+        blueBase.commanderPads[0].padX - 3.6,
+        blueBase.commanderPads[0].padZ - 2.8,
         0,
         true,
       );
@@ -3002,6 +2487,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         if (slot.bossShell) slot.bossShell.visible = false;
         if (slot.playerShell) slot.playerShell.visible = false;
         if (slot.fodderShell) slot.fodderShell.visible = false;
+        if (slot.nukeShell) slot.nukeShell.visible = false;
         slot.mesh.visible = true;
       },
       deactivateSlot: (slot) => {
@@ -3010,10 +2496,109 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         if (slot.bossShell) slot.bossShell.visible = false;
         if (slot.playerShell) slot.playerShell.visible = false;
         if (slot.fodderShell) slot.fodderShell.visible = false;
+        if (slot.nukeShell) slot.nukeShell.visible = false;
         slot.mesh.visible = false;
       },
     });
     const projectiles = projectilePool.slots;
+
+    const activeNuclearLaunchers: NuclearLauncherTurretRig[] = [];
+    let nukeStrikeState: NuclearStrikeSequenceState = createInitialNuclearStrikeState();
+    let nukeLastMouseNdc = { x: 0, y: 0 };
+    let emitHudImmediately: () => void = () => {};
+
+    // 3D Tactical Nuclear Target Reticle (visible on the zoomed-out map during `nukeStrikeState.phase === 'targeting'`)
+    const nukeTargetReticleGroup = new THREE.Group();
+    nukeTargetReticleGroup.name = 'NuclearTargetReticle3D';
+    nukeTargetReticleGroup.visible = false;
+    {
+      const outerRingMat = new THREE.MeshBasicMaterial({
+        color: 0xef4444,
+        transparent: true,
+        opacity: 0.72,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      const outerBlastRing = new THREE.Mesh(new THREE.RingGeometry(10.5, 11.4, 48), outerRingMat);
+      outerBlastRing.rotation.x = -Math.PI / 2;
+      outerBlastRing.position.y = 0.14;
+      nukeTargetReticleGroup.add(outerBlastRing);
+
+      const midRingMat = new THREE.MeshBasicMaterial({
+        color: 0xf59e0b,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      const midLockRing = new THREE.Mesh(new THREE.RingGeometry(3.8, 4.45, 36), midRingMat);
+      midLockRing.rotation.x = -Math.PI / 2;
+      midLockRing.position.y = 0.18;
+      midLockRing.name = 'MidLockRing';
+      nukeTargetReticleGroup.add(midLockRing);
+
+      const crossGeo = new THREE.PlaneGeometry(9.6, 0.36);
+      const crossH = new THREE.Mesh(crossGeo, midRingMat);
+      crossH.rotation.x = -Math.PI / 2;
+      crossH.position.y = 0.2;
+      nukeTargetReticleGroup.add(crossH);
+
+      const crossV = new THREE.Mesh(crossGeo, midRingMat);
+      crossV.rotation.x = -Math.PI / 2;
+      crossV.rotation.z = Math.PI / 2;
+      crossV.position.y = 0.2;
+      nukeTargetReticleGroup.add(crossV);
+
+      const centerCoreMat = new THREE.MeshBasicMaterial({
+        color: 0xff3b30,
+        transparent: true,
+        opacity: 0.92,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      const centerDisc = new THREE.Mesh(new THREE.CircleGeometry(1.15, 24), centerCoreMat);
+      centerDisc.rotation.x = -Math.PI / 2;
+      centerDisc.position.y = 0.22;
+      nukeTargetReticleGroup.add(centerDisc);
+
+      const beamMat = new THREE.MeshBasicMaterial({
+        color: 0xff4d3d,
+        transparent: true,
+        opacity: 0.26,
+        depthWrite: false,
+      });
+      const laserPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.95, 42, 16, 1, true), beamMat);
+      laserPillar.position.y = 21.0;
+      nukeTargetReticleGroup.add(laserPillar);
+    }
+    scene.add(nukeTargetReticleGroup);
+
+    // Dedicated 3D Cinematic Flying Rocket (`MLRS-MK5 'ATLAS' Nuke Rocket`) for Phase 2 (`tracking_rocket`)
+    const nukeCinematicRocketGroup = new THREE.Group();
+    nukeCinematicRocketGroup.name = 'NuclearCinematicRocket3D';
+    nukeCinematicRocketGroup.visible = false;
+    {
+      const nukeBody = buildProceduralNuclearMissileMesh(windUniforms, isSoftwareGl);
+      nukeBody.scale.setScalar(2.1);
+      nukeCinematicRocketGroup.add(nukeBody);
+
+      const plumeMat = new THREE.MeshBasicMaterial({
+        color: 0xffa726,
+        transparent: true,
+        opacity: 0.92,
+        depthWrite: false,
+      });
+      const plumeCone = new THREE.Mesh(new THREE.ConeGeometry(0.48, 2.6, 14), plumeMat);
+      plumeCone.rotation.x = -Math.PI / 2;
+      plumeCone.position.set(0, 0, -2.1);
+      plumeCone.name = 'RocketExhaustPlume';
+      nukeCinematicRocketGroup.add(plumeCone);
+    }
+    scene.add(nukeCinematicRocketGroup);
+
+    const activeLaserBeams: ActiveLaserBeam3D[] = [];
+    const activeOrdnanceDevices: ActiveOrdnanceDevice3D[] = [];
+    let planeClusterBombCooldown = 0;
 
     const fireProjectile = (
       isPlayerTeam: boolean,
@@ -3028,23 +2613,39 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         slot.weaponType = weaponType;
         slot.pos.copy(origin);
         slot.vel.copy(dir).normalize().multiplyScalar(speed);
-        slot.life = 1.25;
+        slot.life = weaponType === 'NuclearMissile' ? 4.8 : 1.25;
         slot.damage = damage;
 
         const visSpec = getWeaponProjectileVisualSpec(weaponType);
-        if (slot.has3dShells && slot.bossShell && slot.playerShell && slot.fodderShell) {
+        if (weaponType === 'NuclearMissile') {
+          if (!slot.nukeShell) {
+            const nukeMesh = buildProceduralNuclearMissileMesh(windUniforms, isSoftwareGl);
+            nukeMesh.scale.setScalar(1.35);
+            slot.mesh.add(nukeMesh);
+            slot.nukeShell = nukeMesh;
+          }
+          slot.mesh.material = hiddenCarrierProjMat;
+          if (slot.bossShell) slot.bossShell.visible = false;
+          if (slot.playerShell) slot.playerShell.visible = false;
+          if (slot.fodderShell) slot.fodderShell.visible = false;
+          slot.nukeShell.visible = true;
+          slot.mesh.scale.set(1, 1, 1);
+        } else if (slot.has3dShells && slot.bossShell && slot.playerShell && slot.fodderShell) {
           slot.mesh.material = hiddenCarrierProjMat;
           slot.bossShell.visible = visSpec.shellKind === 'boss';
           slot.playerShell.visible = visSpec.shellKind === 'player';
           slot.fodderShell.visible = visSpec.shellKind === 'fodder';
+          if (slot.nukeShell) slot.nukeShell.visible = false;
+          slot.mesh.scale.set(visSpec.diameter, visSpec.diameter, visSpec.length);
         } else {
+          if (slot.nukeShell) slot.nukeShell.visible = false;
           slot.mesh.material = !isPlayerTeam
             ? enemyProjMat
-            : weaponType === 'Ice Gun'
+            : weaponType === 'Ice Gun' || weaponType === 'LyoLaserGun'
             ? iceProjMat
             : playerProjMat;
+          slot.mesh.scale.set(visSpec.diameter, visSpec.diameter, visSpec.length);
         }
-        slot.mesh.scale.set(visSpec.diameter, visSpec.diameter, visSpec.length);
         slot.mesh.position.copy(origin);
         slot.mesh.lookAt(
           origin.x + slot.vel.x,
@@ -3294,6 +2895,134 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       }
     };
 
+    // Target Fire / Thermal Ignition Particle Spawner (for LG-88 Laser Gun target hits & Cluster Bomb / Incendiary blasts)
+    const FIRE_PARTICLE_COLORS = [0xff2a00, 0xff5e00, 0xff9500, 0xffe600];
+    const spawnTargetFireParticles = (
+      x: number,
+      y: number,
+      z: number,
+      count = 14,
+      spreadRadius = 0.48,
+    ) => {
+      for (let i = 0; i < count; i++) {
+        const ep = explosionParticlePool.acquire((slot) => {
+          slot.maxLife = 0.34 + Math.random() * 0.28;
+          const ang = Math.random() * Math.PI * 2;
+          const r = Math.random() * spreadRadius;
+          slot.mesh.position.set(
+            x + Math.cos(ang) * r,
+            y + 0.12 + Math.random() * 0.45,
+            z + Math.sin(ang) * r,
+          );
+          slot.mesh.scale.setScalar(0.52 + Math.random() * 0.72);
+          (slot.mesh.material as THREE.MeshBasicMaterial).color.setHex(
+            FIRE_PARTICLE_COLORS[i % FIRE_PARTICLE_COLORS.length],
+          );
+          // High upward buoyancy velocity so flames flicker and rise on the target
+          const horizSpd = 0.8 + Math.random() * 2.2;
+          slot.vel.set(
+            Math.cos(ang) * horizSpd,
+            5.8 + Math.random() * 5.2,
+            Math.sin(ang) * horizSpd,
+          );
+        });
+        if (!ep) break;
+      }
+    };
+
+    // 3D Coherent Photon Laser Beam Spawner (stretches from LG-88 muzzle to target impact point + ignites target with fire particles)
+    const laserOuterCylGeo = new THREE.CylinderGeometry(0.11, 0.11, 1.0, 10, 1, true);
+    const laserCoreCylGeo = new THREE.CylinderGeometry(0.042, 0.042, 1.0, 8, 1, true);
+    const laserHitSphereGeo = new THREE.SphereGeometry(0.26, 10, 10);
+    const laserUpAxis = new THREE.Vector3(0, 1, 0);
+    const spawnLaserBeamEffect = (startPos: THREE.Vector3, endPos: THREE.Vector3) => {
+      const delta = new THREE.Vector3().subVectors(endPos, startPos);
+      const dist = Math.max(0.5, delta.length());
+      const mid = new THREE.Vector3().addVectors(startPos, endPos).multiplyScalar(0.5);
+      const dir = delta.clone().divideScalar(dist);
+
+      const group = new THREE.Group();
+      const outerMat = new THREE.MeshBasicMaterial({
+        color: 0x00f0ff,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const coreMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.98,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+
+      const outerBeam = new THREE.Mesh(laserOuterCylGeo, outerMat);
+      outerBeam.scale.set(1, dist, 1);
+      outerBeam.position.copy(mid);
+      outerBeam.quaternion.setFromUnitVectors(laserUpAxis, dir);
+      group.add(outerBeam);
+
+      const coreBeam = new THREE.Mesh(laserCoreCylGeo, coreMat);
+      coreBeam.scale.set(1, dist, 1);
+      coreBeam.position.copy(mid);
+      coreBeam.quaternion.setFromUnitVectors(laserUpAxis, dir);
+      group.add(coreBeam);
+
+      const hitFlare = new THREE.Mesh(laserHitSphereGeo, outerMat);
+      hitFlare.position.copy(endPos);
+      group.add(hitFlare);
+
+      scene.add(group);
+      activeLaserBeams.push({
+        group,
+        outerMat,
+        coreMat,
+        life: 0,
+        maxLife: 0.16,
+      });
+    };
+
+    // TITAN-6 Rotary Gatling Ejected Brass Shell Casings + Hot Barrel Sparks
+    const spawnGatlingBrassAndSparks = (
+      muzzleX: number,
+      muzzleY: number,
+      muzzleZ: number,
+      fwdX: number,
+      fwdZ: number,
+      rightX: number,
+      rightZ: number,
+    ) => {
+      spawnDirectionalSparks(muzzleX, muzzleY, muzzleZ, fwdX, fwdZ, 12, 18, 0.62);
+      // Eject 2 glinting brass 7.62mm shell casings to the right of the TITAN-6 receiver
+      for (let i = 0; i < 2; i++) {
+        debrisChunkPool.acquire((slot) => {
+          slot.maxLife = 0.65 + Math.random() * 0.35;
+          slot.mat.color.setHex(i === 0 ? 0xfacc15 : 0xeab308);
+          slot.baseScale.set(0.16, 0.08, 0.28);
+          slot.mesh.scale.copy(slot.baseScale);
+          slot.pos.set(
+            muzzleX - fwdX * 0.55 + rightX * 0.22,
+            muzzleY + 0.04,
+            muzzleZ - fwdZ * 0.55 + rightZ * 0.22,
+          );
+          slot.mesh.position.copy(slot.pos);
+          const ejectSpd = 3.4 + Math.random() * 2.4;
+          slot.vel.set(
+            rightX * ejectSpd - fwdX * (0.6 + Math.random() * 0.8),
+            3.2 + Math.random() * 2.2,
+            rightZ * ejectSpd - fwdZ * (0.6 + Math.random() * 0.8),
+          );
+          slot.rotVel.set(
+            (Math.random() - 0.5) * 24,
+            (Math.random() - 0.5) * 24,
+            (Math.random() - 0.5) * 24,
+          );
+        });
+      }
+    };
+
     // Preallocated Pool of 220 Ground Tank Track Tread Marks (left & right caterpillar ruts in grass/dirt)
     interface TankTrackMark {
       active: boolean;
@@ -3485,12 +3214,56 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
     ): boolean => {
       if (kind === 'medical') return false;
       const slotsList = team === 'blue' ? bluePadSlotsList : redPadSlotsList;
-      const slots = slotsList[commanderIdx] || slotsList[0];
       const isPlayerMainPad = team === 'blue' && commanderIdx === 0;
+
+      // Special Indestructible Supply Drop Metallic Box Instant Full Boost!
+      if (kind === 'silver_metallic' || kind === 'gold_metallic') {
+        const specialBoost = evaluateSpecialMetallicCratePadBoost(kind);
+        slotsList[commanderIdx] = [...specialBoost.filledSlots];
+        if (isPlayerMainPad) {
+          buildOrder = specialBoost.buildOrder;
+          useCustomHologramRecipe = false;
+        } else {
+          aiBuildOrders[commanderIdx % aiBuildOrders.length] = specialBoost.buildOrder;
+        }
+        if (team === 'blue') {
+          gold += specialBoost.bonusGold;
+          score += specialBoost.bonusScore;
+          kioskStatusMessage = specialBoost.rewardLabel;
+          kioskStatusTimer = 5.5;
+          if (playerUnit && playerUnit.alive) {
+            playerUnit.saluteTimer = 2.6;
+            playerUnit.saluteSign.updateText(
+              kind === 'gold_metallic' ? 'SHINY GOLD BOX BOOST!' : 'SILVER BOX BOOST!',
+              `+${specialBoost.bonusGold}G & INSTANT OVERPOWER CRAFT!`,
+              kind === 'gold_metallic' ? '#facc15' : '#38bdf8',
+              1,
+            );
+            playerUnit.saluteSign.sprite.visible = true;
+          }
+          syncPadVisuals(blueBase, bluePadSlotsList[0], 'BLUE', blueBaseHp);
+        } else {
+          syncPadVisuals(redBase, redPadSlotsList[0], 'RED', redBaseHp);
+        }
+        craftFromCommanderPad(team, commanderIdx, isPlayerMainPad);
+        if (kind === 'silver_metallic' && worldPickups.length > 0) {
+          const latestPickup = worldPickups[worldPickups.length - 1];
+          if (latestPickup && latestPickup.kind === 'weapon') {
+            latestPickup.weaponName =
+              specialBoost.overpowerWeaponName ?? 'LG-88 Photon Lance (Overpower Tier)';
+            latestPickup.remainingAmmo = 180;
+          }
+        }
+        return true;
+      }
+
+      const slots = slotsList[commanderIdx] || slotsList[0];
       const activePattern: BuildOrderTarget = isPlayerMainPad
-        ? buildOrder
+        ? useCustomHologramRecipe
+          ? buildOrder
+          : 'AUTO'
         : aiBuildOrders[commanderIdx % aiBuildOrders.length];
-      const nextIdx =
+      let nextIdx =
         isPlayerMainPad && useCustomHologramRecipe && KIOSK_BUILD_PRIORITY_RECIPES[activePriorityRecipe]
           ? chooseNextPadSlotIndexForHologram(
               slots,
@@ -3500,10 +3273,27 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
               strictColorOnly,
             )
           : chooseNextPadSlotIndex(slots, activePattern);
+      if (nextIdx === -1 && isPlayerMainPad && !strictColorOnly) {
+        nextIdx = chooseNextPadSlotIndex(slots, 'AUTO');
+      }
       if (nextIdx === -1) return false;
       slots[nextIdx] = kind;
       if (team === 'blue') {
         syncPadVisuals(blueBase, bluePadSlotsList[0], 'BLUE', blueBaseHp);
+        // Auto-Burst & Continuous Queue Build: when the active hologram target on Blue Pad P1 is fulfilled,
+        // the stacked boxes burst and craft the item automatically without needing to be kicked ([F])!
+        const isHoloFulfilled =
+          useCustomHologramRecipe &&
+          evaluatePadHologramState(true, useCustomHologramRecipe, activePriorityRecipe, slots)
+            .isFulfilled;
+        const isManualOrderFulfilled =
+          !useCustomHologramRecipe &&
+          buildOrder !== 'AUTO' &&
+          evaluateStackingPadRecipe(slots).totalCrates >=
+            (BUILD_ORDER_SPECS[buildOrder]?.targetCrates ?? 8);
+        if (isPlayerMainPad && (isHoloFulfilled || isManualOrderFulfilled)) {
+          craftFromCommanderPad('blue', 0, true);
+        }
       } else {
         syncPadVisuals(redBase, redPadSlotsList[0], 'RED', redBaseHp);
       }
@@ -3551,7 +3341,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         return;
       }
 
-      if (!playerUnit.alive) return;
+      if (!playerUnit.alive || ridingTramCarIdx !== null) return;
 
       // Case A: Already carrying a crate above head -> Load 1 crate into nearby Dump Truck, or Throw toward Stacking Pad / forward!
       if (playerUnit.carryingCrate !== 'none') {
@@ -3561,9 +3351,9 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         const throwX = wrapPlanetCoord(playerUnit.x + fwdX * 2.4);
         const throwZ = wrapPlanetCoord(playerUnit.z + fwdZ * 2.4);
 
-        // Priority 1: Manual One-by-One Loading into nearest Dump Truck Vessel!
+        // Priority 1: Manual One-by-One Loading into nearest Dump Truck Vessel (within 2.9m)!
         let targetTruck: TankVehicle | null = null;
-        let bestTruckDist = 6.2;
+        let bestTruckDist = INTERACT_EXIT_RADIUS;
         for (const v of tanks) {
           if (
             v.vehicleKind === 'truck' &&
@@ -3581,7 +3371,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
               getPlanetShortestDistance(throwX, throwZ, rearX, rearZ),
             );
             const effDist = Math.min(dPlayer, dThrow);
-            if (effDist < bestTruckDist) {
+            if (effDist <= bestTruckDist) {
               bestTruckDist = effDist;
               targetTruck = v;
             }
@@ -3603,7 +3393,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         soundEngine.playCrateThrow();
 
         const distToBluePad = getPlanetShortestDistance(playerUnit.x, playerUnit.z, blueBase.padX, blueBase.padZ);
-        if (distToBluePad <= 10.5) {
+        if (isPadDepositPromptActive || distToBluePad <= INTERACT_EXIT_RADIUS) {
           if (addCrateToPadSlots('blue', carriedKind, 0)) {
             score += carriedKind === 'legend' ? 95 : carriedKind === 'super' ? 60 : 30;
             spawnBurstParticles(blueBase.padX, 1.8, blueBase.padZ, 10);
@@ -3613,13 +3403,6 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         }
 
         // Otherwise throw crate forward onto the ground with momentum
-        const dPadFromLand = getPlanetShortestDistance(throwX, throwZ, blueBase.padX, blueBase.padZ);
-        if (dPadFromLand <= 6.5 && addCrateToPadSlots('blue', carriedKind, 0)) {
-          score += carriedKind === 'legend' ? 95 : carriedKind === 'super' ? 60 : 30;
-          spawnBurstParticles(blueBase.padX, 1.8, blueBase.padZ, 10);
-          soundEngine.playPickup();
-          return;
-        }
         const launchX = wrapPlanetCoord(playerUnit.x + fwdX * 1.45);
         const launchZ = wrapPlanetCoord(playerUnit.z + fwdZ * 1.45);
         spawnWorldCrate(carriedKind, launchX, launchZ, true);
@@ -3640,13 +3423,13 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         return;
       }
 
-      // Case B: Not carrying -> Find nearest grounded crate within 5.5m and lift it overhead!
+      // Case B: Not carrying -> Find nearest grounded crate within 2.9m and lift it overhead!
       let nearestCrate: WorldCrate | null = null;
-      let bestDist = 5.5;
+      let bestDist = INTERACT_EXIT_RADIUS;
       for (const c of worldCrates) {
         if (c.state === 'grounded' || c.state === 'falling') {
           const d = getPlanetShortestDistance(c.x, c.z, playerUnit.x, playerUnit.z);
-          if (d < bestDist) {
+          if (d <= bestDist) {
             bestDist = d;
             nearestCrate = c;
           }
@@ -3665,12 +3448,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
             0.84,
           );
         } else {
-          playerUnit.overheadCrateBox.material =
-            nearestCrate.kind === 'legend'
-              ? matLegendCrate
-              : nearestCrate.kind === 'super'
-              ? matSuperCrate
-              : matRedCrate;
+          playerUnit.overheadCrateBox.material = getCrateFallbackMaterial(nearestCrate.kind);
         }
         playerUnit.overheadCrateGroup.visible = true;
         scene.remove(nearestCrate.mesh);
@@ -3680,13 +3458,17 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         return;
       }
 
-      // Case B.2: Standing right beside the Self-Service Tactical Kiosk / Crate Stacking Pad -> Open the Tactical Kiosk UI!
-      const distToKioskOrPad = Math.min(
-        getPlanetShortestDistance(playerUnit.x, playerUnit.z, blueBase.padX - 3.45, blueBase.padZ),
-        getPlanetShortestDistance(playerUnit.x, playerUnit.z, blueBase.padX, blueBase.padZ),
+      // Case B.2: Standing beside the Self-Service Tactical Kiosk (icon active or dist <= 2.9m) -> Open Tactical Kiosk UI!
+      const kioskWorldPos = getBlueKioskWorldCenter(0);
+      const distToKiosk = getPlanetShortestDistance(
+        playerUnit.x,
+        playerUnit.z,
+        kioskWorldPos.x,
+        kioskWorldPos.z,
       );
-      if (distToKioskOrPad <= 6.8) {
+      if (isKioskPromptActive || distToKiosk <= INTERACT_EXIT_RADIUS) {
         soundEngine.playUiClick();
+        emitHudImmediately();
         window.dispatchEvent(new CustomEvent('toggle-kiosk-ui'));
         return;
       }
@@ -3723,6 +3505,20 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       }
     };
 
+    const ensureBlueNuclearLauncherDeployed = (): NuclearLauncherTurretRig => {
+      let nl = activeNuclearLaunchers.find((n) => n.team === 'blue');
+      if (!nl) {
+        nl = buildProceduralNuclearLauncherTurret(windUniforms, isSoftwareGl, 'blue');
+        const nlX = wrapPlanetCoord(blueBase.padX - 6.2);
+        const nlZ = wrapPlanetCoord(blueBase.padZ - 5.4);
+        nl.root.position.set(nlX, getTerrainElevation(nlX, nlZ), nlZ);
+        scene.add(nl.root);
+        activeNuclearLaunchers.push(nl);
+        spawnBurstParticles(nlX, 2.6, nlZ, 26);
+      }
+      return nl;
+    };
+
     const craftFromCommanderPad = (
       team: 'blue' | 'red',
       commanderIdx = 0,
@@ -3748,6 +3544,33 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         soundEngine.playBuildBoxCraft(!isPlayerAction);
       });
       spawnBurstParticles(padMeshObj.padX, 2.0, padMeshObj.padZ, 18);
+      spawnDebrisChunks(
+        padMeshObj.padX,
+        1.15,
+        padMeshObj.padZ,
+        padEval.isSuper ? 'metal' : 'wood',
+        10,
+      );
+      scratchExplosionPos.set(padMeshObj.padX, 1.15, padMeshObj.padZ);
+      lyoExplosionSystem.spawnLyoExplosion(scratchExplosionPos, 0.78, 'crate');
+
+      const advanceBluePlayerBuildQueue = () => {
+        if (!isBlue || commanderIdx !== 0) return;
+        const qAdv = advanceKioskBuildQueueOnCraft(blueBuildQueue);
+        blueBuildQueue = qAdv.queue;
+        if (qAdv.hasMoreQueued && qAdv.nextActiveRecipe) {
+          activePriorityRecipe = qAdv.nextActiveRecipe;
+          useCustomHologramRecipe = true;
+          const nextSpec = KIOSK_BUILD_PRIORITY_RECIPES[activePriorityRecipe];
+          if (nextSpec) {
+            buildOrder = nextSpec.buildOrder;
+            kioskStatusMessage = `SELESAI! LANJUT ANTRIAN (${blueBuildQueue.length}/${MAX_KIOSK_BUILD_QUEUE}): ${nextSpec.name.toUpperCase()}`;
+            kioskStatusTimer = 4.5;
+          }
+        } else {
+          useCustomHologramRecipe = false;
+        }
+      };
 
       // Handle Base Upgrade & Facility Build Orders ('upgrade_building', 'upgrade_fence', 'build_parking', 'build_helipad')
       if (
@@ -3765,12 +3588,11 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
           redBaseHp = redCommanderBases.reduce((acc, b) => acc + b.buildingHp, 0);
         }
         slotsList[commanderIdx] = createEmptyPadSlots();
-        if (isBlue && commanderIdx === 0) {
-          useCustomHologramRecipe = false;
-        }
+        advanceBluePlayerBuildQueue();
         if (isBlue) {
           bluePadSlots = bluePadSlotsList[0];
           syncPadVisuals(blueBase, bluePadSlots, 'BLUE', blueBaseHp);
+          emitHudImmediately();
         } else {
           redPadSlots = redPadSlotsList[0];
           syncPadVisuals(redBase, redPadSlots, 'RED', redBaseHp);
@@ -3778,23 +3600,94 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         return true;
       }
 
-      const spawnX = wrapPlanetCoord(padMeshObj.padX - sign * 2.6);
+      const spawnX = wrapPlanetCoord(padMeshObj.padX - sign * 3.4);
       const spawnZ = wrapPlanetCoord(padMeshObj.padZ - sign * 2.2);
 
-      // Personal Helipad (relZ = -5.8) & Vehicle Parking Bay (relZ = 0.0, right beside Helipad) relative to Stacking Pad (relZ = +5.8)
-      const heliX = wrapPlanetCoord(padMeshObj.padX - sign * 11.6);
-      const heliZ = wrapPlanetCoord(padMeshObj.padZ);
-      const bayX = wrapPlanetCoord(padMeshObj.padX - sign * 5.8);
-      const bayZ = wrapPlanetCoord(padMeshObj.padZ);
-      const bayParallelYaw = isBlue ? Math.PI / 2 : -Math.PI / 2;
+      // Personal Helipad (relZ = -5.6, lx = 6.8, opposite Crate Pad) & Roofless Vehicle Parking Bay (relZ = -5.6, lx = 13.8, opposite Kiosk)
+      // Both face RIGHT (+relZ / +X for Blue Base) across toward the Kiosk & central exit driveway!
+      const heliX = wrapPlanetCoord(padMeshObj.padX - sign * 12.9);
+      const heliZ = wrapPlanetCoord(padMeshObj.padZ + sign * 1.4);
+      const bayX = wrapPlanetCoord(padMeshObj.padX - sign * 12.9);
+      const bayZ = wrapPlanetCoord(padMeshObj.padZ - sign * 5.6);
+      const bayParallelYaw = isBlue ? 0 : Math.PI;
+      const customBlueRecipe: KioskBuildPriorityRecipeId | null =
+        isBlue && commanderIdx === 0 && useCustomHologramRecipe ? activePriorityRecipe : null;
 
-      if (padEval.spawnType === 'plane') {
-        // 8 Crates (2x2x2) with Legend Crate -> Auto-build Helipad in Plot & Spawn Pesawat Pengebom / Lyo Fighter Plane!
+      if (customBlueRecipe === 'nuclear_launcher') {
+        ensureBlueNuclearLauncherDeployed();
+        score += 500;
+        kioskStatusMessage =
+          "MLRS-MK5 'ATLAS' NUCLEAR LAUNCHER SELESAI DIRAKIT! TEKAN [N] ATAU [E] DI LAUNCHER UNTUK TARGET!";
+        kioskStatusTimer = 5.0;
+      } else if (
+        customBlueRecipe === 'hand_grenade' ||
+        customBlueRecipe === 'land_mine' ||
+        customBlueRecipe === 'cluster_bomb'
+      ) {
+        if (playerUnit && playerUnit.alive) {
+          playerUnit.secondaryItem = customBlueRecipe;
+          playerUnit.secondaryCount = Math.min(
+            9,
+            (playerUnit.secondaryItem === customBlueRecipe ? playerUnit.secondaryCount : 0) + 3,
+          );
+        }
+        const popSec = computeStackingPadWeaponPopOutTrajectory(
+          padMeshObj.padX,
+          padMeshObj.padZ,
+          0,
+          1,
+          sign,
+        );
+        spawnWorldPickup(
+          'secondary',
+          customBlueRecipe === 'hand_grenade'
+            ? 'HG-04 Frag Grenade'
+            : customBlueRecipe === 'land_mine'
+              ? 'TM-89 Land Mine'
+              : 'CB-24 Cluster Bomb',
+          popSec.startX,
+          popSec.startZ,
+          {
+            secondaryId: customBlueRecipe,
+            secondaryCount: 3,
+            vx: popSec.vx,
+            vy: popSec.vy,
+            vz: popSec.vz,
+            despawnTimerSec: TEAM_BUDDIES_CRAFTED_WEAPON_DESPAWN_SEC,
+          },
+        );
+        score += 180;
+      } else if (customBlueRecipe === 'laser_gun' || customBlueRecipe === 'gatling_mortar') {
+        const isGat = customBlueRecipe === 'gatling_mortar';
+        const popSpecial = computeStackingPadWeaponPopOutTrajectory(
+          padMeshObj.padX,
+          padMeshObj.padZ,
+          0,
+          1,
+          sign,
+        );
+        spawnWorldPickup(
+          'weapon',
+          isGat ? 'TITAN-6 Rotary Gatling' : 'LG-88 Photon Lance',
+          popSpecial.startX,
+          popSpecial.startZ,
+          {
+            weaponId: 'rifle',
+            remainingAmmo: isGat ? 240 : 140,
+            vx: popSpecial.vx,
+            vy: popSpecial.vy,
+            vz: popSpecial.vz,
+            despawnTimerSec: TEAM_BUDDIES_CRAFTED_WEAPON_DESPAWN_SEC,
+          },
+        );
+        score += isGat ? 320 : 220;
+      } else if (padEval.spawnType === 'plane') {
+        // 8 Crates (2x2x2) with Legend Crate -> Auto-build Helipad in Plot & Spawn Pesawat Pengebom / Lyo Fighter Plane facing RIGHT!
         plotBase.hasHelipad = true;
         const newPlane = createLyoPlaneVehicle(heliX, heliZ, team);
         newPlane.maxHp = 620;
         newPlane.hp = 620;
-        newPlane.hullYaw = isBlue ? Math.PI / 2 : -Math.PI / 2;
+        newPlane.hullYaw = bayParallelYaw;
         newPlane.bodyGroup.rotation.y = newPlane.hullYaw;
         tanks.push(newPlane);
         spawnBurstParticles(heliX, 2.2, heliZ, 22);
@@ -3910,7 +3803,12 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         if (canCommanderBuildCharacter(ownedAlive.length, MAX_CHARACTERS_PER_COMMANDER)) {
           let chosenClass: BuddyClassId = BLUE_BUDDY_ROTATION[blueBuddyClassIdx % BLUE_BUDDY_ROTATION.length];
           blueBuddyClassIdx++;
-          if (padEval.category === 'buddy_t2') {
+          if (isBlue && commanderIdx === 0 && useCustomHologramRecipe) {
+            if (activePriorityRecipe === 'buddy_ninja') chosenClass = 'Ninja';
+            else if (activePriorityRecipe === 'buddy_infantry') chosenClass = 'Infuntry';
+            else if (activePriorityRecipe === 'buddy_commando') chosenClass = 'Commando';
+            else if (activePriorityRecipe === 'buddy_super_wall') chosenClass = 'SuperBuddie';
+          } else if (padEval.category === 'buddy_t2') {
             chosenClass = padEval.isSuper ? 'SuperBuddie' : 'Cyborg';
           } else if (padEval.isLegend) {
             chosenClass = 'Ninja';
@@ -4016,12 +3914,11 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       }
 
       slotsList[commanderIdx] = createEmptyPadSlots();
-      if (isBlue && commanderIdx === 0) {
-        useCustomHologramRecipe = false;
-      }
+      advanceBluePlayerBuildQueue();
       if (isBlue) {
         bluePadSlots = bluePadSlotsList[0];
         syncPadVisuals(blueBase, bluePadSlots, 'BLUE', blueBaseHp);
+        emitHudImmediately();
       } else {
         redPadSlots = redPadSlotsList[0];
         syncPadVisuals(redBase, redPadSlots, 'RED', redBaseHp);
@@ -4134,9 +4031,11 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         hitCrate = true;
         c.squashTimer = 0;
         c.mesh.scale.set(1, 1, 1);
-        c.hp -= kind === 'kick' ? 6 : 8;
+        if (canDamageWorldCrate(c)) {
+          c.hp -= kind === 'kick' ? 6 : 8;
+        }
 
-        if (c.hp <= 0) {
+        if (canDamageWorldCrate(c) && c.hp <= 0) {
           playMeleeAudio(() => {
             soundEngine.playWoodBreak(10.5);
             soundEngine.playBarrelExplosion();
@@ -4171,7 +4070,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
           c.vy = Math.max(c.vy, strike.upwardHopVy);
           c.rotVelY = (Math.random() - 0.5) * (kind === 'kick' ? 10.5 : 6.5);
           playMeleeAudio(() => {
-            if (c.kind === 'super') {
+            if (c.kind === 'super' || !canDamageWorldCrate(c)) {
               soundEngine.playMetalImpact(kind === 'kick' ? 10.5 : 7.5);
             } else {
               soundEngine.playWoodHit(kind === 'kick' ? 10.5 : 7.5);
@@ -4247,7 +4146,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
               other.weaponId = 'unarmed';
               other.weaponName = 'Tangan Kosong (Tinju)';
               other.ammo = 0;
-              other.x = blueBase.padX + 4.0;
+              other.x = blueBase.padX - 3.8;
               other.z = blueBase.padZ - 0.5;
               other.root.visible = true;
             } else {
@@ -4356,6 +4255,89 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       return hitCrate || hitAny;
     };
 
+    const cancelAndShatterBluePadBuild = (): boolean => {
+      const slots = bluePadSlotsList[0];
+      const shatterRes = evaluatePadCancelKickShatterDrops(slots);
+      if (!shatterRes.cancelled || shatterRes.shatteredCrateCount === 0) return false;
+
+      const padEval = evaluateStackingPadRecipe(slots);
+      soundEngine.playKick(true);
+      soundEngine.playBuildBoxCraft(false);
+      shakeTrauma = Math.min(1, shakeTrauma + 0.14);
+
+      spawnBurstParticles(blueBase.padX, 1.85, blueBase.padZ, 22);
+      spawnDebrisChunks(
+        blueBase.padX,
+        1.15,
+        blueBase.padZ,
+        padEval.isSuper ? 'metal' : 'wood',
+        14,
+      );
+      scratchExplosionPos.set(blueBase.padX, 1.15, blueBase.padZ);
+      lyoExplosionSystem.spawnLyoExplosion(scratchExplosionPos, 0.72, 'crate');
+
+      // Pop out small items (Pistol, Granat, Medkit, Land Mine, Ammo, Coin) from the shattered boxes!
+      for (let i = 0; i < shatterRes.drops.length; i++) {
+        const drop = shatterRes.drops[i];
+        const pop = computeStackingPadWeaponPopOutTrajectory(
+          blueBase.padX,
+          blueBase.padZ,
+          i,
+          shatterRes.drops.length,
+          1,
+        );
+        spawnWorldPickup(drop.kind, drop.label, pop.startX, pop.startZ, {
+          weaponId: drop.weaponId,
+          remainingAmmo: drop.remainingAmmo,
+          secondaryId: drop.secondaryId,
+          secondaryCount: drop.secondaryCount,
+          scoreValue: drop.coinValue,
+          vx: pop.vx,
+          vy: pop.vy,
+          vz: pop.vz,
+        });
+      }
+
+      // Clear pad slots and cancel the active build at the front of the queue
+      bluePadSlotsList[0] = createEmptyPadSlots();
+      bluePadSlots = bluePadSlotsList[0];
+      if (blueBuildQueue.length > 0) {
+        const qAdv = advanceKioskBuildQueueOnCraft(blueBuildQueue);
+        blueBuildQueue = qAdv.queue;
+        if (qAdv.hasMoreQueued && qAdv.nextActiveRecipe) {
+          activePriorityRecipe = qAdv.nextActiveRecipe;
+          useCustomHologramRecipe = true;
+          const nextSpec = KIOSK_BUILD_PRIORITY_RECIPES[activePriorityRecipe];
+          if (nextSpec) {
+            buildOrder = nextSpec.buildOrder;
+          }
+        } else {
+          useCustomHologramRecipe = false;
+        }
+      } else {
+        useCustomHologramRecipe = false;
+      }
+
+      kioskStatusMessage =
+        'BUILD DIBATALKAN! BOX DI PAD PECAH MENJADI ITEM KECIL (PISTOL, GRANAT, MEDKIT)!';
+      kioskStatusTimer = 4.5;
+
+      if (playerUnit && playerUnit.alive) {
+        playerUnit.saluteTimer = 2.0;
+        playerUnit.saluteSign.updateText(
+          'BUILD DIBATALKAN!',
+          'BOX PECAH JADI PISTOL / GRANAT / MEDKIT!',
+          '#fb923c',
+          1,
+        );
+        playerUnit.saluteSign.sprite.visible = true;
+      }
+
+      syncPadVisuals(blueBase, bluePadSlots, 'BLUE', blueBaseHp);
+      emitHudImmediately();
+      return true;
+    };
+
     const handlePlayerKickOrCraft = () => {
       if (ridingTramCarIdx !== null) {
         disembarkFromCityTram();
@@ -4365,22 +4347,39 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       const actorZ = mountedTank ? mountedTank.z : playerUnit.z;
       const distToPad = getPlanetShortestDistance(actorX, actorZ, blueBase.padX, blueBase.padZ);
       const padEval = evaluateStackingPadRecipe(bluePadSlots);
+      const kioskWorldPos = getBlueKioskWorldCenter(0);
+      const distToKiosk = getPlanetShortestDistance(actorX, actorZ, kioskWorldPos.x, kioskWorldPos.z);
 
       if (mountedTank) {
-        if (distToPad <= 9.5 && padEval.totalCrates > 0) {
-          craftFromBluePad();
+        if ((isPadCraftPromptActive || distToPad <= INTERACT_EXIT_RADIUS) && padEval.totalCrates > 0) {
+          cancelAndShatterBluePadBuild();
+        } else if (isKioskPromptActive || distToKiosk <= INTERACT_EXIT_RADIUS) {
+          soundEngine.playUiClick();
+          emitHudImmediately();
+          window.dispatchEvent(new CustomEvent('toggle-kiosk-ui'));
         }
         return;
       }
 
       if (!playerUnit || !playerUnit.alive) return;
 
+      // If Kiosk icon is active / within 2.9m and not kicking stacked boxes on the Pad, [F] opens Tactical Kiosk modal!
+      if (
+        (isKioskPromptActive || distToKiosk <= INTERACT_EXIT_RADIUS) &&
+        !((isPadCraftPromptActive || distToPad <= INTERACT_EXIT_RADIUS) && padEval.totalCrates > 0)
+      ) {
+        soundEngine.playUiClick();
+        emitHudImmediately();
+        window.dispatchEvent(new CustomEvent('toggle-kiosk-ui'));
+        return;
+      }
+
       // Always execute the Team Buddies Front Leg Kick on foot!
       const hitTarget = performBuddyMeleeAttack(playerUnit, 'kick');
 
-      // If standing near the Blue Stacking Pad with stacked crates (and we didn't just punt a loose crate at our feet), also trigger Pad Craft!
-      if (!hitTarget && distToPad <= 9.5 && padEval.totalCrates > 0) {
-        craftFromBluePad();
+      // Kicking ([F]) stacked boxes on the Crate Pad cancels the build and shatters the boxes into small items (Pistol, Grenade, Medkit, etc.)!
+      if (!hitTarget && (isPadCraftPromptActive || distToPad <= INTERACT_EXIT_RADIUS) && padEval.totalCrates > 0) {
+        cancelAndShatterBluePadBuild();
       }
     };
 
@@ -4406,7 +4405,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       }
 
       // Otherwise check if near the 2-Car City Tram anywhere along its route OR near any Tank/Plane/Truck!
-      if (!playerUnit.alive) return;
+      if (!playerUnit.alive || ridingTramCarIdx !== null) return;
       const tramBoard = canUnitBoardCityTramAtAnyPoint(
         playerUnit.x,
         playerUnit.z,
@@ -4430,7 +4429,8 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         ridingTramCarIdx = tramBoard.carIndex;
         playerUnit.vx = 0;
         playerUnit.vz = 0;
-        playerUnit.root.visible = false;
+        playerUnit.root.visible = true;
+        playerUnit.overheadCrateGroup.visible = playerUnit.carryingCrate !== 'none';
         return;
       }
 
@@ -4472,6 +4472,11 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       const curRecipeIdx = recipeKeys.indexOf(activePriorityRecipe);
       const nextRecipeId = recipeKeys[(curRecipeIdx + 1) % recipeKeys.length];
       activePriorityRecipe = nextRecipeId;
+      if (blueBuildQueue.length > 0) {
+        blueBuildQueue = [nextRecipeId, ...blueBuildQueue.slice(1)];
+      } else {
+        blueBuildQueue = [nextRecipeId];
+      }
       useCustomHologramRecipe = true;
       const recipeSpec = KIOSK_BUILD_PRIORITY_RECIPES[nextRecipeId];
       buildOrder = recipeSpec.buildOrder;
@@ -4490,7 +4495,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         if (slotIdx !== -1) {
           bluePadSlots[slotIdx] = kind;
         } else {
-          spawnWorldCrate(kind, blueBase.padX + 2.8, blueBase.padZ - 1.5, true);
+          spawnWorldCrate(kind, blueBase.padX - 3.2, blueBase.padZ - 1.5, true);
         }
       }
       syncPadVisuals(blueBase, bluePadSlots, 'BLUE', blueBaseHp);
@@ -4502,6 +4507,24 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
           b.saluteTimer = 1.65;
           b.saluteSign.updateText('HORMAT!', saluteLabel, '#b8ff3c', 1);
           b.saluteSign.sprite.visible = true;
+        }
+      }
+    };
+
+    const syncSquadRoleWithTeamCommand = (
+      nextCmd: TeamCommandMode,
+      forceAllOwnedUnits: boolean,
+    ) => {
+      const myPlot = blueCommanderBases[0];
+      for (const b of buddyUnits) {
+        if (b.team === 'blue' && !b.isPlayer && b.alive && b.ownerCommanderId === 0) {
+          const isStationedRadarDefender =
+            b.assignedRole === 'DEFEND' &&
+            myPlot &&
+            isUnitInPersonalCommandCenterArea(b.x, b.z, myPlot);
+          if (forceAllOwnedUnits || (!b.hasIndividualRoleAssigned && !isStationedRadarDefender)) {
+            b.assignedRole = nextCmd;
+          }
         }
       }
     };
@@ -4524,18 +4547,19 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
           currentCommand: teamCommand,
         });
         teamCommand = res.command;
+        playerUnit.assignedRole = teamCommand;
+        syncSquadRoleWithTeamCommand(teamCommand, true);
         triggerAlliedSalute(res.saluteLabel);
       } else {
         const idx = COMMAND_CYCLE.indexOf(teamCommand);
         teamCommand = COMMAND_CYCLE[(idx + 1) % COMMAND_CYCLE.length];
-        const labelMap: Record<TeamCommandMode, string> = {
-          HARVEST: 'PANEN PETI',
-          ATTACK: 'SERANG MUSUH',
-          DEFEND: 'JAGA MARKAS',
-          FOLLOW: 'IKUTI PEMAIN',
-          MOUNT: 'NAIK TANK',
-        };
-        triggerAlliedSalute(labelMap[teamCommand]);
+        playerUnit.assignedRole = teamCommand;
+        syncSquadRoleWithTeamCommand(teamCommand, false);
+        const roleUiLabel = formatBuddyRoleUiLabel(teamCommand).toUpperCase();
+        playerUnit.saluteTimer = 1.65;
+        playerUnit.saluteSign.updateText('PERAN UNIT', roleUiLabel, '#38bdf8', 1);
+        playerUnit.saluteSign.sprite.visible = true;
+        triggerAlliedSalute(roleUiLabel);
       }
     };
 
@@ -4632,11 +4656,23 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       const nextBuddy = swapped ? swapped.unit : null;
       if (!nextBuddy || nextBuddy.id === playerUnit.id) return;
       soundEngine.playUiClick();
+      playerUnit.assignedRole = playerUnit.assignedRole ?? teamCommand;
+      playerUnit.hasIndividualRoleAssigned = true;
       playerUnit.isPlayer = false;
       (playerUnit.teamRing.material as THREE.MeshBasicMaterial).color.setHex(0x2979ff);
       nextBuddy.isPlayer = true;
       (nextBuddy.teamRing.material as THREE.MeshBasicMaterial).color.setHex(0xb4ff39);
       playerUnit = nextBuddy;
+      teamCommand = playerUnit.assignedRole ?? 'HARVEST';
+      playerUnit.assignedRole = teamCommand;
+      playerUnit.saluteTimer = 1.65;
+      playerUnit.saluteSign.updateText(
+        `AKTIF: ${playerUnit.classId.toUpperCase()}`,
+        formatBuddyRoleUiLabel(teamCommand).toUpperCase(),
+        '#b4ff39',
+        1,
+      );
+      playerUnit.saluteSign.sprite.visible = true;
     };
 
     const handleHotJoinPlayer = () => {
@@ -4674,6 +4710,10 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       playerUnit.weaponName =
         weaponId === 'unarmed'
           ? 'Tangan Kosong (Tinju)'
+          : weaponId === 'gatling'
+          ? 'TITAN-6 Rotary Gatling'
+          : weaponId === 'laser'
+          ? 'LG-88 Photon Lance'
           : weaponId === 'bazooka'
           ? 'LyoRocketLauncher'
           : weaponId === 'rifle'
@@ -4751,6 +4791,342 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       const newTruck = createLyoDumpTruckVehicle(spawnX, spawnZ, 'blue', actorYaw);
       tanks.push(newTruck);
       spawnBurstParticles(spawnX, 1.8, spawnZ, 16);
+    };
+
+    // Deploy 3D Secondary Ordnance (CB-24 Cluster Bomb exclusively from Lyo Plane, HG-04 Frag Grenade, TM-89 Land Mine)
+    const dropClusterBombFromPlane = (plane: TankVehicle) => {
+      soundEngine.playBazookaLaunch();
+      const alt = Math.max(4.5, plane.altitude ?? 8.5);
+      const groundY = getTerrainElevation(plane.x, plane.z);
+      const fwdX = Math.cos(plane.hullYaw);
+      const fwdZ = -Math.sin(plane.hullYaw);
+      const mesh = buildTeamBuddiesDropPickupMesh(
+        'secondary',
+        'cluster_bomb',
+        windUniforms,
+        isSoftwareGl,
+      );
+      mesh.scale.setScalar(1.45);
+      const startPos = new THREE.Vector3(
+        wrapPlanetCoord(plane.x + fwdX * 1.2),
+        groundY + alt - 0.3,
+        wrapPlanetCoord(plane.z + fwdZ * 1.2),
+      );
+      mesh.position.copy(startPos);
+      mesh.rotation.y = plane.hullYaw;
+      scene.add(mesh);
+      activeOrdnanceDevices.push({
+        kind: 'cluster_bomb',
+        mesh,
+        pos: startPos,
+        vel: new THREE.Vector3(
+          fwdX * Math.max(9.5, (plane.forwardSpeed ?? 10) * 0.95),
+          -6.5,
+          fwdZ * Math.max(9.5, (plane.forwardSpeed ?? 10) * 0.95),
+        ),
+        fuseTimer: 2.4,
+        isGrounded: false,
+      });
+      kioskStatusMessage = 'CB-24 CLUSTER BOMB DIJATUHKAN DARI PESAWAT TEMPUR!';
+      kioskStatusTimer = 3.5;
+    };
+
+    const handleUseSecondaryOrdnance = () => {
+      const secId = playerUnit?.secondaryItem ?? 'none';
+      const isInPlane = Boolean(mountedTank && mountedTank.vehicleKind === 'plane');
+
+      // If piloting the Lyo Plane, pressing [X] drops the CB-24 Cluster Bomb (if unlocked / equipped)
+      if (isInPlane && mountedTank) {
+        const bLv = blueCommanderBases[0]?.buildingLevel ?? 1;
+        const clusterAccess = evaluateClusterBombAccess(bLv, true);
+        if (!clusterAccess.allowedToBuild) {
+          soundEngine.playHit();
+          kioskStatusMessage = clusterAccess.statusMessage;
+          kioskStatusTimer = 4.5;
+          return;
+        }
+        dropClusterBombFromPlane(mountedTank);
+        if (playerUnit.secondaryItem === 'cluster_bomb' && playerUnit.secondaryCount > 0) {
+          playerUnit.secondaryCount = Math.max(0, playerUnit.secondaryCount - 1);
+        }
+        return;
+      }
+
+      if (!playerUnit || !playerUnit.alive || secId === 'none' || playerUnit.secondaryCount <= 0) {
+        return;
+      }
+
+      // STRICT RULE: CB-24 Cluster Bomb can ONLY be used by the Lyo Fighter Plane!
+      if (secId === 'cluster_bomb') {
+        soundEngine.playHit();
+        playerUnit.saluteTimer = 2.8;
+        playerUnit.saluteSign.updateText(
+          'KHUSUS PESAWAT TEMPUR!',
+          'CLUSTER BOMB HANYA BISA DIJATUHKAN DARI PESAWAT [G]!',
+          '#ff9f0a',
+          1,
+        );
+        playerUnit.saluteSign.sprite.visible = true;
+        kioskStatusMessage =
+          'KHUSUS PESAWAT! Naik ke Pesawat Tempur (Lyo Plane) [G] untuk menjatuhkan CB-24 Cluster Bomb!';
+        kioskStatusTimer = 4.5;
+        return;
+      }
+
+      const fwdX = Math.cos(playerUnit.yaw);
+      const fwdZ = -Math.sin(playerUnit.yaw);
+      const groundY = getTerrainElevation(playerUnit.x, playerUnit.z);
+
+      if (secId === 'hand_grenade') {
+        soundEngine.playPickup();
+        const mesh = buildTeamBuddiesDropPickupMesh(
+          'secondary',
+          'hand_grenade',
+          windUniforms,
+          isSoftwareGl,
+        );
+        mesh.scale.setScalar(1.25);
+        const startPos = new THREE.Vector3(
+          wrapPlanetCoord(playerUnit.x + fwdX * 1.1),
+          groundY + 1.45,
+          wrapPlanetCoord(playerUnit.z + fwdZ * 1.1),
+        );
+        mesh.position.copy(startPos);
+        scene.add(mesh);
+        activeOrdnanceDevices.push({
+          kind: 'hand_grenade',
+          mesh,
+          pos: startPos,
+          vel: new THREE.Vector3(fwdX * 12.5, 6.8, fwdZ * 12.5),
+          fuseTimer: 1.65,
+          isGrounded: false,
+        });
+        playerUnit.secondaryCount = Math.max(0, playerUnit.secondaryCount - 1);
+        if (playerUnit.secondaryCount <= 0) playerUnit.secondaryItem = 'none';
+      } else if (secId === 'land_mine') {
+        soundEngine.playPickup();
+        const mesh = buildTeamBuddiesDropPickupMesh(
+          'secondary',
+          'land_mine',
+          windUniforms,
+          isSoftwareGl,
+        );
+        mesh.scale.setScalar(1.3);
+        const mx = wrapPlanetCoord(playerUnit.x + fwdX * 1.6);
+        const mz = wrapPlanetCoord(playerUnit.z + fwdZ * 1.6);
+        const mineGrassOffsetY = computeLandMineGrassYOffset(evaluateLyoGrassMask(mx, mz));
+        const startPos = new THREE.Vector3(
+          mx,
+          getTerrainElevation(mx, mz) + 0.05 + mineGrassOffsetY,
+          mz,
+        );
+        mesh.position.copy(startPos);
+        scene.add(mesh);
+        activeOrdnanceDevices.push({
+          kind: 'land_mine',
+          mesh,
+          pos: startPos,
+          vel: new THREE.Vector3(0, 0, 0),
+          fuseTimer: 18.0,
+          isGrounded: true,
+        });
+        playerUnit.secondaryCount = Math.max(0, playerUnit.secondaryCount - 1);
+        if (playerUnit.secondaryCount <= 0) playerUnit.secondaryItem = 'none';
+      }
+    };
+
+    const handleSandboxUnlockBaseLv3 = () => {
+      const plot0 = blueCommanderBases[0];
+      if (plot0) {
+        plot0.buildingLevel = 3;
+        plot0.commandCenterLevel = 3;
+        plot0.buildingMaxHp = 960;
+        plot0.buildingHp = 960;
+        plot0.fenceLevel = 3;
+        plot0.fenceMaxHp = 680;
+        plot0.fenceHp = 680;
+        blueBaseHp = blueCommanderBases.reduce((acc, b) => acc + b.buildingHp, 0);
+        syncPadVisuals(blueBase, bluePadSlots, 'BLUE', blueBaseHp);
+      }
+      soundEngine.playPowerCore();
+      kioskStatusMessage =
+        'COMMAND CENTER LV.3 TERBUKA! Nuclear Launcher & CB-24 Cluster Bomb Aktif!';
+      kioskStatusTimer = 5.0;
+    };
+
+    const startNuclearStrikeTargetingMode = () => {
+      const currentCmdLevel = blueCommanderBases[0]?.buildingLevel ?? 1;
+      const nukeAccess = evaluateNuclearLauncherAccess(currentCmdLevel);
+      if (!nukeAccess.allowed) {
+        soundEngine.playHit();
+        kioskStatusMessage = nukeAccess.statusMessage;
+        kioskStatusTimer = 5.0;
+        return;
+      }
+
+      const nl = ensureBlueNuclearLauncherDeployed();
+      const nlX = nl.root.position.x;
+      const nlZ = nl.root.position.z;
+      const nlY = getTerrainElevation(nlX, nlZ);
+
+      // Pick a smart initial target on the battlefield (nearest enemy tank/unit or central arena road toward Red Base)
+      let defaultTargetX = 0;
+      let defaultTargetZ = 18;
+      let bestEnemyDist = 999;
+      for (const t of tanks) {
+        if (t.team === 'red' && t.hp > 0) {
+          const d = Math.hypot(t.x - nlX, t.z - nlZ);
+          if (d < bestEnemyDist) {
+            bestEnemyDist = d;
+            defaultTargetX = t.x;
+            defaultTargetZ = t.z;
+          }
+        }
+      }
+      if (bestEnemyDist >= 999) {
+        for (const b of buddyUnits) {
+          if (b.team === 'red' && b.alive) {
+            const d = Math.hypot(b.x - nlX, b.z - nlZ);
+            if (d < bestEnemyDist) {
+              bestEnemyDist = d;
+              defaultTargetX = b.x;
+              defaultTargetZ = b.z;
+            }
+          }
+        }
+      }
+
+      const activeFocus = mountedTank ? mountedTank : playerUnit;
+      const originPos: Vec3 = {
+        x: activeFocus.x,
+        y: getTerrainElevation(activeFocus.x, activeFocus.z) + 1.0,
+        z: activeFocus.z,
+      };
+      const launchPos: Vec3 = {
+        x: nlX,
+        y: nlY + 2.35,
+        z: nlZ,
+      };
+      const initialTargetPos: Vec3 = {
+        x: defaultTargetX,
+        y: getTerrainElevation(defaultTargetX, defaultTargetZ),
+        z: defaultTargetZ,
+      };
+
+      nukeStrikeState = beginNuclearStrikeTargeting(originPos, launchPos, initialTargetPos);
+      nukeLastMouseNdc = { x: mouseNdc.x, y: mouseNdc.y };
+      nukeTargetReticleGroup.visible = true;
+      nukeCinematicRocketGroup.visible = false;
+      soundEngine.playPowerCore();
+      window.dispatchEvent(new CustomEvent('close-kiosk-ui'));
+      emitHudImmediately();
+    };
+
+    const confirmAndLaunchNuclearStrike = () => {
+      if (nukeStrikeState.phase !== 'targeting') return;
+      const nl = ensureBlueNuclearLauncherDeployed();
+      const dx = nukeStrikeState.targetPos.x - nl.root.position.x;
+      const dz = nukeStrikeState.targetPos.z - nl.root.position.z;
+      const targetYaw = Math.atan2(dx, dz);
+      nl.yawGroup.rotation.y = targetYaw;
+      nl.pitchGroup.rotation.x = -0.58;
+
+      nukeStrikeState = confirmNuclearStrikeTargetAndLaunch(nukeStrikeState);
+      nukeTargetReticleGroup.visible = false;
+      nukeCinematicRocketGroup.visible = true;
+
+      const launchOrigin = new THREE.Vector3(
+        nukeStrikeState.launchPos.x,
+        nukeStrikeState.launchPos.y,
+        nukeStrikeState.launchPos.z,
+      );
+      const launchDir = new THREE.Vector3(
+        nukeStrikeState.rocketTangent.x,
+        nukeStrikeState.rocketTangent.y,
+        nukeStrikeState.rocketTangent.z,
+      ).normalize();
+      lyoExplosionSystem.spawnLyoMuzzleFlash(launchOrigin, launchDir, 1.85, 'bazooka');
+      spawnBurstParticles(launchOrigin.x, launchOrigin.y, launchOrigin.z, 24);
+      spawnTargetFireParticles(launchOrigin.x, launchOrigin.y, launchOrigin.z, 18, 1.25);
+      soundEngine.playBazookaLaunch();
+      kioskStatusMessage = "ROKET NUKLIR MLRS-MK5 'ATLAS' MELUNCUR KE TITIK TARGET!";
+      kioskStatusTimer = 4.5;
+      emitHudImmediately();
+    };
+
+    const triggerNuclearStrikeDetonation = (tx: number, ty: number, tz: number) => {
+      nukeCinematicRocketGroup.visible = false;
+      nukeTargetReticleGroup.visible = false;
+
+      // 1. Primary HQ-scale Nuclear Fireball & Shockwave
+      const impactCenter = new THREE.Vector3(tx, ty + 0.4, tz);
+      lyoExplosionSystem.spawnLyoExplosion(impactCenter, 3.35, 'hq');
+
+      // 2. Ring of 6 Secondary Nuclear Thermal Fireballs + Massive Rising Fire Column
+      for (let i = 0; i < 6; i++) {
+        const ang = (i / 6) * Math.PI * 2;
+        const rx = wrapPlanetCoord(tx + Math.cos(ang) * 4.8);
+        const rz = wrapPlanetCoord(tz + Math.sin(ang) * 4.8);
+        const ry = getTerrainElevation(rx, rz);
+        lyoExplosionSystem.spawnLyoExplosion(new THREE.Vector3(rx, ry + 0.3, rz), 1.85, 'cannon');
+      }
+      spawnTargetFireParticles(tx, ty, tz, 48, 3.6);
+      spawnBurstParticles(tx, ty + 1.8, tz, 46);
+      spawnDirectionalSparks(tx, ty + 0.8, tz, 0, 1, 28, 22, 2.2);
+
+      // 3. Thunderous Dual-Layer Nuclear Explosion Audio & Camera Shake
+      soundEngine.playBarrelExplosion();
+      soundEngine.playTacticalExplosion(2.85);
+      shakeTrauma = 0.92;
+      lyoGrassSystem.stampExplosionShockwave(tx, tz, 24.0, 1.0);
+
+      // 4. Heavy 24m Radius Nuclear Blast Damage to Enemy Units, Vehicles, Props, Trees & Red Base
+      const blastRadius = 24.0;
+      for (const t of tanks) {
+        if (t.team === 'blue' || t.hp <= 0) continue;
+        const d = getPlanetShortestDistance(tx, tz, t.x, t.z);
+        if (d <= blastRadius) {
+          const dmg = Math.round(240 * (1 - (d / blastRadius) * 0.55));
+          t.hp = Math.max(0, t.hp - dmg);
+          t.hitFlashTimer = 0.45;
+          if (t.hp <= 0) {
+            lyoExplosionSystem.spawnLyoExplosion(new THREE.Vector3(t.x, ty + 1.0, t.z), 1.65, 'cannon');
+          }
+        }
+      }
+      for (const b of buddyUnits) {
+        if (b.team === 'blue' || !b.alive) continue;
+        const d = getPlanetShortestDistance(tx, tz, b.x, b.z);
+        if (d <= blastRadius) {
+          b.hp = 0;
+          b.alive = false;
+          b.respawnTimer = 8.0;
+          b.root.visible = false;
+          enemiesDefeated++;
+          score += 250;
+        }
+      }
+      for (const other of activeMapProps) {
+        if (!other.alive) continue;
+        const d = getPlanetShortestDistance(other.x, other.z, tx, tz);
+        if (d < 16.0) {
+          if (other.category === 'pushable' && d > 0.05) {
+            const dx = getPlanetShortestDelta(other.x, tx) / d;
+            const dz = getPlanetShortestDelta(other.z, tz) / d;
+            const push = (1 - d / 16.0) * 18.0;
+            other.vx += dx * push;
+            other.vz += dz * push;
+            other.rotVelY += (Math.random() - 0.5) * 12.0;
+          } else if (other.category === 'breakable' || (other.category === 'solid' && other.destructible)) {
+            other.alive = false;
+            other.wrapper.visible = false;
+          }
+        }
+      }
+      if (getPlanetShortestDistance(tx, tz, redBase.hqX, redBase.hqZ) <= 28.0) {
+        redBaseHp = Math.max(0, redBaseHp - 480);
+        syncPadVisuals(redBase, redPadSlots, 'RED', redBaseHp);
+      }
     };
 
     const handleEditorPlaceAtCursor = (worldX: number, worldZ: number) => {
@@ -4953,6 +5329,21 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         return;
       }
 
+      if (nukeStrikeState.phase === 'targeting') {
+        if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space') {
+          e.preventDefault();
+          confirmAndLaunchNuclearStrike();
+          return;
+        }
+        return;
+      }
+
+      if (e.code === 'KeyN') {
+        e.preventDefault();
+        startNuclearStrikeTargetingMode();
+        return;
+      }
+
       if (e.code === 'Space') {
         e.preventDefault();
         if (mountedTank && mountedTank.vehicleKind === 'plane') {
@@ -4971,6 +5362,14 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
 
       if (e.code === 'KeyE') {
         e.preventDefault();
+        const blueNl = activeNuclearLaunchers.find((n) => n.team === 'blue');
+        if (
+          blueNl &&
+          getPlanetShortestDistance(playerUnit.x, playerUnit.z, blueNl.root.position.x, blueNl.root.position.z) < 6.8
+        ) {
+          startNuclearStrikeTargetingMode();
+          return;
+        }
         if (mountedTank && mountedTank.vehicleKind === 'plane') {
           mountedTank.targetAltitude = Math.min(14.5, Math.max(12.2, (mountedTank.targetAltitude ?? 0) + 4.5));
           mountedTank.forwardSpeed = Math.max(mountedTank.forwardSpeed ?? 0, 8.5);
@@ -4979,7 +5378,14 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         }
       } else if (e.code === 'KeyF') {
         e.preventDefault();
-        handlePlayerKickOrCraft();
+        if (mountedTank && mountedTank.vehicleKind === 'plane') {
+          handleUseSecondaryOrdnance();
+        } else {
+          handlePlayerKickOrCraft();
+        }
+      } else if (e.code === 'KeyX') {
+        e.preventDefault();
+        handleUseSecondaryOrdnance();
       } else if (e.code === 'KeyG') {
         e.preventDefault();
         handleToggleMountTank();
@@ -4988,8 +5394,20 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         handleCycleBuildOrder();
       } else if (e.code === 'KeyB') {
         e.preventDefault();
-        soundEngine.playUiClick();
-        window.dispatchEvent(new CustomEvent('toggle-kiosk-ui'));
+        const actorX = mountedTank ? mountedTank.x : playerUnit.x;
+        const actorZ = mountedTank ? mountedTank.z : playerUnit.z;
+        const kioskWorldPos = getBlueKioskWorldCenter(0);
+        const distToKiosk = getPlanetShortestDistance(
+          actorX,
+          actorZ,
+          kioskWorldPos.x,
+          kioskWorldPos.z,
+        );
+        if (isKioskPromptActive || distToKiosk <= INTERACT_EXIT_RADIUS) {
+          soundEngine.playUiClick();
+          emitHudImmediately();
+          window.dispatchEvent(new CustomEvent('toggle-kiosk-ui'));
+        }
       } else if (e.code === 'KeyV') {
         e.preventDefault();
         handleCursorOrCycleTeamCommand(true);
@@ -5086,19 +5504,48 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         return;
       }
 
+      if (nukeStrikeState.phase === 'targeting') {
+        if (e.button === 0) {
+          raycaster.setFromCamera(mouseNdc, camera);
+          if (raycaster.ray.intersectPlane(groundPlane, aimWorldPoint)) {
+            nukeStrikeState = updateNuclearStrikeTargetCursor(
+              nukeStrikeState,
+              aimWorldPoint.x,
+              getTerrainElevation(aimWorldPoint.x, aimWorldPoint.z),
+              aimWorldPoint.z,
+              280.0,
+            );
+          }
+          confirmAndLaunchNuclearStrike();
+        } else if (e.button === 2) {
+          soundEngine.playUiClick();
+          nukeStrikeState = createInitialNuclearStrikeState();
+          nukeTargetReticleGroup.visible = false;
+        }
+        return;
+      }
+
       if (e.button === 0) {
-        // Clicking directly on the 3D Self-Service Kiosk machine slides open the Kiosk Build UI on the right
+        // Clicking directly on the 3D Self-Service Kiosk machine opens the Tactical Kiosk modal immediately when in range (<= 2.9m)
         raycaster.setFromCamera(mouseNdc, camera);
         const kioskHitBox = new THREE.Box3();
         for (const cp of blueBase.commanderPads) {
-          const kx = cp.padGroup.position.x - 3.45;
-          const ky = cp.padGroup.position.y;
-          const kz = cp.padGroup.position.z;
-          kioskHitBox.min.set(kx - 1.55, ky - 0.25, kz - 1.55);
-          kioskHitBox.max.set(kx + 1.55, ky + 4.15, kz + 1.55);
+          cp.kioskMesh.updateWorldMatrix(true, false);
+          cp.kioskMesh.getWorldPosition(scratchKioskWorldPos);
+          const kx = scratchKioskWorldPos.x;
+          const ky = scratchKioskWorldPos.y;
+          const kz = scratchKioskWorldPos.z;
+          kioskHitBox.min.set(kx - 1.65, ky - 0.25, kz - 1.65);
+          kioskHitBox.max.set(kx + 1.65, ky + 4.25, kz + 1.65);
           if (raycaster.ray.intersectsBox(kioskHitBox)) {
-            soundEngine.playUiClick();
-            window.dispatchEvent(new CustomEvent('toggle-kiosk-ui'));
+            const actorX = mountedTank ? mountedTank.x : playerUnit.x;
+            const actorZ = mountedTank ? mountedTank.z : playerUnit.z;
+            const distToKiosk = getPlanetShortestDistance(actorX, actorZ, kx, kz);
+            if (isKioskPromptActive || distToKiosk <= INTERACT_EXIT_RADIUS) {
+              soundEngine.playUiClick();
+              emitHudImmediately();
+              window.dispatchEvent(new CustomEvent('toggle-kiosk-ui'));
+            }
             return;
           }
         }
@@ -5163,7 +5610,104 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       else if (act === 'sandboxSpawnTank') handleSandboxQuickSpawnTank();
       else if (act === 'sandboxSpawnPlane') handleSandboxQuickSpawnPlane();
       else if (act === 'sandboxSpawnTruck') handleSandboxQuickSpawnTruck();
-      else if (act === 'planeClimbStep') {
+      else if (act === 'useSecondaryOrdnance') handleUseSecondaryOrdnance();
+      else if (act === 'sandboxUnlockBaseLv3') handleSandboxUnlockBaseLv3();
+      else if (act === 'sandboxEquipLaserGun') {
+        if (mountedTank) handleToggleMountTank();
+        handleSelectTacticalWeapon('laser');
+        playerUnit.ammo = 200;
+        const fwdX = Math.cos(playerUnit.yaw);
+        const fwdZ = -Math.sin(playerUnit.yaw);
+        const pY = getTerrainElevation(playerUnit.x, playerUnit.z) + 1.48;
+        const mPos = new THREE.Vector3(
+          wrapPlanetCoord(playerUnit.x + fwdX * 1.48),
+          pY,
+          wrapPlanetCoord(playerUnit.z + fwdZ * 1.48),
+        );
+        const endPos = new THREE.Vector3(
+          wrapPlanetCoord(playerUnit.x + fwdX * 18.0),
+          getTerrainElevation(playerUnit.x + fwdX * 18.0, playerUnit.z + fwdZ * 18.0) + 1.1,
+          wrapPlanetCoord(playerUnit.z + fwdZ * 18.0),
+        );
+        soundEngine.playLaserGunFire();
+        spawnLaserBeamEffect(mPos, endPos);
+        spawnTargetFireParticles(endPos.x, endPos.y, endPos.z, 18, 0.65);
+        fireProjectile(true, 'LyoLaserGun', mPos, new THREE.Vector3(fwdX, 0, fwdZ), 68, 18);
+        spawnWorldPickup(
+          'weapon',
+          'LG-88 Photon Lance',
+          wrapPlanetCoord(playerUnit.x + fwdX * 2.8),
+          wrapPlanetCoord(playerUnit.z + fwdZ * 2.8),
+          { weaponId: 'rifle', remainingAmmo: 160, despawnTimerSec: 60 },
+        );
+      } else if (act === 'sandboxEquipGatlingGun') {
+        if (mountedTank) handleToggleMountTank();
+        handleSelectTacticalWeapon('gatling');
+        playerUnit.ammo = 300;
+        const fwdX = Math.cos(playerUnit.yaw);
+        const fwdZ = -Math.sin(playerUnit.yaw);
+        const rightX = Math.sin(playerUnit.yaw);
+        const rightZ = Math.cos(playerUnit.yaw);
+        const pY = getTerrainElevation(playerUnit.x, playerUnit.z) + 1.44;
+        const mPos = new THREE.Vector3(
+          wrapPlanetCoord(playerUnit.x + fwdX * 1.52),
+          pY,
+          wrapPlanetCoord(playerUnit.z + fwdZ * 1.52),
+        );
+        soundEngine.playGatlingGunFire();
+        spawnGatlingBrassAndSparks(mPos.x, mPos.y, mPos.z, fwdX, fwdZ, rightX, rightZ);
+        fireProjectile(true, 'Titan6Gatling', mPos, new THREE.Vector3(fwdX, 0, fwdZ), 62, 14);
+        spawnWorldPickup(
+          'weapon',
+          'TITAN-6 Rotary Gatling',
+          wrapPlanetCoord(playerUnit.x + fwdX * 2.8),
+          wrapPlanetCoord(playerUnit.z + fwdZ * 2.8),
+          { weaponId: 'rifle', remainingAmmo: 240, despawnTimerSec: 60 },
+        );
+      } else if (act === 'sandboxGiveHandGrenade') {
+        if (mountedTank) handleToggleMountTank();
+        playerUnit.secondaryItem = 'hand_grenade';
+        playerUnit.secondaryCount = 5;
+        handleUseSecondaryOrdnance();
+      } else if (act === 'sandboxGiveLandMine') {
+        if (mountedTank) handleToggleMountTank();
+        playerUnit.secondaryItem = 'land_mine';
+        playerUnit.secondaryCount = 5;
+        handleUseSecondaryOrdnance();
+      } else if (act === 'sandboxSpawnPlaneWithClusterBomb') {
+        handleSandboxUnlockBaseLv3();
+        playerUnit.secondaryItem = 'cluster_bomb';
+        playerUnit.secondaryCount = 6;
+        if (!mountedTank || mountedTank.vehicleKind !== 'plane') {
+          if (mountedTank) handleToggleMountTank();
+          const newPlane = createLyoPlaneVehicle(playerUnit.x, playerUnit.z, 'blue');
+          newPlane.altitude = 9.5;
+          newPlane.targetAltitude = 11.5;
+          newPlane.forwardSpeed = 10.5;
+          tanks.push(newPlane);
+          mountedTank = newPlane;
+          newPlane.occupiedByPlayer = true;
+          newPlane.riderGroup.visible = true;
+          playerUnit.root.visible = false;
+        }
+        if (mountedTank && mountedTank.vehicleKind === 'plane') {
+          dropClusterBombFromPlane(mountedTank);
+        }
+      } else if (act === 'sandboxDeployNuclearLauncher' || act === 'startNuclearStrikeTargeting') {
+        if (act === 'sandboxDeployNuclearLauncher') {
+          handleSandboxUnlockBaseLv3();
+        }
+        startNuclearStrikeTargetingMode();
+      } else if (act === 'confirmNuclearStrikeTarget') {
+        if (nukeStrikeState.phase === 'targeting') {
+          confirmAndLaunchNuclearStrike();
+        }
+      } else if (act === 'cancelNuclearStrikeTarget') {
+        soundEngine.playUiClick();
+        nukeStrikeState = createInitialNuclearStrikeState();
+        nukeTargetReticleGroup.visible = false;
+        nukeCinematicRocketGroup.visible = false;
+      } else if (act === 'planeClimbStep') {
         if (mountedTank && mountedTank.vehicleKind === 'plane') {
           soundEngine.playPickup();
           mountedTank.targetAltitude = Math.min(19.5, Math.max(13.8, (mountedTank.targetAltitude ?? 0) + 6.5));
@@ -5178,37 +5722,133 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
           mountedTank.verticalSpeed = -7.5;
         }
       } else if (act === 'toggleKioskUi') {
-        soundEngine.playUiClick();
-        window.dispatchEvent(new CustomEvent('toggle-kiosk-ui'));
+        const actorX = mountedTank ? mountedTank.x : playerUnit.x;
+        const actorZ = mountedTank ? mountedTank.z : playerUnit.z;
+        const kioskWorldPos = getBlueKioskWorldCenter(0);
+        const distToKiosk = getPlanetShortestDistance(
+          actorX,
+          actorZ,
+          kioskWorldPos.x,
+          kioskWorldPos.z,
+        );
+        if (isKioskPromptActive || distToKiosk <= INTERACT_EXIT_RADIUS) {
+          soundEngine.playUiClick();
+          emitHudImmediately();
+          window.dispatchEvent(new CustomEvent('toggle-kiosk-ui'));
+        }
       } else if (act.startsWith('kioskSelectRecipe:')) {
         const recipeId = act.slice('kioskSelectRecipe:'.length) as KioskBuildPriorityRecipeId;
+        if (recipeId === 'nuclear_launcher') {
+          const currentCmdLevel = blueCommanderBases[0]?.buildingLevel ?? 1;
+          const nukeAccess = evaluateNuclearLauncherAccess(currentCmdLevel);
+          if (!nukeAccess.allowed) {
+            soundEngine.playHit();
+            kioskStatusMessage = nukeAccess.statusMessage;
+            kioskStatusTimer = 5.5;
+            emitHudImmediately();
+            return;
+          }
+          if (activeNuclearLaunchers.some((n) => n.team === 'blue')) {
+            startNuclearStrikeTargetingMode();
+            return;
+          }
+        }
+        if (recipeId === 'cluster_bomb') {
+          const currentCmdLevel = blueCommanderBases[0]?.buildingLevel ?? 1;
+          const clusterAccess = evaluateClusterBombAccess(
+            currentCmdLevel,
+            Boolean(mountedTank && mountedTank.vehicleKind === 'plane'),
+          );
+          if (!clusterAccess.allowedToBuild) {
+            soundEngine.playHit();
+            kioskStatusMessage = clusterAccess.statusMessage;
+            kioskStatusTimer = 5.5;
+            emitHudImmediately();
+            return;
+          }
+        }
         const spec = KIOSK_BUILD_PRIORITY_RECIPES[recipeId];
         if (spec) {
+          const wasEmptyQueue = blueBuildQueue.length === 0 || !useCustomHologramRecipe;
+          const baseQueue = useCustomHologramRecipe ? blueBuildQueue : [];
+          const enq = enqueueKioskBuildRecipe(baseQueue, recipeId, MAX_KIOSK_BUILD_QUEUE);
+          if (!enq.enqueued) {
+            soundEngine.playHit();
+            kioskStatusMessage = enq.statusMessage;
+            kioskStatusTimer = 4.5;
+            emitHudImmediately();
+            return;
+          }
           soundEngine.playUiClick();
-          activePriorityRecipe = recipeId;
+          blueBuildQueue = enq.queue;
+          activePriorityRecipe = enq.activeRecipe;
           useCustomHologramRecipe = true;
-          buildOrder = spec.buildOrder;
-          const existingCrates = bluePadSlots.filter((s) => s !== 'empty') as ('red' | 'super' | 'legend')[];
-          bluePadSlots = ['empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'];
-          bluePadSlotsList[0] = bluePadSlots;
-          for (const kind of existingCrates) {
-            const slotIdx = chooseNextPadSlotIndexForHologram(
-              bluePadSlots,
-              spec.slotHologramColors,
-              kind,
-              buildOrder,
-            );
-            if (slotIdx !== -1) {
-              bluePadSlots[slotIdx] = kind;
-            } else {
-              spawnWorldCrate(kind, blueBase.padX + 2.8, blueBase.padZ - 1.5, true);
+          const activeSpec = KIOSK_BUILD_PRIORITY_RECIPES[activePriorityRecipe];
+          buildOrder = activeSpec.buildOrder;
+
+          if (wasEmptyQueue || blueBuildQueue.length === 1) {
+            const existingCrates = bluePadSlots.filter((s) => s !== 'empty') as (
+              | 'red'
+              | 'super'
+              | 'legend'
+            )[];
+            bluePadSlots = ['empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'];
+            bluePadSlotsList[0] = bluePadSlots;
+            for (const kind of existingCrates) {
+              const slotIdx = chooseNextPadSlotIndexForHologram(
+                bluePadSlots,
+                activeSpec.slotHologramColors,
+                kind,
+                buildOrder,
+              );
+              if (slotIdx !== -1) {
+                bluePadSlots[slotIdx] = kind;
+              } else {
+                spawnWorldCrate(kind, blueBase.padX - 3.2, blueBase.padZ - 1.5, true);
+              }
             }
           }
           syncPadVisuals(blueBase, bluePadSlots, 'BLUE', blueBaseHp);
           spawnBurstParticles(blueBase.padX, 1.6, blueBase.padZ, 12);
-          kioskStatusMessage = `HOLOGRAM PAD AKTIF: ${spec.name.toUpperCase()} (${spec.targetCrates} PETI)`;
+          kioskStatusMessage = enq.statusMessage;
           kioskStatusTimer = 4.5;
+          if (
+            evaluatePadHologramState(
+              true,
+              useCustomHologramRecipe,
+              activePriorityRecipe,
+              bluePadSlotsList[0],
+            ).isFulfilled
+          ) {
+            craftFromCommanderPad('blue', 0, true);
+          } else {
+            emitHudImmediately();
+          }
         }
+      } else if (act.startsWith('kioskRemoveQueueIndex:')) {
+        const rmIdx = Number(act.slice('kioskRemoveQueueIndex:'.length));
+        if (!Number.isNaN(rmIdx)) {
+          soundEngine.playUiClick();
+          const res = removeKioskBuildQueueAtIndex(blueBuildQueue, rmIdx);
+          blueBuildQueue = res.queue;
+          if (res.activeRecipe) {
+            activePriorityRecipe = res.activeRecipe;
+            useCustomHologramRecipe = true;
+            buildOrder = KIOSK_BUILD_PRIORITY_RECIPES[activePriorityRecipe].buildOrder;
+          } else {
+            useCustomHologramRecipe = false;
+          }
+          syncPadVisuals(blueBase, bluePadSlots, 'BLUE', blueBaseHp);
+          emitHudImmediately();
+        }
+      } else if (act === 'kioskClearQueue') {
+        soundEngine.playUiClick();
+        blueBuildQueue = [];
+        useCustomHologramRecipe = false;
+        syncPadVisuals(blueBase, bluePadSlots, 'BLUE', blueBaseHp);
+        kioskStatusMessage = 'ANTRIAN BUILD DIKOSONGKAN';
+        kioskStatusTimer = 3.5;
+        emitHudImmediately();
       } else if (act.startsWith('kioskUpgradeBase:')) {
         const upgradeId = act.slice('kioskUpgradeBase:'.length) as KioskBaseGoldUpgradeId;
         const myPlot = blueCommanderBases[0];
@@ -5235,10 +5875,10 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         if (res.purchased && res.airdropCrateKind) {
           gold = res.nextGold;
           soundEngine.playPickup();
-          const dropX = blueBase.padX + (Math.random() - 0.5) * 2.8;
-          const dropZ = blueBase.padZ - 2.6 + (Math.random() - 0.5) * 1.8;
+          const dropX = blueBase.padX - 3.6 + (Math.random() - 0.5) * 2.2;
+          const dropZ = blueBase.padZ - 2.0 + (Math.random() - 0.5) * 1.8;
           spawnWorldCrate(res.airdropCrateKind, dropX, dropZ, false);
-          spawnBurstParticles(blueBase.padX - 2.6, 2.0, blueBase.padZ, 12);
+          spawnBurstParticles(blueBase.padX - 3.6, 2.0, blueBase.padZ - 2.0, 12);
         } else {
           soundEngine.playHit();
         }
@@ -5441,7 +6081,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                 b.weaponId = 'unarmed';
                 b.weaponName = 'Tangan Kosong (Tinju)';
                 b.ammo = 0;
-                b.x = blueBase.padX + 4.0;
+                b.x = blueBase.padX - 3.8;
                 b.z = blueBase.padZ - 0.5;
                 b.root.visible = true;
               } else {
@@ -5477,222 +6117,47 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       }
     };
 
-    interface StaticWorldStructureObb {
-      id: string;
-      x: number;
-      z: number;
-      halfX: number;
-      halfZ: number;
-      rotY: number;
-      heightY: number;
-      mat: CollisionMaterialTag;
-      isRetainingWall?: boolean;
-    }
+    let cachedStaticWorldStructures: StaticWorldStructureObb[] | null = null;
+    let cachedStaticWorldStructuresKey = '';
 
     const getStaticWorldStructures = (): StaticWorldStructureObb[] => {
-      const sExcRot = -0.35;
-      const nExcRot = Math.PI + 0.35;
-      const excBoomOffset = 4.55;
-      const plotOffsetsX = [-45.0, -15.0, 15.0, 45.0] as const;
-      const structures: StaticWorldStructureObb[] = [
-        // 0. West Elevated Concrete Lobby & Shopping Plaza Platform (+1.48m Vertical Retaining Wall OBB Segments leaving 5.4m openings at z = ±15.0 ramps)
-        { id: 'west_wall_north', x: -90.5, z: -38.05, halfX: 14.05, halfZ: 0.22, rotY: 0, heightY: 1.48, mat: 'concrete', isRetainingWall: true },
-        { id: 'west_wall_south', x: -90.5, z: 38.05, halfX: 14.05, halfZ: 0.22, rotY: 0, heightY: 1.48, mat: 'concrete', isRetainingWall: true },
-        { id: 'west_wall_east_n', x: -76.45, z: -27.95, halfX: 0.22, halfZ: 10.15, rotY: 0, heightY: 1.48, mat: 'concrete', isRetainingWall: true },
-        { id: 'west_wall_east_mid', x: -76.45, z: 0.0, halfX: 0.22, halfZ: 12.20, rotY: 0, heightY: 1.48, mat: 'concrete', isRetainingWall: true },
-        { id: 'west_wall_east_s', x: -76.45, z: 27.95, halfX: 0.22, halfZ: 10.15, rotY: 0, heightY: 1.48, mat: 'concrete', isRetainingWall: true },
-
-        // 1. Shifted East Construction Yard Heavy Equipment (aligned along x = 92.0..93.0 leaving wide western corridor open)
-        { id: 'const_excavator_s_body', x: 92.0, z: 72.0, halfX: 2.22, halfZ: 2.75, rotY: sExcRot, heightY: 4.85, mat: 'metal' },
-        {
-          id: 'const_excavator_s_boom',
-          x: 92.0 + Math.sin(sExcRot) * excBoomOffset,
-          z: 72.0 + Math.cos(sExcRot) * excBoomOffset,
-          halfX: 0.62,
-          halfZ: 2.15,
-          rotY: sExcRot,
-          heightY: 4.85,
-          mat: 'metal',
-        },
-        { id: 'const_excavator_n_body', x: 92.0, z: -72.0, halfX: 2.22, halfZ: 2.75, rotY: nExcRot, heightY: 4.85, mat: 'metal' },
-        {
-          id: 'const_excavator_n_boom',
-          x: 92.0 + Math.sin(nExcRot) * excBoomOffset,
-          z: -72.0 + Math.cos(nExcRot) * excBoomOffset,
-          halfX: 0.62,
-          halfZ: 2.15,
-          rotY: nExcRot,
-          heightY: 4.85,
-          mat: 'metal',
-        },
-        { id: 'const_girders_s1', x: 93.0, z: 55.0, halfX: 1.85, halfZ: 3.48, rotY: 0.0, heightY: 1.75, mat: 'metal' },
-        { id: 'const_girders_n1', x: 93.0, z: -55.0, halfX: 1.85, halfZ: 3.48, rotY: 0.0, heightY: 1.75, mat: 'metal' },
-        { id: 'const_pallets_s2', x: 92.5, z: 89.0, halfX: 2.85, halfZ: 2.65, rotY: 0.0, heightY: 1.95, mat: 'concrete' },
-        { id: 'const_pallets_n2', x: 92.5, z: -89.0, halfX: 2.85, halfZ: 2.65, rotY: 0.0, heightY: 1.95, mat: 'concrete' },
-
-        // 2. 8 Active Front-Yard Skyshield Concrete Bastions in the Front Lawn of the 4 Plots per Team (x = ±51.4, ±21.4, z = ±60.0, detached from the z = ±64.2 fence)
-        { id: 'bastion_b_0', x: blueBase.hqX - 51.4, z: blueBase.hqZ - 26.0, halfX: 1.85, halfZ: 1.85, rotY: 0, heightY: getBaseSkyshieldTurrets(blueBase.baseGroup)[0]?.isBuilt ? 5.20 : 2.60, mat: 'concrete' },
-        { id: 'bastion_b_1', x: blueBase.hqX - 21.4, z: blueBase.hqZ - 26.0, halfX: 1.85, halfZ: 1.85, rotY: 0, heightY: getBaseSkyshieldTurrets(blueBase.baseGroup)[1]?.isBuilt ? 5.20 : 2.60, mat: 'concrete' },
-        { id: 'bastion_b_2', x: blueBase.hqX + 21.4, z: blueBase.hqZ - 26.0, halfX: 1.85, halfZ: 1.85, rotY: 0, heightY: getBaseSkyshieldTurrets(blueBase.baseGroup)[2]?.isBuilt ? 5.20 : 2.60, mat: 'concrete' },
-        { id: 'bastion_b_3', x: blueBase.hqX + 51.4, z: blueBase.hqZ - 26.0, halfX: 1.85, halfZ: 1.85, rotY: 0, heightY: getBaseSkyshieldTurrets(blueBase.baseGroup)[3]?.isBuilt ? 5.20 : 2.60, mat: 'concrete' },
-        { id: 'bastion_r_0', x: redBase.hqX + 51.4, z: redBase.hqZ + 26.0, halfX: 1.85, halfZ: 1.85, rotY: 0, heightY: getBaseSkyshieldTurrets(redBase.baseGroup)[0]?.isBuilt ? 5.20 : 2.60, mat: 'concrete' },
-        { id: 'bastion_r_1', x: redBase.hqX + 21.4, z: redBase.hqZ + 26.0, halfX: 1.85, halfZ: 1.85, rotY: 0, heightY: getBaseSkyshieldTurrets(redBase.baseGroup)[1]?.isBuilt ? 5.20 : 2.60, mat: 'concrete' },
-        { id: 'bastion_r_2', x: redBase.hqX - 21.4, z: redBase.hqZ + 26.0, halfX: 1.85, halfZ: 1.85, rotY: 0, heightY: getBaseSkyshieldTurrets(redBase.baseGroup)[2]?.isBuilt ? 5.20 : 2.60, mat: 'concrete' },
-        { id: 'bastion_r_3', x: redBase.hqX - 51.4, z: redBase.hqZ + 26.0, halfX: 1.85, halfZ: 1.85, rotY: 0, heightY: getBaseSkyshieldTurrets(redBase.baseGroup)[3]?.isBuilt ? 5.20 : 2.60, mat: 'concrete' },
-
-        // 3. Shifted East Harbor Terminal Corrugated Shipping Container Stacks (x = 80.15 & 101.5)
-        { id: 'cont_stack_harbor_nw', x: 80.15, z: -34.5, halfX: 3.55, halfZ: 3.64, rotY: 0, heightY: 6.72, mat: 'metal' },
-        { id: 'cont_stack_harbor_sw', x: 80.15, z: 34.5, halfX: 3.55, halfZ: 3.64, rotY: 0, heightY: 6.72, mat: 'metal' },
-        { id: 'cont_stack_harbor_nc', x: 80.15, z: -24.5, halfX: 3.55, halfZ: 3.64, rotY: 0, heightY: 3.40, mat: 'metal' },
-        { id: 'cont_stack_harbor_sc', x: 80.15, z: 24.5, halfX: 3.55, halfZ: 3.64, rotY: 0, heightY: 3.40, mat: 'metal' },
-        { id: 'cont_stack_harbor_ne', x: 101.5, z: -33.45, halfX: 3.55, halfZ: 3.64, rotY: Math.PI / 2, heightY: 6.72, mat: 'metal' },
-        { id: 'cont_stack_harbor_se', x: 101.5, z: 33.45, halfX: 3.55, halfZ: 3.64, rotY: Math.PI / 2, heightY: 6.72, mat: 'metal' },
-      ];
-
-      // 4. 4 Individual Commander Base Plots per Team (Live Command Center Building + 5-Segment Perimeter Fence + Automatic Sliding Gate for Owner & Owner's Built Characters)
+      const blueSkyshields = getBaseSkyshieldTurrets(blueBase.baseGroup);
+      const redSkyshields = getBaseSkyshieldTurrets(redBase.baseGroup);
+      let stateKey = `${blueBase.hqX},${blueBase.hqZ},${redBase.hqX},${redBase.hqZ}|`;
       for (let i = 0; i < 4; i++) {
-        const ox = plotOffsetsX[i];
-        const bPlot = blueCommanderBases[i];
-        if (bPlot && !bPlot.destroyed) {
-          const bwx = blueBase.hqX + ox;
-          if (bPlot.buildingHp > 0) {
-            structures.push({
-              id: `blue_plot_${i}_building`,
-              x: bwx,
-              z: blueBase.hqZ + 5.5,
-              halfX: 4.25,
-              halfZ: 3.65,
-              rotY: Math.PI / 2,
-              heightY: 6.8 + bPlot.buildingLevel * 2.1,
-              mat: 'concrete',
-            });
-          }
-          if (bPlot.fenceHp > 0) {
-            const fh = 1.9 + bPlot.fenceLevel * 0.35;
-            structures.push(
-              { id: `blue_plot_${i}_fence_rear`, x: bwx, z: blueBase.hqZ + 13.2, halfX: 9.8, halfZ: 0.32, rotY: 0, heightY: fh, mat: 'concrete' },
-              { id: `blue_plot_${i}_fence_w`, x: bwx - 9.8, z: blueBase.hqZ - 4.3, halfX: 0.32, halfZ: 17.5, rotY: 0, heightY: fh, mat: 'concrete' },
-              { id: `blue_plot_${i}_fence_e`, x: bwx + 9.8, z: blueBase.hqZ - 4.3, halfX: 0.32, halfZ: 17.5, rotY: 0, heightY: fh, mat: 'concrete' },
-              { id: `blue_plot_${i}_fence_fl`, x: bwx - 6.3, z: blueBase.hqZ - 21.8, halfX: 3.5, halfZ: 0.32, rotY: 0, heightY: fh, mat: 'concrete' },
-              { id: `blue_plot_${i}_fence_fr`, x: bwx + 6.3, z: blueBase.hqZ - 21.8, halfX: 3.5, halfZ: 0.32, rotY: 0, heightY: fh, mat: 'concrete' },
-              { id: `blue_plot_${i}_gate`, x: bwx, z: blueBase.hqZ - 21.8, halfX: 2.8, halfZ: 0.34, rotY: 0, heightY: fh, mat: 'metal' },
-            );
-          }
-        }
-
-        const rPlot = redCommanderBases[i];
-        if (rPlot && !rPlot.destroyed) {
-          const rwx = redBase.hqX - ox;
-          if (rPlot.buildingHp > 0) {
-            structures.push({
-              id: `red_plot_${i}_building`,
-              x: rwx,
-              z: redBase.hqZ - 5.5,
-              halfX: 4.25,
-              halfZ: 3.65,
-              rotY: -Math.PI / 2,
-              heightY: 6.8 + rPlot.buildingLevel * 2.1,
-              mat: 'concrete',
-            });
-          }
-          if (rPlot.fenceHp > 0) {
-            const fh = 1.9 + rPlot.fenceLevel * 0.35;
-            structures.push(
-              { id: `red_plot_${i}_fence_rear`, x: rwx, z: redBase.hqZ - 13.2, halfX: 9.8, halfZ: 0.32, rotY: 0, heightY: fh, mat: 'concrete' },
-              { id: `red_plot_${i}_fence_w`, x: rwx - 9.8, z: redBase.hqZ + 4.3, halfX: 0.32, halfZ: 17.5, rotY: 0, heightY: fh, mat: 'concrete' },
-              { id: `red_plot_${i}_fence_e`, x: rwx + 9.8, z: redBase.hqZ + 4.3, halfX: 0.32, halfZ: 17.5, rotY: 0, heightY: fh, mat: 'concrete' },
-              { id: `red_plot_${i}_fence_fl`, x: rwx - 6.3, z: redBase.hqZ + 21.8, halfX: 3.5, halfZ: 0.32, rotY: 0, heightY: fh, mat: 'concrete' },
-              { id: `red_plot_${i}_fence_fr`, x: rwx + 6.3, z: redBase.hqZ + 21.8, halfX: 3.5, halfZ: 0.32, rotY: 0, heightY: fh, mat: 'concrete' },
-              { id: `red_plot_${i}_gate`, x: rwx, z: redBase.hqZ + 21.8, halfX: 2.8, halfZ: 0.34, rotY: 0, heightY: fh, mat: 'metal' },
-            );
-          }
-        }
+        const bp = blueCommanderBases[i];
+        const rp = redCommanderBases[i];
+        stateKey += `${blueSkyshields[i]?.isBuilt ? 1 : 0}${redSkyshields[i]?.isBuilt ? 1 : 0}`;
+        stateKey += bp
+          ? `${bp.destroyed ? 1 : 0}:${bp.buildingHp > 0 ? bp.buildingLevel : 0}:${bp.fenceHp > 0 ? bp.fenceLevel : 0}:${bp.hasParkingBay ? 1 : 0};`
+          : '0;';
+        stateKey += rp
+          ? `${rp.destroyed ? 1 : 0}:${rp.buildingHp > 0 ? rp.buildingLevel : 0}:${rp.fenceHp > 0 ? rp.fenceLevel : 0}:${rp.hasParkingBay ? 1 : 0};`
+          : '0;';
+      }
+      if (cachedStaticWorldStructures && cachedStaticWorldStructuresKey === stateKey) {
+        return cachedStaticWorldStructures;
       }
 
+      const structures = buildStaticWorldStructuresList({
+        blueBase,
+        redBase,
+        blueCommanderBases,
+        redCommanderBases,
+      });
+      cachedStaticWorldStructures = structures;
+      cachedStaticWorldStructuresKey = stateKey;
       return structures;
     };
 
     // Build & cache 2D A* Navigation Grids for Foot Units (BuddyUnit) and Tracked Vehicles (TankVehicle)
     const getArenaNavGrid = (isTrackedTank: boolean): AStarNavGrid => {
       if (navGridDirty || !cachedFootNavGrid || !cachedVehicleNavGrid) {
-        const footGrid = createAStarNavGrid(-112, 112, -112, 112, 1.5);
-        const vehicleGrid = createAStarNavGrid(-112, 112, -112, 112, 1.5);
-        const footPad = 0.50;
-        const vehiclePad = 0.92;
-
-        // 1. Rasterize Outer Embankment, East Harbor Deep Water, and Centered Oasis Lake
-        for (let row = 0; row < footGrid.rows; row++) {
-          const wz = footGrid.minZ + (row + 0.5) * footGrid.cellSize;
-          for (let col = 0; col < footGrid.cols; col++) {
-            const wx = footGrid.minX + (col + 0.5) * footGrid.cellSize;
-            const idx = row * footGrid.cols + col;
-            if (
-              evaluateOuterEmbankmentSdf(wx, wz) > -0.85 ||
-              evaluateSeHarborSdf(wx, wz).waterSdf < 0.25
-            ) {
-              footGrid.blocked[idx] = 1;
-              vehicleGrid.blocked[idx] = 1;
-            } else if (evaluateNwLakeSdf(wx, wz) < 0.25) {
-              // Foot units walk around the Centered Oasis Lake; tracked tanks can ford across it
-              footGrid.blocked[idx] = 1;
-            }
-          }
-        }
-
-        // 2. Rasterize Static World OBB Structures (Retaining Walls, Base Plot Buildings & Fences, Bastions, Container Stacks, Excavators)
-        const staticStructures = getStaticWorldStructures();
-        for (const st of staticStructures) {
-          // Skip automatic sliding gates in global A* navgrid so authorized commanders/characters can pathfind through their own gate
-          if (st.id.endsWith('_gate')) continue;
-          const isThinGateOrFence = st.id.includes('_fence_') || st.id.startsWith('gate_post_');
-          rasterizeObbObstacleToNavGrid(
-            footGrid,
-            st.x,
-            st.z,
-            st.halfX,
-            st.halfZ,
-            st.rotY,
-            isThinGateOrFence ? 0.28 : footPad,
-          );
-          rasterizeObbObstacleToNavGrid(
-            vehicleGrid,
-            st.x,
-            st.z,
-            st.halfX,
-            st.halfZ,
-            st.rotY,
-            isThinGateOrFence ? 0.38 : vehiclePad,
-          );
-        }
-
-        // 3. Rasterize Living Tree Trunks
-        for (const tr of trees) {
-          if (!tr.alive) continue;
-          const trunkR = 0.88 * tr.scale;
-          rasterizeCircleObstacleToNavGrid(footGrid, tr.x, tr.z, trunkR, footPad * 0.75);
-          rasterizeCircleObstacleToNavGrid(vehicleGrid, tr.x, tr.z, trunkR, vehiclePad * 0.75);
-        }
-
-        // 4. Rasterize Solid Map Props (Perimeter concrete_fence walls, Power Plant tanks/pipes, Harbor machinery)
-        for (const mp of activeMapProps) {
-          if (!mp.alive || mp.category !== 'solid') continue;
-          if (mp.halfX !== undefined && mp.halfZ !== undefined) {
-            rasterizeObbObstacleToNavGrid(footGrid, mp.x, mp.z, mp.halfX, mp.halfZ, mp.rotY, footPad);
-            rasterizeObbObstacleToNavGrid(
-              vehicleGrid,
-              mp.x,
-              mp.z,
-              mp.halfX,
-              mp.halfZ,
-              mp.rotY,
-              vehiclePad * 0.8,
-            );
-          } else {
-            rasterizeCircleObstacleToNavGrid(footGrid, mp.x, mp.z, mp.radius, footPad * 0.8);
-            rasterizeCircleObstacleToNavGrid(vehicleGrid, mp.x, mp.z, mp.radius, vehiclePad * 0.75);
-          }
-        }
-
+        const { footGrid, vehicleGrid } = buildArenaNavGrids({
+          staticStructures: getStaticWorldStructures(),
+          trees,
+          activeMapProps,
+        });
         cachedFootNavGrid = footGrid;
         cachedVehicleNavGrid = vehicleGrid;
         navGridDirty = false;
@@ -5700,122 +6165,30 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       return isTrackedTank ? cachedVehicleNavGrid! : cachedFootNavGrid!;
     };
 
+    let aStarRepathsThisFrame = 0;
+
     // Compute A* waypoint steering velocity (vx, vz) for an AI character or AI tank
     const computeAStarSteeringDirection = (
-      agent: {
-        id: number;
-        x: number;
-        z: number;
-        navPath?: Array<{ x: number; z: number }>;
-        navWaypointIndex?: number;
-        navLastGoalX?: number;
-        navLastGoalZ?: number;
-        navRepathTimer?: number;
-        navStuckTimer?: number;
-        navLastProgressX?: number;
-        navLastProgressZ?: number;
-      },
+      agent: Parameters<typeof computeUnitAStarSteeringDirection>[0],
       goalX: number,
       goalZ: number,
       dt: number,
       isTrackedTank: boolean,
       canFly = false,
-    ): { dirX: number; dirZ: number; distToGoal: number } => {
-      const totalDx = getPlanetShortestDelta(goalX, agent.x);
-      const totalDz = getPlanetShortestDelta(goalZ, agent.z);
-      const distToGoal = Math.hypot(totalDx, totalDz);
-      if (distToGoal < 0.001) {
-        return { dirX: 0, dirZ: 0, distToGoal: 0 };
-      }
-
-      // Flying classes or agents already very close to their target steer directly
-      if (canFly || distToGoal < 2.1) {
-        return { dirX: totalDx / distToGoal, dirZ: totalDz / distToGoal, distToGoal };
-      }
-
-      // Track forward progress to detect and recover if an agent ever gets wedged against a corner
-      if (agent.navLastProgressX === undefined || agent.navLastProgressZ === undefined) {
-        agent.navLastProgressX = agent.x;
-        agent.navLastProgressZ = agent.z;
-        agent.navStuckTimer = 0;
-      } else {
-        const moved = Math.hypot(
-          getPlanetShortestDelta(agent.x, agent.navLastProgressX),
-          getPlanetShortestDelta(agent.z, agent.navLastProgressZ),
-        );
-        if (moved > 0.32) {
-          agent.navLastProgressX = agent.x;
-          agent.navLastProgressZ = agent.z;
-          agent.navStuckTimer = 0;
-        } else {
-          agent.navStuckTimer = (agent.navStuckTimer ?? 0) + dt;
-        }
-      }
-
-      agent.navRepathTimer = (agent.navRepathTimer ?? 0) - dt;
-      const goalShift =
-        agent.navLastGoalX === undefined || agent.navLastGoalZ === undefined
-          ? Infinity
-          : Math.hypot(goalX - agent.navLastGoalX, goalZ - agent.navLastGoalZ);
-      const pathExhausted =
-        !agent.navPath ||
-        agent.navWaypointIndex === undefined ||
-        agent.navWaypointIndex >= agent.navPath.length;
-      const isStuck = (agent.navStuckTimer ?? 0) > 0.42;
-
-      if (goalShift > 2.2 || pathExhausted || agent.navRepathTimer <= 0 || isStuck) {
-        const grid = getArenaNavGrid(isTrackedTank);
-        const aStarRes = findPathAStar(grid, agent.x, agent.z, goalX, goalZ, {
-          allowDiagonal: true,
-          maxIterations: 8192,
-        });
-        agent.navPath = aStarRes.waypoints;
-        agent.navWaypointIndex = 0;
-        agent.navLastGoalX = goalX;
-        agent.navLastGoalZ = goalZ;
-        agent.navRepathTimer = 0.55 + (agent.id % 5) * 0.08;
-        if (isStuck) {
-          agent.navStuckTimer = 0;
-          agent.navLastProgressX = agent.x;
-          agent.navLastProgressZ = agent.z;
-        }
-      }
-
-      const waypointReachDist = isTrackedTank ? 1.85 : 1.15;
-      while (
-        agent.navPath &&
-        agent.navWaypointIndex !== undefined &&
-        agent.navWaypointIndex < agent.navPath.length - 1
-      ) {
-        const wp = agent.navPath[agent.navWaypointIndex];
-        const wpDist = Math.hypot(
-          getPlanetShortestDelta(wp.x, agent.x),
-          getPlanetShortestDelta(wp.z, agent.z),
-        );
-        if (wpDist < waypointReachDist) {
-          agent.navWaypointIndex++;
-        } else {
-          break;
-        }
-      }
-
-      let steerX = goalX;
-      let steerZ = goalZ;
-      if (
-        agent.navPath &&
-        agent.navWaypointIndex !== undefined &&
-        agent.navWaypointIndex < agent.navPath.length - 1
-      ) {
-        const wp = agent.navPath[agent.navWaypointIndex];
-        steerX = wp.x;
-        steerZ = wp.z;
-      }
-
-      const sdx = getPlanetShortestDelta(steerX, agent.x);
-      const sdz = getPlanetShortestDelta(steerZ, agent.z);
-      const sLen = Math.max(0.001, Math.hypot(sdx, sdz));
-      return { dirX: sdx / sLen, dirZ: sdz / sLen, distToGoal };
-    };
+    ): { dirX: number; dirZ: number; distToGoal: number } =>
+      computeUnitAStarSteeringDirection(
+        agent,
+        goalX,
+        goalZ,
+        dt,
+        isTrackedTank,
+        canFly,
+        getArenaNavGrid,
+        () => aStarRepathsThisFrame < 2,
+        () => {
+          aStarRepathsThisFrame++;
+        },
+      );
 
     // =========================================================================
     // MUZZLE RAYCAST HIT DETECTION (100 UNITS, LAYER MASK SKIPPING SHOOTER & FRIENDLIES)
@@ -5824,126 +6197,6 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
     const muzzleRaycastGroup = new THREE.Group();
     muzzleRaycastGroup.name = 'MuzzleRaycastAndTargetLockGroup';
     scene.add(muzzleRaycastGroup);
-
-    const createGroundLockAuraTexture = (): THREE.CanvasTexture => {
-      const c = document.createElement('canvas');
-      c.width = 512;
-      c.height = 512;
-      const ctx = c.getContext('2d');
-      if (ctx) {
-        const cx = 256;
-        const cy = 256;
-        ctx.clearRect(0, 0, 512, 512);
-
-        // Soft radial energy field bloom (zero hard polygon edges)
-        const radGrad = ctx.createRadialGradient(cx, cy, 24, cx, cy, 240);
-        radGrad.addColorStop(0.0, 'rgba(255, 56, 92, 0.0)');
-        radGrad.addColorStop(0.52, 'rgba(255, 56, 92, 0.08)');
-        radGrad.addColorStop(0.76, 'rgba(255, 70, 95, 0.34)');
-        radGrad.addColorStop(0.88, 'rgba(255, 190, 60, 0.22)');
-        radGrad.addColorStop(1.0, 'rgba(255, 45, 85, 0.0)');
-        ctx.fillStyle = radGrad;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 245, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Outer soft-glowing segmented holographic ring
-        ctx.save();
-        ctx.shadowColor = 'rgba(255, 45, 85, 0.95)';
-        ctx.shadowBlur = 18;
-        ctx.strokeStyle = 'rgba(255, 75, 105, 0.92)';
-        ctx.lineWidth = 6;
-        ctx.lineCap = 'round';
-        for (let i = 0; i < 4; i++) {
-          const startAng = (i * Math.PI) / 2 + 0.16;
-          const endAng = ((i + 1) * Math.PI) / 2 - 0.16;
-          ctx.beginPath();
-          ctx.arc(cx, cy, 196, startAng, endAng);
-          ctx.stroke();
-        }
-
-        // Inner thin amber-gold rangefinder sweep arcs
-        ctx.shadowColor = 'rgba(255, 215, 64, 0.9)';
-        ctx.shadowBlur = 14;
-        ctx.strokeStyle = 'rgba(255, 225, 100, 0.88)';
-        ctx.lineWidth = 3.5;
-        for (let i = 0; i < 8; i++) {
-          const a0 = (i * Math.PI) / 4 + 0.08;
-          const a1 = a0 + 0.18;
-          ctx.beginPath();
-          ctx.arc(cx, cy, 162, a0, a1);
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
-      const tex = new THREE.CanvasTexture(c);
-      tex.needsUpdate = true;
-      return tex;
-    };
-
-    const createHudLockReticleTexture = (): THREE.CanvasTexture => {
-      const c = document.createElement('canvas');
-      c.width = 512;
-      c.height = 512;
-      const ctx = c.getContext('2d');
-      if (ctx) {
-        const cx = 256;
-        const cy = 256;
-        ctx.clearRect(0, 0, 512, 512);
-
-        // Soft central optical glow
-        const coreGrad = ctx.createRadialGradient(cx, cy, 4, cx, cy, 190);
-        coreGrad.addColorStop(0.0, 'rgba(255, 90, 110, 0.35)');
-        coreGrad.addColorStop(0.35, 'rgba(255, 45, 85, 0.12)');
-        coreGrad.addColorStop(0.78, 'rgba(255, 180, 50, 0.08)');
-        coreGrad.addColorStop(1.0, 'rgba(255, 45, 85, 0.0)');
-        ctx.fillStyle = coreGrad;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 195, 0, Math.PI * 2);
-        ctx.fill();
-
-        // 4 Sleek Anti-Aliased Curved Optical Lock Arcs + Corner Hairlines
-        ctx.save();
-        ctx.shadowColor = 'rgba(255, 45, 85, 0.95)';
-        ctx.shadowBlur = 16;
-        ctx.strokeStyle = 'rgba(255, 82, 110, 0.95)';
-        ctx.lineWidth = 5.5;
-        ctx.lineCap = 'round';
-        for (let i = 0; i < 4; i++) {
-          const centerAng = (i * Math.PI) / 2 + Math.PI / 4;
-          ctx.beginPath();
-          ctx.arc(cx, cy, 148, centerAng - 0.32, centerAng + 0.32);
-          ctx.stroke();
-        }
-
-        // Crisp glowing amber-white inner reticle ticks & center pinpoint
-        ctx.shadowColor = 'rgba(255, 220, 90, 0.95)';
-        ctx.shadowBlur = 12;
-        ctx.strokeStyle = 'rgba(255, 238, 150, 0.92)';
-        ctx.lineWidth = 3.5;
-        const tickDirs = [
-          [1, 0],
-          [-1, 0],
-          [0, 1],
-          [0, -1],
-        ];
-        for (const [dx, dy] of tickDirs) {
-          ctx.beginPath();
-          ctx.moveTo(cx + dx * 112, cy + dy * 112);
-          ctx.lineTo(cx + dx * 136, cy + dy * 136);
-          ctx.stroke();
-        }
-
-        ctx.fillStyle = 'rgba(255, 245, 190, 0.96)';
-        ctx.beginPath();
-        ctx.arc(cx, cy, 6.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-      const tex = new THREE.CanvasTexture(c);
-      tex.needsUpdate = true;
-      return tex;
-    };
 
     // Soft-Glow Target Lock-On VFX Group — ONLY visible when the INVISIBLE raycast locks onto a hostile ('red') target!
     const targetLockGroup = new THREE.Group();
@@ -5980,259 +6233,27 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
     let activeMuzzleRaycastResult: MuzzleRaycastResult | null = null;
     let lastLockedColliderId: string | null = null;
 
-    const getPlayerMuzzleAndAimDirection = (): { muzzleOrigin: Vec3; aimDir: Vec3; shooterId: string } => {
-      if (mountedTank) {
-        if (mountedTank.vehicleKind === 'plane') {
-          const alt = mountedTank.altitude ?? 0;
-          const groundElev = getTerrainElevation(mountedTank.x, mountedTank.z);
-          const muzzleY = groundElev + 0.55 + alt;
-          const fwdX = Math.cos(mountedTank.hullYaw);
-          const fwdZ = -Math.sin(mountedTank.hullYaw);
-          const distToAim = Math.max(
-            9.0,
-            getPlanetShortestDistance(aimWorldPoint.x, aimWorldPoint.z, mountedTank.x, mountedTank.z),
-          );
-          const pitchDropY =
-            alt > 1.2 ? clamp((groundElev + 1.2 - muzzleY) / distToAim, -0.55, 0.02) : 0;
-          const dLen = Math.hypot(fwdX, pitchDropY, fwdZ) || 1;
-          return {
-            muzzleOrigin: {
-              x: wrapPlanetCoord(mountedTank.x + fwdX * 2.1),
-              y: muzzleY,
-              z: wrapPlanetCoord(mountedTank.z + fwdZ * 2.1),
-            },
-            aimDir: { x: fwdX / dLen, y: pitchDropY / dLen, z: fwdZ / dLen },
-            shooterId: `veh_${mountedTank.id}`,
-          };
-        }
-        const totalYaw =
-          mountedTank.vehicleKind === 'truck'
-            ? mountedTank.hullYaw
-            : mountedTank.hullYaw + mountedTank.turretYaw;
-        const fwdX = Math.cos(totalYaw);
-        const fwdZ = -Math.sin(totalYaw);
-        const tankGroundY = getTerrainElevation(mountedTank.x, mountedTank.z);
-        return {
-          muzzleOrigin: {
-            x: wrapPlanetCoord(mountedTank.x + fwdX * 3.4),
-            y: tankGroundY + 2.15,
-            z: wrapPlanetCoord(mountedTank.z + fwdZ * 3.4),
-          },
-          aimDir: { x: fwdX, y: 0, z: fwdZ },
-          shooterId: `veh_${mountedTank.id}`,
-        };
-      }
+    const getPlayerMuzzleAndAimDirection = () =>
+      computePlayerMuzzleAndAimDirection(playerUnit, mountedTank, aimWorldPoint);
 
-      // On-foot Player Buddy: compute aim direction toward mouse crosshair (or facing yaw)
-      const aimDx = getPlanetShortestDelta(aimWorldPoint.x, playerUnit.x);
-      const aimDz = getPlanetShortestDelta(aimWorldPoint.z, playerUnit.z);
-      const aimHorizLen = Math.hypot(aimDx, aimDz);
-      const fwdX = aimHorizLen > 0.25 ? aimDx / aimHorizLen : Math.cos(playerUnit.yaw);
-      const fwdZ = aimHorizLen > 0.25 ? aimDz / aimHorizLen : -Math.sin(playerUnit.yaw);
-      const rightX = -fwdZ;
-      const rightZ = fwdX;
-      const playerTerrainY =
-        getTerrainElevation(playerUnit.x, playerUnit.z) + playerUnit.jumpOffset;
-      const wId = playerUnit.weaponId;
-      const muzzleY =
-        wId === 'bazooka'
-          ? playerTerrainY + 1.82
-          : wId === 'rifle'
-          ? playerTerrainY + 1.46
-          : playerTerrainY + 1.54;
-      const fwdOff = wId === 'bazooka' ? 1.38 : wId === 'rifle' ? 1.42 : 1.15;
-      const rightOff = wId === 'bazooka' ? 0.54 : wId === 'rifle' ? 0.12 : 0.07;
-
-      return {
-        muzzleOrigin: {
-          x: wrapPlanetCoord(playerUnit.x + fwdX * fwdOff + rightX * rightOff),
-          y: muzzleY,
-          z: wrapPlanetCoord(playerUnit.z + fwdZ * fwdOff + rightZ * rightOff),
-        },
-        aimDir: { x: fwdX, y: 0, z: fwdZ },
-        shooterId: `buddy_${playerUnit.id}`,
-      };
-    };
-
-    const buildWorldRaycastColliders = (shooterId: string): RaycastCollider3D[] => {
-      const colliders: RaycastCollider3D[] = [];
-
-      // 0. Register Shooter on RAYCAST_LAYERS.SHOOTER (explicitly skipped by DEFAULT_MUZZLE_MASK!)
-      if (mountedTank) {
-        colliders.push({
-          id: shooterId,
-          layer: RAYCAST_LAYERS.SHOOTER,
-          targetKind: 'vehicle',
-          team: 'blue',
-          label: 'Player Vehicle',
-          shape: 'obb',
-          center: {
-            x: mountedTank.x,
-            y: getTerrainElevation(mountedTank.x, mountedTank.z) + (mountedTank.altitude ?? 0) + 1.15,
-            z: mountedTank.z,
-          },
-          halfExtents: { x: 2.5, y: 1.35, z: 1.7 },
-          rotY: -(mountedTank.hullYaw ?? 0),
-        });
-      } else if (playerUnit.alive) {
-        colliders.push({
-          id: shooterId,
-          layer: RAYCAST_LAYERS.SHOOTER,
-          targetKind: 'enemy_character',
-          team: 'blue',
-          label: 'Player Buddy',
-          shape: 'cylinder',
-          center: {
-            x: playerUnit.x,
-            y: getTerrainElevation(playerUnit.x, playerUnit.z) + playerUnit.jumpOffset + 1.05,
-            z: playerUnit.z,
-          },
-          radius: 0.85,
-          halfExtents: { x: 0.85, y: 1.1, z: 0.85 },
-        });
-      }
-
-      // 1. Enemy Buddy Characters ONLY (`b.team === 'red'` — NEVER lock onto friendly Blue team Buddies!)
-      for (let i = 0; i < buddyUnits.length; i++) {
-        const b = buddyUnits[i];
-        if (!b.alive || b.isPlayer || b.team === 'blue') continue;
-        if (tanks.some((t) => t.occupiedByAiId === b.id)) continue;
-        const floatY = BUDDY_CLASSES[b.classId].canFly ? 0.65 : 0;
-        const by = getTerrainElevation(b.x, b.z) + floatY + b.jumpOffset + 1.05;
-        colliders.push({
-          id: `buddy_${b.id}`,
-          layer: RAYCAST_LAYERS.ENEMY_CHARACTER,
-          targetKind: 'enemy_character',
-          team: 'red',
-          label: `Musuh ${b.classId}`,
-          shape: 'cylinder',
-          center: { x: b.x, y: by, z: b.z },
-          radius: 1.02,
-          halfExtents: { x: 1.02, y: 1.22, z: 1.02 },
-        });
-      }
-
-      // 2. Enemy Vehicles ONLY (`tv.team === 'red'` — NEVER lock onto friendly Blue team vehicles!)
-      for (let i = 0; i < tanks.length; i++) {
-        const tv = tanks[i];
-        if (tv.hp <= 0 || tv === mountedTank || tv.team === 'blue') continue;
-        const vGroundY = getTerrainElevation(tv.x, tv.z);
-        const vCenterY = vGroundY + (tv.altitude ?? 0) + 1.15;
-        const tvHalfX =
-          tv.vehicleKind === 'truck' ? 3.66 : tv.vehicleKind === 'tank' ? 2.48 : 2.52;
-        const tvHalfZ =
-          tv.vehicleKind === 'truck' ? 1.76 : tv.vehicleKind === 'tank' ? 1.66 : 2.48;
-        const vehLabel =
-          tv.vehicleKind === 'plane'
-            ? 'Pesawat Tempur Musuh'
-            : tv.vehicleKind === 'truck'
-            ? 'Dump Truck Musuh'
-            : tv.isSuper
-            ? 'Tyrant Tank Musuh'
-            : 'Tank Tempur Musuh';
-        colliders.push({
-          id: `veh_${tv.id}`,
-          layer: RAYCAST_LAYERS.VEHICLE,
-          targetKind: 'vehicle',
-          team: 'red',
-          label: vehLabel,
-          shape: 'obb',
-          center: { x: tv.x, y: vCenterY, z: tv.z },
-          halfExtents: { x: tvHalfX, y: 1.38, z: tvHalfZ },
-          rotY: -(tv.hullYaw ?? 0),
-        });
-      }
-
-      // 3. Enemy Skyshield 35mm Turrets ONLY (`redBase` — NEVER lock onto our own `blueBase` Skyshields!)
-      const enemySkyshields = getBaseSkyshieldTurrets(redBase.baseGroup);
-      for (let si = 0; si < enemySkyshields.length; si++) {
-        const st = enemySkyshields[si];
-        if (!st.isBuilt || st.hp <= 0) continue;
-        const wx = redBase.hqX - st.localZ;
-        const wz = redBase.hqZ + st.localX;
-        const groundY = getTerrainElevation(wx, wz);
-        colliders.push({
-          id: `skyshield_red_${si}`,
-          layer: RAYCAST_LAYERS.SKYSHIELD,
-          targetKind: 'skyshield',
-          team: 'red',
-          label: `Skyshield 35mm Musuh (#${si + 1})`,
-          shape: 'cylinder',
-          center: { x: wx, y: groundY + 2.85, z: wz },
-          radius: 2.22,
-          halfExtents: { x: 2.22, y: 2.85, z: 2.22 },
-        });
-      }
-
-      // 4. Map Props, Explosive Barrels, Trees & Crates (`RAYCAST_LAYERS.PROP`)
-      for (let i = 0; i < activeMapProps.length; i++) {
-        const mp = activeMapProps[i];
-        if (!mp.alive || mp.category === 'none') continue;
-        const groundY = getTerrainElevation(mp.x, mp.z);
-        const halfH = Math.max(0.75, mp.heightY * 0.5);
-        if (mp.halfX !== undefined && mp.halfZ !== undefined) {
-          colliders.push({
-            id: `prop_${mp.id}`,
-            layer: RAYCAST_LAYERS.PROP,
-            targetKind: 'prop',
-            label: mp.kind,
-            shape: 'obb',
-            center: { x: mp.x, y: groundY + halfH, z: mp.z },
-            halfExtents: { x: mp.halfX, y: halfH, z: mp.halfZ },
-            rotY: mp.rotY,
-          });
-        } else {
-          colliders.push({
-            id: `prop_${mp.id}`,
-            layer: RAYCAST_LAYERS.PROP,
-            targetKind: 'prop',
-            label: mp.kind,
-            shape: 'cylinder',
-            center: { x: mp.x, y: groundY + halfH, z: mp.z },
-            radius: Math.max(0.55, mp.radius),
-            halfExtents: { x: mp.radius, y: halfH, z: mp.radius },
-          });
-        }
-      }
-
-      for (let i = 0; i < trees.length; i++) {
-        const tr = trees[i];
-        if (!tr.alive) continue;
-        const groundY = getTerrainElevation(tr.x, tr.z);
-        const trunkR = 0.88 * tr.scale;
-        colliders.push({
-          id: `tree_${tr.id}`,
-          layer: RAYCAST_LAYERS.PROP,
-          targetKind: 'prop',
-          label: 'Tree',
-          shape: 'cylinder',
-          center: { x: tr.x, y: groundY + 2.2 * tr.scale, z: tr.z },
-          radius: trunkR,
-          halfExtents: { x: trunkR, y: 2.2 * tr.scale, z: trunkR },
-        });
-      }
-
-      // 5. Static Base Buildings & Structures (`RAYCAST_LAYERS.STRUCTURE`)
-      const staticStructures = getStaticWorldStructures();
-      for (let i = 0; i < staticStructures.length; i++) {
-        const st = staticStructures[i];
-        if (st.id.startsWith('bastion_')) continue;
-        const groundY = getTerrainElevation(st.x, st.z);
-        const halfH = st.heightY * 0.5;
-        colliders.push({
-          id: `struct_${st.id}`,
-          layer: RAYCAST_LAYERS.STRUCTURE,
-          targetKind: 'structure',
-          label: st.id,
-          shape: 'obb',
-          center: { x: st.x, y: groundY + halfH, z: st.z },
-          halfExtents: { x: st.halfX, y: halfH, z: st.halfZ },
-          rotY: st.rotY,
-        });
-      }
-
-      return colliders;
-    };
+    const buildWorldRaycastColliders = (
+      shooterId: string,
+      rayOriginX: number,
+      rayOriginZ: number,
+    ): RaycastCollider3D[] =>
+      buildArenaRaycastColliders({
+        shooterId,
+        rayOriginX,
+        rayOriginZ,
+        mountedTank,
+        playerUnit,
+        buddyUnits,
+        tanks,
+        redBase,
+        activeMapProps,
+        trees,
+        staticStructures: getStaticWorldStructures(),
+      });
 
     const updateMuzzleRaycastAndTargetLock = (
       planetPivotX: number,
@@ -6241,7 +6262,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       timeSec: number,
     ): MuzzleRaycastResult => {
       const { muzzleOrigin, aimDir, shooterId } = getPlayerMuzzleAndAimDirection();
-      const colliders = buildWorldRaycastColliders(shooterId);
+      const colliders = buildWorldRaycastColliders(shooterId, muzzleOrigin.x, muzzleOrigin.z);
 
       // Perform invisible 100-unit raycast skipping shooter & friendly ('blue') units/vehicles/Skyshields
       const result = castMuzzleRaycast3D(muzzleOrigin, aimDir, colliders, {
@@ -6445,6 +6466,8 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       const staticStructures = getStaticWorldStructures();
       for (const st of staticStructures) {
         if (moverAltitude >= st.heightY) continue;
+        const maxReach = st.halfX + st.halfZ + 5.5;
+        if (Math.abs(mover.x - st.x) > maxReach || Math.abs(mover.z - st.z) > maxReach) continue;
         const gateMatch = /^(blue|red)_plot_([0-3])_gate$/.exec(st.id);
         if (gateMatch) {
           const gateTeam = gateMatch[1] as 'blue' | 'red';
@@ -6506,7 +6529,8 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       for (const tr of trees) {
         if (!tr.alive) continue;
         if (moverAltitude >= 9.2 * tr.scale) continue;
-        const treeRadius = moverAltitude > 2.6 ? 1.65 * tr.scale : 0.92 * tr.scale;
+        if (Math.abs(mover.x - tr.x) > 7.5 || Math.abs(mover.z - tr.z) > 7.5) continue;
+        const treeRadius = moverAltitude > 2.6 ? 1.65 * tr.scale : 0.98 * tr.scale;
         for (const hs of hullSpheres) {
           const sx = mover.x + hs.ox;
           const sz = mover.z + hs.oz;
@@ -6558,6 +6582,8 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       for (const mp of activeMapProps) {
         if (!mp.alive) continue;
         if (moverAltitude >= mp.heightY) continue;
+        const propReach = Math.max(mp.radius, (mp.halfX ?? 0) + (mp.halfZ ?? 0)) + 5.5;
+        if (Math.abs(mover.x - mp.x) > propReach || Math.abs(mover.z - mp.z) > propReach) continue;
 
         if (mp.category === 'solid') {
           for (const hs of hullSpheres) {
@@ -6902,7 +6928,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         const relSpd = Math.hypot(mover.vx - c.vx, mover.vz - c.vz);
         const dist = getPlanetShortestDistance(mover.x, mover.z, c.x, c.z);
         const crateRadius = 0.78;
-        if (isVehicle && dist < moverRadius + crateRadius && relSpd >= 11.2) {
+        if (isVehicle && dist < moverRadius + crateRadius && relSpd >= 11.2 && canDamageWorldCrate(c)) {
           // High-speed tank ram shatters wooden/metal crate with Lyo Explosion VFX + 3D debris + drops bonus pickup!
           playSpatialSoundAt(c.x, c.z, 22.0, 5.0, () => {
             soundEngine.playWoodBreak(relSpd);
@@ -6980,9 +7006,28 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
 
     let rafId = 0;
     let prevTime = performance.now();
+    const reusableGrassTramplers: { x: number; z: number; radius: number; weight: number }[] = [];
+    const reusableGrassExclusions: {
+      x: number;
+      z: number;
+      yaw: number;
+      halfLen: number;
+      halfWidth: number;
+    }[] = [
+      { x: -51.4, z: 60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
+      { x: -21.4, z: 60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
+      { x: 21.4, z: 60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
+      { x: 51.4, z: 60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
+      { x: -51.4, z: -60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
+      { x: -21.4, z: -60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
+      { x: 21.4, z: -60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
+      { x: 51.4, z: -60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
+    ];
+    const scratchSignWorldPos = new THREE.Vector3();
 
     const animate = (now: number) => {
       rafId = requestAnimationFrame(animate);
+      aStarRepathsThisFrame = 0;
       const rawDt = (now - prevTime) / 1000;
       prevTime = now;
       const dt = Math.min(rawDt, 0.05);
@@ -6996,11 +7041,29 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       windUniforms.uWindPhase.value = timeSec * 4.8;
       windUniforms.uWindGust.value = 0.25 + 0.25 * Math.sin(timeSec * 1.7);
       const activeFocusUnit = mountedTank ? mountedTank : playerUnit;
-      const viewCenterX = currentPlayMode === 'editor' ? editorPan.x : activeFocusUnit ? activeFocusUnit.x : 0;
-      const viewCenterZ = currentPlayMode === 'editor' ? editorPan.z : activeFocusUnit ? activeFocusUnit.z : 0;
+      const nukePrePose =
+        nukeStrikeState.phase !== 'idle'
+          ? computeNuclearStrikeCameraPose(nukeStrikeState)
+          : null;
+      const viewCenterX =
+        nukePrePose
+          ? nukePrePose.focusPivotPos.x
+          : currentPlayMode === 'editor'
+          ? editorPan.x
+          : activeFocusUnit
+          ? activeFocusUnit.x
+          : 0;
+      const viewCenterZ =
+        nukePrePose
+          ? nukePrePose.focusPivotPos.z
+          : currentPlayMode === 'editor'
+          ? editorPan.z
+          : activeFocusUnit
+          ? activeFocusUnit.z
+          : 0;
       lyoGrassSystem.update(
-        activeFocusUnit ? activeFocusUnit.x : 0,
-        activeFocusUnit ? activeFocusUnit.z : 0,
+        nukePrePose ? nukePrePose.focusPivotPos.x : activeFocusUnit ? activeFocusUnit.x : 0,
+        nukePrePose ? nukePrePose.focusPivotPos.z : activeFocusUnit ? activeFocusUnit.z : 0,
         viewCenterX,
         viewCenterZ,
       );
@@ -7009,11 +7072,11 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       // Multi-Unit Grass Trampling (Vehicles + Characters):
       // Every ground vehicle (Tank, Dump Truck, low-altitude Plane) and every on-foot Character (Player + AI Buddies)
       // radially parts, bends, and flattens the grass blades underneath them in real time!
-      const grassTramplers: { x: number; z: number; radius: number; weight: number }[] = [];
+      reusableGrassTramplers.length = 0;
       for (let i = 0; i < tanks.length; i++) {
         const v = tanks[i];
         if (v.hp <= 0 || (v.altitude ?? 0) > 2.2) continue;
-        grassTramplers.push({
+        reusableGrassTramplers.push({
           x: v.x,
           z: v.z,
           radius: v.vehicleKind === 'truck' ? 2.45 : 2.25,
@@ -7025,37 +7088,22 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         if (!b.alive || b.jumpOffset > 1.0) continue;
         if (b.isPlayer && mountedTank) continue;
         if (!b.isPlayer && tanks.some((t) => t.occupiedByAiId === b.id)) continue;
-        grassTramplers.push({
+        reusableGrassTramplers.push({
           x: b.x,
           z: b.z,
           radius: 1.05,
           weight: 0.92,
         });
       }
-      lyoGrassSystem.setTramplers(grassTramplers);
+      lyoGrassSystem.setTramplers(reusableGrassTramplers);
 
       // Suppress grass blades ONLY underneath static Park Benches ("kursi taman jangan sampai tertutup rumput"),
       // Front-Yard Skyshield Bastion Pedestals, & grounded Crates (vehicles use uTramplers + trailTex so grass visibly bends!)
-      const grassExclusions: {
-        x: number;
-        z: number;
-        yaw: number;
-        halfLen: number;
-        halfWidth: number;
-      }[] = [
-        { x: -51.4, z: 60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
-        { x: -21.4, z: 60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
-        { x: 21.4, z: 60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
-        { x: 51.4, z: 60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
-        { x: -51.4, z: -60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
-        { x: -21.4, z: -60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
-        { x: 21.4, z: -60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
-        { x: 51.4, z: -60.0, yaw: 0, halfLen: 2.15, halfWidth: 2.15 },
-      ];
+      reusableGrassExclusions.length = 8;
       for (let i = 0; i < activeMapProps.length; i++) {
         const mp = activeMapProps[i];
         if (!mp.alive || (mp.kind !== 'bench' && mp.kind !== 'recycle_bin')) continue;
-        grassExclusions.push({
+        reusableGrassExclusions.push({
           x: mp.x,
           z: mp.z,
           yaw: mp.rotY,
@@ -7066,7 +7114,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       for (let i = 0; i < worldCrates.length; i++) {
         const c = worldCrates[i];
         if (c.state !== 'grounded') continue;
-        grassExclusions.push({
+        reusableGrassExclusions.push({
           x: c.x,
           z: c.z,
           yaw: c.rotY,
@@ -7074,7 +7122,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
           halfWidth: 0.92,
         });
       }
-      lyoGrassSystem.setDynamicExclusions(grassExclusions);
+      lyoGrassSystem.setDynamicExclusions(reusableGrassExclusions);
 
       // 2. Raycast Mouse Crosshair onto Ground Plane
       raycaster.setFromCamera(mouseNdc, camera);
@@ -7171,6 +7219,88 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
               spot.z,
               { scoreValue: isGoldCoin ? 250 : 100, vy: 4.5 },
             );
+          }
+
+          // Dynamic Supply Drop Event (Alternating Central Oasis & Harbor Dock every 45–70s, with 15s countdown!)
+          const supplyStep = stepSupplyDropSchedule(supplyDropSchedule, dt);
+          supplyDropSchedule = supplyStep.state;
+          if (supplyDropBeaconLingeringTimer > 0) {
+            supplyDropBeaconLingeringTimer = Math.max(0, supplyDropBeaconLingeringTimer - dt);
+          }
+          if (supplyStep.landedPayload) {
+            const payload = supplyStep.landedPayload;
+            supplyDropBeaconLingeringTimer = 10.0;
+            // 1. Spawn 1 Indestructible Special Metallic Crate (65% Silver Metallic / 35% Shiny Gold Metallic)
+            spawnWorldCrate(payload.metallicCrateKind, payload.x, payload.z, false);
+
+            // 2. Spawn 5-8 Large Gold Coins (@ +150 G) around the Supply Drop landing site
+            for (let gi = 0; gi < payload.goldCoinCount; gi++) {
+              const angle = (gi / Math.max(1, payload.goldCoinCount)) * Math.PI * 2 + Math.random() * 0.35;
+              const rad = 1.6 + Math.random() * 2.1;
+              const gx = wrapPlanetCoord(payload.x + Math.cos(angle) * rad);
+              const gz = wrapPlanetCoord(payload.z + Math.sin(angle) * rad);
+              spawnWorldPickup(
+                'coin_gold',
+                `SUPPLY DROP GOLD (+${payload.goldCoinValue}G)`,
+                gx,
+                gz,
+                {
+                  scoreValue: payload.goldCoinValue,
+                  vx: Math.cos(angle) * 2.8,
+                  vy: 5.8 + Math.random() * 1.6,
+                  vz: Math.sin(angle) * 2.8,
+                },
+              );
+            }
+
+            // 3. Spawn 2-3 Medkits (Significantly restores +65 HP when picked up)
+            for (let mi = 0; mi < payload.medkitCount; mi++) {
+              const angle = (mi / Math.max(1, payload.medkitCount)) * Math.PI * 2 + 0.65;
+              const rad = 1.9 + Math.random() * 1.4;
+              const mx = wrapPlanetCoord(payload.x + Math.cos(angle) * rad);
+              const mz = wrapPlanetCoord(payload.z + Math.sin(angle) * rad);
+              spawnWorldPickup(
+                'health',
+                'SUPPLY MEDKIT (+65 HP)',
+                mx,
+                mz,
+                {
+                  healAmount: payload.medkitHealAmount,
+                  vx: Math.cos(angle) * 2.2,
+                  vy: 5.2,
+                  vz: Math.sin(angle) * 2.2,
+                },
+              );
+            }
+
+            playSpatialSoundAt(payload.x, payload.z, 65.0, 12.0, () => {
+              soundEngine.playPowerCore();
+            });
+            spawnBurstParticles(payload.x, getTerrainElevation(payload.x, payload.z) + 1.5, payload.z, 24);
+            kioskStatusMessage =
+              payload.metallicCrateKind === 'gold_metallic'
+                ? `✨ SUPPLY DROP MENDARAT DI ${payload.locationName}! (SHINY GOLD METALLIC BOX + ${payload.goldCoinCount} KOIN + ${payload.medkitCount} MEDKIT)`
+                : `🥈 SUPPLY DROP MENDARAT DI ${payload.locationName}! (SILVER METALLIC BOX + ${payload.goldCoinCount} KOIN + ${payload.medkitCount} MEDKIT)`;
+            kioskStatusTimer = 6.0;
+          }
+
+          if (supplyDropSchedule.warningActive || supplyDropBeaconLingeringTimer > 0) {
+            const activeLocId = supplyDropSchedule.warningActive
+              ? supplyDropSchedule.nextLocationId
+              : supplyDropSchedule.nextLocationId === 'CENTRAL_OASIS'
+                ? 'HARBOR_DOCK'
+                : 'CENTRAL_OASIS';
+            const locSpec = SUPPLY_DROP_LOCATIONS[activeLocId];
+            const groundElev = getTerrainElevation(locSpec.x, locSpec.z);
+            supplyDropBeaconGroup.visible = true;
+            supplyDropBeaconGroup.position.set(locSpec.x, groundElev + 0.08, locSpec.z);
+            const pulse = 1.0 + Math.sin(timeSec * 6.5) * 0.14;
+            supplyBeaconOuterRing.scale.set(pulse, pulse, 1);
+            supplyBeaconInnerRing.scale.set(2.0 - pulse * 0.85, 2.0 - pulse * 0.85, 1);
+            supplyBeaconOuterRingMat.opacity = 0.55 + Math.abs(Math.sin(timeSec * 5.0)) * 0.4;
+            supplyBeaconBeamMat.opacity = 0.16 + Math.abs(Math.sin(timeSec * 4.0)) * 0.2;
+          } else {
+            supplyDropBeaconGroup.visible = false;
           }
 
           if (kioskStatusTimer > 0) {
@@ -7752,6 +7882,21 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                 }
                 shakeTrauma = Math.min(1, shakeTrauma + 0.08);
               }
+              // 5B. Aerial CB-24 Cluster Bomb Salvo Drop (Exclusive to Lyo Plane!)
+              if (planeClusterBombCooldown > 0) {
+                planeClusterBombCooldown = Math.max(0, planeClusterBombCooldown - dt);
+              }
+              if (
+                isPlaneFiring &&
+                planeClusterBombCooldown <= 0 &&
+                playerUnit.secondaryItem === 'cluster_bomb' &&
+                playerUnit.secondaryCount > 0 &&
+                (blueCommanderBases[0]?.buildingLevel ?? 1) >= 3
+              ) {
+                planeClusterBombCooldown = 0.95;
+                dropClusterBombFromPlane(mountedTank);
+                playerUnit.secondaryCount = Math.max(0, playerUnit.secondaryCount - 1);
+              }
             } else if (isTruck) {
               // ---------------------------------------------------------------
               // LYO DUMP TRUCK WHEELED ACKERMANN STEERING & DIESEL INERTIA
@@ -7968,11 +8113,14 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                 soundEngine.playTankCannonFire();
                 const totalYaw = mountedTank.hullYaw + mountedTank.turretYaw;
                 const sDir = new THREE.Vector3(Math.cos(totalYaw), 0, -Math.sin(totalYaw));
+                const rightDirX = Math.sin(totalYaw);
+                const rightDirZ = Math.cos(totalYaw);
+                const sideOffset = (mountedTank.isSuper ? 2.75 : 2.45) * 0.42;
                 const tankGroundY = getTerrainElevation(mountedTank.x, mountedTank.z);
                 const muzzleOrigin = new THREE.Vector3(
-                  wrapPlanetCoord(mountedTank.x + sDir.x * 3.4),
-                  tankGroundY + 2.15,
-                  wrapPlanetCoord(mountedTank.z + sDir.z * 3.4),
+                  wrapPlanetCoord(mountedTank.x + sDir.x * 3.7 + rightDirX * sideOffset),
+                  tankGroundY + (mountedTank.isSuper ? 3.45 : 3.08),
+                  wrapPlanetCoord(mountedTank.z + sDir.z * 3.7 + rightDirZ * sideOffset),
                 );
                 fireProjectile(true, 'TankCannon', muzzleOrigin, sDir, 46, mountedTank.isSuper ? 26 : 18);
                 if (activeMuzzleRaycastResult?.hit) {
@@ -7991,7 +8139,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
             }
           } else if (ridingTramCarIdx !== null && playerUnit.alive) {
             // =================================================================
-            // A2. RIDING CITY TRAM MODE (ESCAPE / SAFE SHELTER — BOARD & DISEMBARK ANYWHERE)
+            // A2. RIDING CITY TRAM MODE (PASSENGER + MAX 1 CARRIED CRATE IN HAND)
             // =================================================================
             const tramStateNow = cityTram.getState();
             const activeCar = ridingTramCarIdx === 0 ? tramStateNow.car1 : tramStateNow.car2;
@@ -8000,7 +8148,11 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
             playerUnit.vx = activeCar.forwardX * CITY_TRAM_SPEC.cruiseSpeed;
             playerUnit.vz = activeCar.forwardZ * CITY_TRAM_SPEC.cruiseSpeed;
             playerUnit.yaw = activeCar.yaw;
-            playerUnit.root.visible = false;
+            const tramFloorY = getTerrainElevation(playerUnit.x, playerUnit.z) + 0.45;
+            playerUnit.root.position.set(playerUnit.x, tramFloorY, playerUnit.z);
+            playerUnit.bodyGroup.rotation.set(0, playerUnit.yaw + Math.PI / 2, 0);
+            playerUnit.root.visible = true;
+            playerUnit.overheadCrateGroup.visible = playerUnit.carryingCrate !== 'none';
             if (playerUnit.hp < playerUnit.maxHp) {
               playerUnit.hp = Math.min(playerUnit.maxHp, playerUnit.hp + dt * 8.5);
             }
@@ -8091,11 +8243,25 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                 performBuddyMeleeAttack(playerUnit, 'punch');
               } else {
                 const isBazooka = wId === 'bazooka';
-                const isRifle = wId === 'rifle';
-                playerUnit.shootCooldown = isBazooka ? 0.52 : isRifle ? 0.11 : 0.19;
+                const isLaser = wId === 'laser';
+                const isGatling = wId === 'gatling';
+                const isRifle = wId === 'rifle' || isLaser || isGatling;
+                playerUnit.shootCooldown = isBazooka
+                  ? 0.52
+                  : isGatling
+                  ? 0.065
+                  : isLaser
+                  ? 0.14
+                  : isRifle
+                  ? 0.11
+                  : 0.19;
                 playerUnit.weaponRecoil = 1.0;
                 if (isBazooka) {
                   soundEngine.playBazookaLaunch();
+                } else if (isLaser) {
+                  soundEngine.playLaserGunFire();
+                } else if (isGatling) {
+                  soundEngine.playGatlingGunFire();
                 } else if (isRifle) {
                   soundEngine.playTacticalFirearm('rifle');
                 } else {
@@ -8139,6 +8305,67 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                   recoilOffset.x -= fwdX * 0.16;
                   recoilOffset.z -= fwdZ * 0.16;
                   shakeTrauma = Math.min(1, shakeTrauma + 0.22);
+                } else if (isLaser) {
+                  // LG-88 Photon Lance: Coherent Cyan/White 3D Laser Beam + Target Fire Ignition Particles!
+                  const muzzleX = wrapPlanetCoord(playerUnit.x + fwdX * 1.48 + rightX * 0.12);
+                  const muzzleZ = wrapPlanetCoord(playerUnit.z + fwdZ * 1.48 + rightZ * 0.12);
+                  const laserMuzzlePos = new THREE.Vector3(muzzleX, playerTerrainY + 1.48, muzzleZ);
+                  const beamTargetPos = activeMuzzleRaycastResult?.hit
+                    ? new THREE.Vector3(
+                        activeMuzzleRaycastResult.point.x,
+                        activeMuzzleRaycastResult.point.y,
+                        activeMuzzleRaycastResult.point.z,
+                      )
+                    : new THREE.Vector3(
+                        wrapPlanetCoord(muzzleX + fwdX * 26.0),
+                        playerTerrainY + 1.48,
+                        wrapPlanetCoord(muzzleZ + fwdZ * 26.0),
+                      );
+                  spawnLaserBeamEffect(laserMuzzlePos, beamTargetPos);
+                  spawnTargetFireParticles(beamTargetPos.x, beamTargetPos.y, beamTargetPos.z, 15, 0.55);
+                  lyoExplosionSystem.spawnLyoMuzzleFlash(laserMuzzlePos, sDir, 0.56, 'rifle');
+                  fireProjectile(true, 'LyoLaserGun', laserMuzzlePos, sDir, 76, 18);
+                  if (activeMuzzleRaycastResult?.hit) {
+                    spawnRaycastSurfaceNormalImpact(activeMuzzleRaycastResult, false);
+                  }
+                  recoilOffset.x -= fwdX * 0.035;
+                  recoilOffset.z -= fwdZ * 0.035;
+                  shakeTrauma = Math.min(1, shakeTrauma + 0.05);
+                } else if (isGatling) {
+                  // TITAN-6 Rotary Gatling Gun: High-RPM 7.62x51mm rotary burst + Brass Shell Casings + Rotary Barrel Spin!
+                  const muzzleX = wrapPlanetCoord(playerUnit.x + fwdX * 1.52 + rightX * 0.14);
+                  const muzzleZ = wrapPlanetCoord(playerUnit.z + fwdZ * 1.52 + rightZ * 0.14);
+                  const gatlingMuzzlePos = new THREE.Vector3(muzzleX, playerTerrainY + 1.44, muzzleZ);
+                  if (playerUnit.rig.gatlingGroup) {
+                    playerUnit.rig.gatlingGroup.rotation.z = Math.sin(timeSec * 65.0) * 0.09;
+                  }
+                  spawnGatlingBrassAndSparks(
+                    muzzleX,
+                    playerTerrainY + 1.44,
+                    muzzleZ,
+                    fwdX,
+                    fwdZ,
+                    rightX,
+                    rightZ,
+                  );
+                  lyoExplosionSystem.spawnLyoMuzzleFlash(gatlingMuzzlePos, sDir, 0.64, 'minigun');
+                  fireProjectile(true, 'Titan6Gatling', gatlingMuzzlePos, sDir, 64, 13);
+                  if (activeMuzzleRaycastResult?.hit) {
+                    spawnRaycastSurfaceNormalImpact(activeMuzzleRaycastResult, false);
+                    spawnDirectionalSparks(
+                      activeMuzzleRaycastResult.point.x,
+                      activeMuzzleRaycastResult.point.y,
+                      activeMuzzleRaycastResult.point.z,
+                      -fwdX,
+                      -fwdZ,
+                      8,
+                      14,
+                      0.85,
+                    );
+                  }
+                  recoilOffset.x -= fwdX * 0.045;
+                  recoilOffset.z -= fwdZ * 0.045;
+                  shakeTrauma = Math.min(1, shakeTrauma + 0.06);
                 } else if (isRifle) {
                   // Tactical Assault Rifle: Fast carbine fire + muzzle brake flash & smoke puff
                   const muzzleX = wrapPlanetCoord(playerUnit.x + fwdX * 1.42 + rightX * 0.12);
@@ -8294,93 +8521,36 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
               const ownerSlots = b.team === 'blue' ? bluePadSlotsList[ownerIdx] : redPadSlotsList[ownerIdx];
               const enemyHqX = b.team === 'blue' ? redBase.hqX : blueBase.hqX;
               const enemyHqZ = b.team === 'blue' ? redBase.hqZ : blueBase.hqZ;
+              const ownerTurret = getBaseSkyshieldTurrets(ownerBase.baseGroup)[ownerIdx];
+              const ownerHasBuiltTurret = Boolean(ownerTurret && ownerTurret.isBuilt && ownerTurret.hp > 0);
+              const isAiCmd = !(b.team === 'blue' && ownerIdx === 0);
 
-              const ownedCharCount = buddyUnits.filter(
-                (u) => u.team === b.team && u.ownerCommanderId === ownerIdx && u.alive,
-              ).length;
-              const hasLegendOnPad = ownerSlots.some((s) => s === 'legend');
-              const ownerTargetCount =
-                b.team === 'blue' && ownerIdx === 0
-                  ? BUILD_ORDER_SPECS[buildOrder].targetCrates
-                  : ownedCharCount < 2
-                  ? 2
-                  : hasLegendOnPad
-                  ? 8
-                  : ownerIdx % 2 === 0
-                  ? 4
-                  : 2;
-
-              // Find nearest wounded ally, nearest enemy, nearest free crate (weighted for Legend/Rare), nearest ground weapon, nearest free vehicle
-              let nearestWoundedAlly: BuddyUnit | null = null;
-              let woundedAllyDist: number | null = null;
-              for (const u of buddyUnits) {
-                if (u.alive && u.team === b.team && u.id !== b.id && u.hp < u.maxHp * 0.78) {
-                  const d = getPlanetShortestDistance(u.x, u.z, b.x, b.z);
-                  if (woundedAllyDist === null || d < woundedAllyDist) {
-                    woundedAllyDist = d;
-                    nearestWoundedAlly = u;
-                  }
-                }
-              }
-
-              let nearestEnemy: BuddyUnit | null = null;
-              let nearestEnemyDist: number | null = null;
-              for (const u of buddyUnits) {
-                if (u.alive && u.team !== b.team && !(u.isPlayer && (mountedTank || ridingTramCarIdx !== null))) {
-                  const d = getPlanetShortestDistance(u.x, u.z, b.x, b.z);
-                  if (nearestEnemyDist === null || d < nearestEnemyDist) {
-                    nearestEnemyDist = d;
-                    nearestEnemy = u;
-                  }
-                }
-              }
-
-              const isPlayerMainPadOwner = b.team === 'blue' && ownerIdx === 0;
-              const emptyHologramSlots: PadSlotHologramPattern = [
-                'empty',
-                'empty',
-                'empty',
-                'empty',
-                'empty',
-                'empty',
-                'empty',
-                'empty',
-              ];
-              const ownerHologramPattern = isPlayerMainPadOwner
-                ? useCustomHologramRecipe && KIOSK_BUILD_PRIORITY_RECIPES[activePriorityRecipe]
-                  ? KIOSK_BUILD_PRIORITY_RECIPES[activePriorityRecipe].slotHologramColors
-                  : emptyHologramSlots
-                : null;
-
-              // Collect crates already carried in-flight by OTHER friendly AI Buddies of the same commander
-              // so two AI Buddies never chase the same single-slot color requirement!
-              const inFlightCarriedCrates: Array<'red' | 'super' | 'legend'> = [];
-              for (const u of buddyUnits) {
-                if (
-                  u.alive &&
-                  u.team === b.team &&
-                  u.ownerCommanderId === ownerIdx &&
-                  u.id !== b.id &&
-                  u.carryingCrate !== 'none' &&
-                  u.carryingCrate !== 'medical'
-                ) {
-                  inFlightCarriedCrates.push(u.carryingCrate);
-                }
-              }
-
-              // If this AI Buddy is carrying a 'medical' crate OR a crate color that is NOT needed by the pad's active hologram,
-              // immediately set it down on the ground instead of polluting the pad with the wrong crate!
-              if (b.carryingCrate !== 'none') {
-                const { unfilledSlotColors } = getRemainingNeededCrateKindsForHologram(
-                  ownerSlots,
-                  ownerHologramPattern,
-                  [],
-                );
-                const isWrongCrateForHologram =
-                  b.carryingCrate === 'medical' ||
-                  (ownerHologramPattern !== null && !unfilledSlotColors.includes(b.carryingCrate));
-                if (isWrongCrateForHologram) {
-                  const dropKind = b.carryingCrate;
+              const {
+                ownerTargetCount,
+                nearestWoundedAlly,
+                woundedAllyDist,
+                nearestEnemy,
+                bestCrate,
+                nearestFreeCrateDist,
+                nearestWeaponPickup,
+                freeTank,
+                nearestEmptyVehicleDist,
+                aiDecision,
+              } = evaluateSquadAiUnitPerceptionAndDecision({
+                unit: b,
+                buddyUnits,
+                worldCrates,
+                worldPickups,
+                tanks,
+                mountedTank,
+                ridingTramCarIdx,
+                ownerSlots,
+                ownerHasBuiltTurret,
+                buildOrder,
+                teamCommand,
+                useCustomHologramRecipe,
+                activePriorityRecipe,
+                onDropWrongCarriedCrate: (dropKind) => {
                   b.carryingCrate = 'none';
                   b.overheadCrateGroup.visible = false;
                   spawnWorldCrate(
@@ -8389,100 +8559,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                     wrapPlanetCoord(b.z - 0.85),
                     true,
                   );
-                }
-              }
-
-              // Smart Recipe-Aware Crate Selection: ONLY pick up crates matching the active hologram colors (and NEVER 'medical' crates!)
-              const smartCratePick = selectSmartCrateForAiHarvester(
-                b.x,
-                b.z,
-                worldCrates,
-                ownerSlots,
-                ownerHologramPattern,
-                inFlightCarriedCrates,
-                true,
-              );
-              const bestCrate: WorldCrate | null = smartCratePick.selectedCrate;
-              const nearestFreeCrateDist: number | null = smartCratePick.distance;
-
-              let nearestWeaponPickup: (typeof worldPickups)[number] | null = null;
-              let nearestGroundWeaponDist: number | null = null;
-              let canUpgradeFromGroundWeapon = false;
-              for (const pk of worldPickups) {
-                if (pk.kind === 'weapon') {
-                  const pkWid: 'pistol' | 'rifle' | 'rocket' =
-                    pk.weaponName.includes('Bazooka') ||
-                    pk.weaponName.includes('Supazooka') ||
-                    pk.weaponName.includes('Rocket') ||
-                    pk.weaponName.includes('Nuclear') ||
-                    pk.weaponName.includes('Ion') ||
-                    pk.weaponName.includes('Homing')
-                      ? 'rocket'
-                      : pk.weaponName.includes('Rifle') ||
-                          pk.weaponName.includes('Shotgun') ||
-                          pk.weaponName.includes('Plasma') ||
-                          pk.weaponName.includes('Gatling')
-                        ? 'rifle'
-                        : 'pistol';
-                  const lootCheck = canUnitLootGroundWeapon(
-                    b.team,
-                    b.weaponId,
-                    b.weaponName,
-                    pkWid,
-                    pk.weaponName,
-                    b.ammo,
-                  );
-                  if (!lootCheck.canLoot) continue;
-                  const d = getPlanetShortestDistance(pk.x, pk.z, b.x, b.z);
-                  if (nearestGroundWeaponDist === null || d < nearestGroundWeaponDist) {
-                    nearestGroundWeaponDist = d;
-                    nearestWeaponPickup = pk;
-                    canUpgradeFromGroundWeapon = lootCheck.isUpgrade;
-                  }
-                }
-              }
-
-              const freeTank =
-                tanks.find(
-                  (t) => t.team === b.team && !t.occupiedByPlayer && t.occupiedByAiId === null && t.hp > 0,
-                ) ?? null;
-              const nearestEmptyVehicleDist = freeTank
-                ? getPlanetShortestDistance(freeTank.x, freeTank.z, b.x, b.z)
-                : null;
-
-              const padCratesNow = ownerSlots.filter((s) => s !== 'empty').length;
-              const padHasMatchingSpace =
-                ownerHologramPattern !== null
-                  ? smartCratePick.unfilledSlotColors.length > 0
-                  : padCratesNow < ownerTargetCount;
-              const ownerTurret = getBaseSkyshieldTurrets(ownerBase.baseGroup)[ownerIdx];
-              const ownerHasBuiltTurret = Boolean(ownerTurret && ownerTurret.isBuilt && ownerTurret.hp > 0);
-              const ownerHasBuiltVehicle = tanks.some((t) => t.team === b.team && t.hp > 0);
-              const isAiCmd = !(b.team === 'blue' && ownerIdx === 0);
-
-              const aiDecision = evaluateBuiltBuddySmartAiDecision({
-                buddyClass: b.classId,
-                weaponId: b.weaponId === 'bazooka' ? 'rocket' : b.weaponId,
-                carryingCrate: b.carryingCrate !== 'none',
-                hp: b.hp,
-                maxHp: b.maxHp,
-                commandMode: b.team === 'blue' && ownerIdx === 0 ? teamCommand : 'HARVEST',
-                ownerBuildOrder: b.team === 'blue' && ownerIdx === 0 ? buildOrder : 'AUTO',
-                ownerPadHasSpace: padHasMatchingSpace,
-                ownerPadReadyToCraft:
-                  ownerHologramPattern !== null
-                    ? padCratesNow >= ownerTargetCount && smartCratePick.unfilledSlotColors.length === 0
-                    : padCratesNow >= ownerTargetCount,
-                ownerIsAiCommander: isAiCmd,
-                ownerAliveBuddyCount: ownedCharCount,
-                ownerHasBuiltTurret,
-                ownerHasBuiltVehicle,
-                woundedAllyDist,
-                nearestEnemyDist,
-                nearestFreeCrateDist,
-                nearestGroundWeaponDist,
-                nearestEmptyVehicleDist,
-                canUpgradeFromGroundWeapon,
+                },
               });
 
               let goalX = b.x;
@@ -8492,7 +8569,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                 goalX = ownerPad.worldX;
                 goalZ = ownerPad.worldZ;
                 if (getPlanetShortestDistance(b.x, b.z, ownerPad.worldX, ownerPad.worldZ) < 2.6) {
-                  if (addCrateToPadSlots(b.team, b.carryingCrate, ownerIdx, true)) {
+                  if (addCrateToPadSlots(b.team, b.carryingCrate, ownerIdx, false)) {
                     b.carryingCrate = 'none';
                     b.overheadCrateGroup.visible = false;
                     if (b.team === 'blue') score += 25;
@@ -8503,7 +8580,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                       craftFromCommanderPad(b.team, ownerIdx);
                     }
                   } else {
-                    // Slot for this crate color is already full -> gently set the crate down beside the pad!
+                    // Pad is completely full (8/8 slots) -> gently set the crate down beside the pad!
                     const dropKind = b.carryingCrate;
                     b.carryingCrate = 'none';
                     b.overheadCrateGroup.visible = false;
@@ -8537,12 +8614,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                         0.84,
                       );
                     } else {
-                      b.overheadCrateBox.material =
-                        bestCrate.kind === 'legend'
-                          ? matLegendCrate
-                          : bestCrate.kind === 'super'
-                          ? matSuperCrate
-                          : matRedCrate;
+                      b.overheadCrateBox.material = getCrateFallbackMaterial(bestCrate.kind);
                     }
                     b.overheadCrateGroup.visible = true;
                     scene.remove(bestCrate.mesh);
@@ -8550,31 +8622,50 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                     if (idx !== -1) worldCrates.splice(idx, 1);
                   }
                 } else {
-                  goalX = enemyHqX;
-                  goalZ = enemyHqZ * 0.5;
+                  // Stage near the owner's Stacking Pad while waiting for new field crates or pad slots
+                  goalX = wrapPlanetCoord(ownerPad.worldX + ((b.id % 3) - 1) * 2.4);
+                  goalZ = wrapPlanetCoord(ownerPad.worldZ + (b.team === 'blue' ? -4.2 : 4.2));
                 }
-              } else if (aiDecision.action === 'EQUIP_GROUND_WEAPON' && nearestWeaponPickup) {
-                goalX = nearestWeaponPickup.x;
-                goalZ = nearestWeaponPickup.z;
-                for (let pi = worldPickups.length - 1; pi >= 0; pi--) {
-                  const pk = worldPickups[pi];
-                  if (pk.kind === 'weapon' && getPlanetShortestDistance(pk.x, pk.z, b.x, b.z) < 2.1) {
-                    b.weaponName = pk.weaponName;
-                    b.weaponId =
-                      pk.weaponName.includes('Bazooka') ||
-                      pk.weaponName.includes('Supazooka') ||
-                      pk.weaponName.includes('Rocket')
-                        ? 'bazooka'
-                        : pk.weaponName.includes('Rifle') ||
-                            pk.weaponName.includes('Shotgun') ||
-                            pk.weaponName.includes('Machine')
-                          ? 'rifle'
-                          : 'pistol';
-                    b.ammo = pk.remainingAmmo ?? 120;
-                    scene.remove(pk.mesh);
-                    worldPickups.splice(pi, 1);
-                    break;
+              } else if (aiDecision.action === 'EQUIP_GROUND_WEAPON') {
+                if (nearestWeaponPickup) {
+                  goalX = nearestWeaponPickup.x;
+                  goalZ = nearestWeaponPickup.z;
+                  for (let pi = worldPickups.length - 1; pi >= 0; pi--) {
+                    const pk = worldPickups[pi];
+                    if (pk.kind === 'weapon' && getPlanetShortestDistance(pk.x, pk.z, b.x, b.z) < 2.1) {
+                      b.weaponName = pk.weaponName;
+                      b.weaponId =
+                        pk.weaponName.includes('Gatling') ||
+                        pk.weaponName.includes('TITAN-6') ||
+                        pk.weaponName.includes('Rotary')
+                          ? 'gatling'
+                          : pk.weaponName.includes('Laser') ||
+                              pk.weaponName.includes('Photon') ||
+                              pk.weaponName.includes('Railgun')
+                            ? 'laser'
+                            : pk.weaponName.includes('Bazooka') ||
+                                pk.weaponName.includes('Supazooka') ||
+                                pk.weaponName.includes('Rocket') ||
+                                pk.weaponName.includes('Nuclear') ||
+                                pk.weaponName.includes('Ion') ||
+                                pk.weaponName.includes('Homing')
+                              ? 'bazooka'
+                              : pk.weaponName.includes('Rifle') ||
+                                  pk.weaponName.includes('Shotgun') ||
+                                  pk.weaponName.includes('Plasma') ||
+                                  pk.weaponName.includes('Machine')
+                                ? 'rifle'
+                                : 'pistol';
+                      b.ammo = pk.remainingAmmo ?? 120;
+                      scene.remove(pk.mesh);
+                      worldPickups.splice(pi, 1);
+                      break;
+                    }
                   }
+                } else {
+                  // Unarmed Attacker returning home to its base Stacking Pad weapon stock area to wait for/pick up a weapon!
+                  goalX = wrapPlanetCoord(ownerPad.worldX - (b.team === 'blue' ? 2.6 : -2.6));
+                  goalZ = wrapPlanetCoord(ownerPad.worldZ - (b.team === 'blue' ? 2.4 : -2.4));
                 }
               } else if (aiDecision.action === 'HEAL_WOUNDED_ALLY' && nearestWoundedAlly) {
                 goalX = nearestWoundedAlly.x;
@@ -8593,41 +8684,242 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                   freeTank.riderGroup.visible = true;
                   b.root.visible = false;
                 }
-              } else if (aiDecision.action === 'FOLLOW_COMMANDER') {
-                goalX = wrapPlanetCoord(playerUnit.x - 2.5);
-                goalZ = wrapPlanetCoord(playerUnit.z + 2.0);
+              }
+
+              let isAutonomousFollowerMode = false;
+              if (aiDecision.action === 'FOLLOW_COMMANDER') {
+                // If a Follower is carrying a crate and comes near its owner's Stacking Pad (<= 14m) while the pad has space,
+                // smartly deliver and stack the crate onto the pad using A* pathfinding!
+                const distToOwnerPad = getPlanetShortestDistance(
+                  b.x,
+                  b.z,
+                  ownerPad.worldX,
+                  ownerPad.worldZ,
+                );
+                if (
+                  b.carryingCrate !== 'none' &&
+                  distToOwnerPad <= 14.0 &&
+                  ownerSlots.some((s) => s === 'empty')
+                ) {
+                  goalX = ownerPad.worldX;
+                  goalZ = ownerPad.worldZ;
+                  if (distToOwnerPad < 2.6 && addCrateToPadSlots(b.team, b.carryingCrate, ownerIdx, false)) {
+                    b.carryingCrate = 'none';
+                    b.overheadCrateGroup.visible = false;
+                    if (b.team === 'blue') score += 25;
+                  }
+                } else {
+                  isAutonomousFollowerMode = true;
+                  const leaderX = mountedTank ? mountedTank.x : playerUnit.x;
+                  const leaderZ = mountedTank ? mountedTank.z : playerUnit.z;
+
+                  // Proactive nearby (< 3.0m) item or crate awareness while escorting
+                  const nearbyItemsAndCrates: Array<{
+                    id: string;
+                    kind: 'crate' | 'pickup';
+                    x: number;
+                    z: number;
+                    dist: number;
+                  }> = [];
+                  if (b.carryingCrate === 'none') {
+                    for (let ci = worldCrates.length - 1; ci >= 0; ci--) {
+                      const wc = worldCrates[ci];
+                      if (wc.state !== 'grounded' || wc.kind === 'medical') continue;
+                      if (isCrateInsideOtherOrEnemyBase(wc.x, wc.z, b.team, ownerIdx)) continue;
+                      const cd = getPlanetShortestDistance(wc.x, wc.z, b.x, b.z);
+                      if (cd < 1.85) {
+                        b.carryingCrate = wc.kind;
+                        if (loadedLyoAssets && b.overheadCrateGroup.userData.lyoBoxKind !== wc.kind) {
+                          populateRealLyoCrateBoxFromGlb(
+                            b.overheadCrateGroup,
+                            wc.kind,
+                            loadedLyoAssets,
+                            windUniforms,
+                            isSoftwareGl,
+                            0.84,
+                          );
+                        } else {
+                          b.overheadCrateBox.material = getCrateFallbackMaterial(wc.kind);
+                        }
+                        b.overheadCrateGroup.visible = true;
+                        scene.remove(wc.mesh);
+                        worldCrates.splice(ci, 1);
+                        break;
+                      } else if (cd < 3.0) {
+                        nearbyItemsAndCrates.push({
+                          id: `crate_${wc.id}`,
+                          kind: 'crate',
+                          x: wc.x,
+                          z: wc.z,
+                          dist: cd,
+                        });
+                      }
+                    }
+                  }
+                  for (const pk of worldPickups) {
+                    if (pk.collected) continue;
+                    const pd = getPlanetShortestDistance(pk.x, pk.z, b.x, b.z);
+                    if (pd < 3.0) {
+                      nearbyItemsAndCrates.push({
+                        id: `pickup_${pk.id}`,
+                        kind: 'pickup',
+                        x: pk.x,
+                        z: pk.z,
+                        dist: pd,
+                      });
+                    }
+                  }
+
+                  const alliedFollowers = buddyUnits
+                    .filter((u) => u.alive && u.team === b.team && u.id !== b.id && !u.isPlayer)
+                    .map((u) => ({ id: String(u.id), x: u.x, z: u.z }));
+                  const nearestEnemyInfo = nearestEnemy
+                    ? {
+                        x: nearestEnemy.x,
+                        z: nearestEnemy.z,
+                        dist: getPlanetShortestDistance(nearestEnemy.x, nearestEnemy.z, b.x, b.z),
+                      }
+                    : null;
+
+                  // Step 1: Evaluate the Follower's desired tactical goal (goalX, goalZ) around the player (zero mirroring)
+                  const previewEscort = evaluateAutonomousFollowerEscortStep({
+                    followerId: String(b.id),
+                    followerX: b.x,
+                    followerZ: b.z,
+                    followerVx: b.vx,
+                    followerVz: b.vz,
+                    followerYaw: b.yaw,
+                    followerMaxSpeed: aiSpeed,
+                    followerCarryingCrate: b.carryingCrate !== 'none',
+                    reactionTimerSec: b.followerReactionTimer ?? 0,
+                    idleLookTimerSec: b.followerIdleLookTimer ?? 1.5,
+                    idleLookYaw: b.followerIdleLookYaw ?? b.yaw,
+                    strafeTimerSec: b.followerStrafeTimer ?? 0.8,
+                    strafeSign: b.followerStrafeSign ?? 1,
+                    playerX: leaderX,
+                    playerZ: leaderZ,
+                    playerVx: mountedTank ? mountedTank.vx : playerUnit.vx,
+                    playerVz: mountedTank ? mountedTank.vz : playerUnit.vz,
+                    playerCarryingCrate: playerUnit.carryingCrate !== 'none',
+                    alliedFollowers,
+                    nearestEnemy: nearestEnemyInfo,
+                    nearbyItemsAndCrates,
+                    combatRangeMeters: b.weaponId === 'unarmed' ? 2.35 : 15.5,
+                    dt,
+                  });
+
+                  // Step 2: Run the Follower's own independent A* pathfinder toward (previewEscort.goalX, previewEscort.goalZ)
+                  const goalDist = getPlanetShortestDistance(
+                    b.x,
+                    b.z,
+                    previewEscort.goalX,
+                    previewEscort.goalZ,
+                  );
+                  let escortStep = previewEscort;
+                  if (goalDist > 0.35) {
+                    const followerSteer = computeAStarSteeringDirection(
+                      b,
+                      previewEscort.goalX,
+                      previewEscort.goalZ,
+                      dt,
+                      false,
+                      spec.canFly,
+                    );
+                    escortStep = evaluateAutonomousFollowerEscortStep({
+                      followerId: String(b.id),
+                      followerX: b.x,
+                      followerZ: b.z,
+                      followerVx: b.vx,
+                      followerVz: b.vz,
+                      followerYaw: b.yaw,
+                      followerMaxSpeed: aiSpeed,
+                      followerCarryingCrate: b.carryingCrate !== 'none',
+                      reactionTimerSec: b.followerReactionTimer ?? 0,
+                      idleLookTimerSec: b.followerIdleLookTimer ?? 1.5,
+                      idleLookYaw: b.followerIdleLookYaw ?? b.yaw,
+                      strafeTimerSec: b.followerStrafeTimer ?? 0.8,
+                      strafeSign: b.followerStrafeSign ?? 1,
+                      playerX: leaderX,
+                      playerZ: leaderZ,
+                      playerVx: mountedTank ? mountedTank.vx : playerUnit.vx,
+                      playerVz: mountedTank ? mountedTank.vz : playerUnit.vz,
+                      playerCarryingCrate: playerUnit.carryingCrate !== 'none',
+                      alliedFollowers,
+                      nearestEnemy: nearestEnemyInfo,
+                      nearbyItemsAndCrates,
+                      combatRangeMeters: b.weaponId === 'unarmed' ? 2.35 : 15.5,
+                      aStarSteerDirX: followerSteer.dirX,
+                      aStarSteerDirZ: followerSteer.dirZ,
+                      dt,
+                    });
+                  }
+
+                  b.vx = escortStep.vx;
+                  b.vz = escortStep.vz;
+                  b.yaw = escortStep.yaw;
+                  b.followerReactionTimer = escortStep.reactionTimerSec;
+                  b.followerIdleLookTimer = escortStep.idleLookTimerSec;
+                  b.followerIdleLookYaw = escortStep.idleLookYaw;
+                  b.followerStrafeTimer = escortStep.strafeTimerSec;
+                  b.followerStrafeSign = escortStep.strafeSign;
+
+                  const moveSpd = Math.hypot(b.vx, b.vz);
+                  if (moveSpd > 0.05 && b.saluteTimer <= 1.1) {
+                    b.x = wrapPlanetCoord(b.x + b.vx * dt);
+                    b.z = wrapPlanetCoord(b.z + b.vz * dt);
+                    resolveMoverWorldCollisions(b, `ai_buddy_${b.id}`, false, 0.70, 2.0, timeSec, false);
+                    b.walkCycle += dt * moveSpd * 1.6;
+                  }
+                }
               } else if (aiDecision.action === 'DEFEND_OWNER_PAD') {
-                goalX = ownerPad.worldX;
-                goalZ = ownerPad.worldZ + (b.team === 'blue' ? -5.0 : 5.0);
-              } else {
+                const ownerPlot =
+                  b.team === 'blue' ? blueCommanderBases[ownerIdx] : redCommanderBases[ownerIdx];
+                const defendCoords = getCommanderDefendStationCoords(
+                  b.team,
+                  ownerPlot,
+                  ownerPad.worldX,
+                  ownerPad.worldZ,
+                );
+                goalX = defendCoords.x;
+                goalZ = defendCoords.z;
+              } else if (
+                aiDecision.action !== 'DELIVER_TO_OWNER_PAD' &&
+                aiDecision.action !== 'TRIGGER_OWNER_PAD_CRAFT' &&
+                aiDecision.action !== 'HARVEST_CRATE' &&
+                aiDecision.action !== 'EQUIP_GROUND_WEAPON' &&
+                aiDecision.action !== 'HEAL_WOUNDED_ALLY' &&
+                aiDecision.action !== 'MOUNT_VEHICLE'
+              ) {
                 // ATTACK_ENEMY
                 goalX = nearestEnemy ? nearestEnemy.x : enemyHqX;
                 goalZ = nearestEnemy ? nearestEnemy.z : enemyHqZ;
               }
 
-              const steer = computeAStarSteeringDirection(
-                b,
-                goalX,
-                goalZ,
-                dt,
-                false,
-                spec.canFly,
-              );
-              if (steer.distToGoal > 0.6 && b.saluteTimer <= 1.1) {
-                b.vx = steer.dirX * aiSpeed;
-                b.vz = steer.dirZ * aiSpeed;
-                b.x = wrapPlanetCoord(b.x + b.vx * dt);
-                b.z = wrapPlanetCoord(b.z + b.vz * dt);
-                resolveMoverWorldCollisions(b, `ai_buddy_${b.id}`, false, 0.70, 2.0, timeSec, false);
-                b.yaw = Math.atan2(-b.vz, b.vx);
-                b.walkCycle += dt * aiSpeed * 1.6;
-              } else {
-                b.vx = 0;
-                b.vz = 0;
+              if (!isAutonomousFollowerMode) {
+                const steer = computeAStarSteeringDirection(
+                  b,
+                  goalX,
+                  goalZ,
+                  dt,
+                  false,
+                  spec.canFly,
+                );
+                if (steer.distToGoal > 0.6 && b.saluteTimer <= 1.1) {
+                  b.vx = steer.dirX * aiSpeed;
+                  b.vz = steer.dirZ * aiSpeed;
+                  b.x = wrapPlanetCoord(b.x + b.vx * dt);
+                  b.z = wrapPlanetCoord(b.z + b.vz * dt);
+                  resolveMoverWorldCollisions(b, `ai_buddy_${b.id}`, false, 0.70, 2.0, timeSec, false);
+                  b.yaw = Math.atan2(-b.vz, b.vx);
+                  b.walkCycle += dt * aiSpeed * 1.6;
+                } else {
+                  b.vx = 0;
+                  b.vz = 0;
+                }
               }
 
               if (b.shootCooldown > 0) b.shootCooldown -= dt;
-              if (b.carryingCrate === 'none' && b.shootCooldown <= 0) {
+              if ((b.carryingCrate === 'none' || isAutonomousFollowerMode) && b.shootCooldown <= 0) {
                 let targetX: number | null = null;
                 let targetZ: number | null = null;
                 let minEnemyDist = b.weaponId === 'unarmed' ? 2.35 : 15.5;
@@ -8650,7 +8942,10 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                 if (targetX !== null && targetZ !== null) {
                   const sdx = getPlanetShortestDelta(targetX, b.x);
                   const sdz = getPlanetShortestDelta(targetZ, b.z);
-                  b.yaw = Math.atan2(-sdz, sdx);
+                  const desiredAimYaw = Math.atan2(-sdz, sdx);
+                  b.yaw = isAutonomousFollowerMode
+                    ? stepFollowerSmoothYaw(b.yaw, desiredAimYaw, dt, 10.5)
+                    : desiredAimYaw;
                   if (b.weaponId === 'unarmed') {
                     performBuddyMeleeAttack(b, Math.random() < 0.35 ? 'kick' : 'punch');
                   } else {
@@ -8699,8 +8994,8 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
               b.vy = aiJump.vy;
               b.isGrounded = aiJump.isGrounded;
             }
-            if (!b.isPlayer && currentPlayMode !== 'match') {
-              // Dampen any knockback velocity on sandbox NPCs
+            if (!b.isPlayer && !shouldRunSmartAi) {
+              // Dampen any knockback velocity on idle sandbox NPCs
               b.vx *= Math.exp(-10 * dt);
               b.vz *= Math.exp(-10 * dt);
               if (Math.hypot(b.vx, b.vz) > 0.05) {
@@ -8829,23 +9124,41 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
           // D. UPDATE PROJECTILES, TREE & PROP DESTRUCTION, BASE HQ DAMAGE & PICKUPS
           // ===================================================================
           const detonateExplosiveShellIfHeavy = (p: Projectile, hitX: number, hitY: number, hitZ: number) => {
+            if (p.weaponType === 'LyoLaserGun') {
+              // LG-88 Photon Lance Target Fire Particle Ignition on every hit!
+              spawnTargetFireParticles(hitX, hitY, hitZ, 16, 0.65);
+            } else if (p.weaponType === 'Titan6Gatling') {
+              // TITAN-6 Rotary Gatling dense metallic spark shower on hit!
+              spawnDirectionalSparks(hitX, hitY + 0.2, hitZ, -p.vel.x, -p.vel.z, 9, 14, 1.15);
+            }
             const isHeavyExplosive =
               p.weaponType === 'TankCannon' ||
               p.weaponType === 'Skyshield35mm' ||
+              p.weaponType === 'NuclearMissile' ||
+              p.weaponType === 'ClusterBomb' ||
+              p.weaponType === 'HandGrenade' ||
+              p.weaponType === 'LandMine' ||
               p.weaponType === 'Bazooka' ||
               p.weaponType === 'Supazooka' ||
               p.weaponType.includes('Rocket');
             if (!isHeavyExplosive) return;
 
             const blastScale =
-              p.weaponType === 'Bazooka' || p.weaponType === 'Supazooka'
+              p.weaponType === 'NuclearMissile'
+                ? 2.45
+                : p.weaponType === 'ClusterBomb'
+                ? 1.55
+                : p.weaponType === 'Bazooka' || p.weaponType === 'Supazooka'
                 ? 1.18
                 : p.weaponType === 'Skyshield35mm'
                 ? 0.72
                 : 1.05;
-            playSpatialSoundAt(hitX, hitZ, p.weaponType === 'Skyshield35mm' ? 28.0 : 38.0, 6.0, () => {
+            playSpatialSoundAt(hitX, hitZ, p.weaponType === 'Skyshield35mm' ? 28.0 : 42.0, 6.0, () => {
               if (p.weaponType === 'Skyshield35mm') {
                 soundEngine.playSkyshieldFlakAirburst();
+              } else if (p.weaponType === 'NuclearMissile' || p.weaponType === 'ClusterBomb') {
+                soundEngine.playBarrelExplosion();
+                soundEngine.playTacticalExplosion(blastScale);
               } else {
                 soundEngine.playTacticalExplosion(blastScale);
               }
@@ -8854,17 +9167,27 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
             lyoExplosionSystem.spawnLyoExplosion(
               scratchExplosionPos,
               blastScale,
-              'cannon',
+              p.weaponType === 'NuclearMissile' ? 'hq' : 'cannon',
             );
+            if (p.weaponType === 'NuclearMissile' || p.weaponType === 'ClusterBomb' || p.weaponType === 'HandGrenade') {
+              spawnTargetFireParticles(hitX, hitY, hitZ, 22, 1.45);
+            }
             const explDist = getPlanetShortestDistance(
               hitX,
               hitZ,
               getPlayerAudioListenerPos().x,
               getPlayerAudioListenerPos().z,
             );
-            if (explDist < 32.0) {
-              const baseShake = p.weaponType === 'Skyshield35mm' ? 0.16 : 0.36;
-              shakeTrauma = Math.min(1, shakeTrauma + baseShake * Math.max(0, 1 - explDist / 32.0));
+            if (explDist < 36.0) {
+              const baseShake =
+                p.weaponType === 'NuclearMissile'
+                  ? 0.65
+                  : p.weaponType === 'ClusterBomb'
+                  ? 0.45
+                  : p.weaponType === 'Skyshield35mm'
+                  ? 0.16
+                  : 0.36;
+              shakeTrauma = Math.min(1, shakeTrauma + baseShake * Math.max(0, 1 - explDist / 36.0));
             }
 
             // Radial blast knockback on nearby pushable/breakable props & crates
@@ -8915,12 +9238,14 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                 c.hp,
               );
               if (splash.hit) {
-                c.hp = splash.nextHp;
+                if (canDamageWorldCrate(c)) {
+                  c.hp = splash.nextHp;
+                }
                 c.vx += splash.knockbackVx * 0.75;
                 c.vz += splash.knockbackVz * 0.75;
                 c.vy = Math.max(c.vy, 3.2);
                 c.rotVelY += (Math.random() - 0.5) * 6.5;
-                if (splash.destroyed) {
+                if (canDamageWorldCrate(c) && splash.destroyed) {
                   scratchExplosionPos.set(c.x, getTerrainElevation(c.x, c.z) + 0.55, c.z);
                   lyoExplosionSystem.spawnLyoExplosion(scratchExplosionPos, 0.72, 'crate');
                   spawnDebrisChunks(c.x, 0.55, c.z, c.kind === 'super' ? 'metal' : 'wood', 9);
@@ -8966,6 +9291,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
             }
           };
 
+          const staticWorldObbs = getStaticWorldStructures();
           for (const p of projectiles) {
             if (!p.active) continue;
             p.life -= dt;
@@ -8976,10 +9302,37 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
               projectilePool.release(p);
               continue;
             }
+            const prevProjX = p.pos.x;
+            const prevProjZ = p.pos.z;
+            const midProjX = wrapPlanetCoord(prevProjX + p.vel.x * dt * 0.5);
+            const midProjZ = wrapPlanetCoord(prevProjZ + p.vel.z * dt * 0.5);
             p.pos.addScaledVector(p.vel, dt);
             p.pos.x = wrapPlanetCoord(p.pos.x);
             p.pos.z = wrapPlanetCoord(p.pos.z);
             p.mesh.position.copy(p.pos);
+
+            const spawnSolidObstacleImpactExplosion = (
+              hitX: number,
+              hitY: number,
+              hitZ: number,
+              dirX: number,
+              dirZ: number,
+            ) => {
+              detonateExplosiveShellIfHeavy(p, hitX, hitY, hitZ);
+              scratchExplosionPos.set(hitX, hitY, hitZ);
+              scratchHitBurstDir.set(-dirX, 0.25, -dirZ).normalize();
+              lyoExplosionSystem.spawnLyoBulletHitBurst(scratchExplosionPos, scratchHitBurstDir, false);
+              const isHeavyExplosive =
+                p.weaponType === 'TankCannon' ||
+                p.weaponType === 'Skyshield35mm' ||
+                p.weaponType === 'NuclearMissile' ||
+                p.weaponType === 'Bazooka' ||
+                p.weaponType === 'Supazooka' ||
+                p.weaponType.includes('Rocket');
+              if (!isHeavyExplosive) {
+                lyoExplosionSystem.spawnLyoExplosion(scratchExplosionPos, 0.44, 'fodder');
+              }
+            };
 
             // Ground impact check (e.g. when LyoPlane strafes downward or shell hits sloped terrain)
             const groundElevAtProj = getTerrainElevation(p.pos.x, p.pos.z);
@@ -8990,24 +9343,30 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
               continue;
             }
 
-            // 1. Check hit against Indestructible Lyo Trees (Tree Jiggle + Wood Impact SFX only, trees cannot be destroyed!)
+            // 1. Check hit against Indestructible Lyo Trees (Tree Jiggle + Wood Impact SFX + Impact Burst, trees cannot be destroyed!)
             let hitResolved = false;
             for (const tr of trees) {
               if (!tr.alive) continue;
+              if (Math.abs(p.pos.x - tr.x) > 4.5 || Math.abs(p.pos.z - tr.z) > 4.5) continue;
               const trGroundY = getTerrainElevation(tr.x, tr.z);
               if (p.pos.y > trGroundY + 9.2 * tr.scale) continue;
-              const trHitRadius = (p.pos.y > trGroundY + 2.6 ? 1.75 : 1.15) * tr.scale;
-              if (getPlanetShortestDistance(p.pos.x, p.pos.z, tr.x, tr.z) < trHitRadius) {
+              const trHitRadius = (p.pos.y > trGroundY + 2.6 ? 1.75 : 1.18) * tr.scale;
+              if (
+                getPlanetShortestDistance(p.pos.x, p.pos.z, tr.x, tr.z) < trHitRadius ||
+                getPlanetShortestDistance(midProjX, midProjZ, tr.x, tr.z) < trHitRadius
+              ) {
                 tr.hitFlashTimer = 0.12;
                 tr.jiggleTimer = 0.48;
                 tr.jiggleIntensity = 0.16;
                 const spdLen = Math.max(0.01, Math.hypot(p.vel.x, p.vel.z));
-                tr.jiggleDirX = p.vel.x / spdLen;
-                tr.jiggleDirZ = p.vel.z / spdLen;
+                const dirX = p.vel.x / spdLen;
+                const dirZ = p.vel.z / spdLen;
+                tr.jiggleDirX = dirX;
+                tr.jiggleDirZ = dirZ;
                 playSpatialSoundAt(p.pos.x, p.pos.z, 24.0, 5.0, () => {
                   soundEngine.playHeavyThud(10.0, true);
                 });
-                detonateExplosiveShellIfHeavy(p, p.pos.x, p.pos.y, p.pos.z);
+                spawnSolidObstacleImpactExplosion(p.pos.x, p.pos.y, p.pos.z, dirX, dirZ);
                 spawnBurstParticles(p.pos.x, p.pos.y, p.pos.z, 6);
                 hitResolved = true;
                 break;
@@ -9018,18 +9377,22 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
               continue;
             }
 
-            // 1A. Check hit against Static 3D OBB World Structures (Base HQ, Hangar, Barracks, Watchtower, Guardhouse, Bunker, Bastions, Shipping Containers, Excavators & Retaining Walls)
-            const staticWorldObbs = getStaticWorldStructures();
+            // 1A. Check hit against Static 3D OBB World Structures (Base HQ, Hangar, Barracks, Watchtower, Guardhouse, Bunker, Bastions, Kiosks, Planters, Shipping Containers, Excavators & Retaining Walls)
             for (const st of staticWorldObbs) {
+              const stReach = st.halfX + st.halfZ + 2.5;
+              if (Math.abs(p.pos.x - st.x) > stReach || Math.abs(p.pos.z - st.z) > stReach) continue;
               const stTopY = st.isRetainingWall
                 ? st.heightY
                 : getTerrainElevation(st.x, st.z) + st.heightY;
               if (p.pos.y > stTopY) continue;
-              if (pointInObb2D(p.pos.x, p.pos.z, st.x, st.z, st.halfX, st.halfZ, st.rotY, 0.22)) {
+              if (
+                pointInObb2D(p.pos.x, p.pos.z, st.x, st.z, st.halfX, st.halfZ, st.rotY, 0.25) ||
+                pointInObb2D(midProjX, midProjZ, st.x, st.z, st.halfX, st.halfZ, st.rotY, 0.25)
+              ) {
                 const spdLen = Math.max(0.01, Math.hypot(p.vel.x, p.vel.z));
                 const dirX = p.vel.x / spdLen;
                 const dirZ = p.vel.z / spdLen;
-                detonateExplosiveShellIfHeavy(p, p.pos.x, p.pos.y, p.pos.z);
+                spawnSolidObstacleImpactExplosion(p.pos.x, p.pos.y, p.pos.z, dirX, dirZ);
                 playSpatialSoundAt(p.pos.x, p.pos.z, 24.0, 5.0, () => {
                   soundEngine.playMaterialImpact(st.mat, 10.0);
                 });
@@ -9168,19 +9531,24 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
               continue;
             }
 
-            // 1B. Check hit against Map Props (Breakable Barrels/Barricades/Fences, Pushable Props, and Solid Metal/Concrete Colliders)
+            // 1B. Check hit against Map Props (Breakable Barrels/Barricades/Fences, Pushable Props, and Solid Metal/Concrete Colliders like Wind Turbine, River Rock, Crane, Chimney, Pipes)
             for (const mp of activeMapProps) {
               if (!mp.alive) continue;
+              const mpReach = Math.max(mp.radius, (mp.halfX ?? 0) + (mp.halfZ ?? 0)) + 2.5;
+              if (Math.abs(p.pos.x - mp.x) > mpReach || Math.abs(p.pos.z - mp.z) > mpReach) continue;
               if (p.pos.y > getTerrainElevation(mp.x, mp.z) + mp.heightY) continue;
+              const hitRadius = Math.max(0.72, mp.radius * 0.98);
               const hitProp =
                 mp.halfX !== undefined && mp.halfZ !== undefined
-                  ? pointInObb2D(p.pos.x, p.pos.z, mp.x, mp.z, mp.halfX, mp.halfZ, mp.rotY, 0.20)
-                  : getPlanetShortestDistance(p.pos.x, p.pos.z, mp.x, mp.z) < Math.max(0.65, mp.radius * 0.92);
+                  ? pointInObb2D(p.pos.x, p.pos.z, mp.x, mp.z, mp.halfX, mp.halfZ, mp.rotY, 0.25) ||
+                    pointInObb2D(midProjX, midProjZ, mp.x, mp.z, mp.halfX, mp.halfZ, mp.rotY, 0.25)
+                  : getPlanetShortestDistance(p.pos.x, p.pos.z, mp.x, mp.z) < hitRadius ||
+                    getPlanetShortestDistance(midProjX, midProjZ, mp.x, mp.z) < hitRadius;
               if (hitProp) {
                 const spdLen = Math.max(0.01, Math.hypot(p.vel.x, p.vel.z));
                 const dirX = p.vel.x / spdLen;
                 const dirZ = p.vel.z / spdLen;
-                detonateExplosiveShellIfHeavy(p, p.pos.x, p.pos.y, p.pos.z);
+                spawnSolidObstacleImpactExplosion(p.pos.x, p.pos.y, p.pos.z, dirX, dirZ);
 
                 if (mp.category === 'breakable' || (mp.category === 'solid' && mp.destructible)) {
                   mp.hp -= p.damage;
@@ -9232,8 +9600,8 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                   });
                   spawnCollisionContactParticles(p.pos.x, 0.85, p.pos.z, -dirX, -dirZ, mp.materialTag, 8.5);
                 } else {
-                  // Solid metal / concrete collider (e.g. Wind Turbine, Crane, Chimney, Giant Tank, Containers, Pipes):
-                  // ricochet sparks + material impact SFX only — large structures NEVER shake/jiggle when shot!
+                  // Solid metal / concrete collider (e.g. Wind Turbine, River Rock, Crane, Chimney, Giant Tank, Containers, Pipes):
+                  // ricochet sparks + explosion burst + material impact SFX — large structures NEVER shake/jiggle when shot!
                   if (mp.canJiggleOnHit) {
                     mp.jiggleTimer = 0.22;
                   }
@@ -9241,6 +9609,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                     soundEngine.playMaterialImpact(mp.materialTag, 9.0);
                   });
                   spawnCollisionContactParticles(p.pos.x, 0.95, p.pos.z, -dirX, -dirZ, mp.materialTag, 9.0);
+                  spawnBurstParticles(p.pos.x, p.pos.y, p.pos.z, 5);
                 }
                 hitResolved = true;
                 break;
@@ -9260,14 +9629,16 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                 const spdLen = Math.max(0.01, Math.hypot(p.vel.x, p.vel.z));
                 const dirX = p.vel.x / spdLen;
                 const dirZ = p.vel.z / spdLen;
-                c.hp -= p.damage;
+                if (canDamageWorldCrate(c)) {
+                  c.hp -= p.damage;
+                }
                 c.vx += dirX * 4.5;
                 c.vz += dirZ * 4.5;
                 c.rotVelY += (Math.random() - 0.5) * 3.5;
                 c.squashTimer = 0;
                 c.mesh.scale.set(1, 1, 1);
                 detonateExplosiveShellIfHeavy(p, c.x, c.y, c.z);
-                if (c.hp <= 0) {
+                if (canDamageWorldCrate(c) && c.hp <= 0) {
                   playSpatialSoundAt(c.x, c.z, 22.0, 4.5, () => {
                     soundEngine.playWoodBreak(11.5);
                     soundEngine.playBarrelExplosion();
@@ -9290,7 +9661,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                   worldCrates.splice(ci, 1);
                 } else {
                   playSpatialSoundAt(c.x, c.z, 18.0, 4.0, () => {
-                    if (c.kind === 'super') {
+                    if (c.kind === 'super' || !canDamageWorldCrate(c)) {
                       soundEngine.playMetalImpact(9.0);
                     } else {
                       soundEngine.playWoodHit(9.0);
@@ -9467,7 +9838,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
                         b.weaponId = 'unarmed';
                         b.weaponName = 'Tangan Kosong (Tinju)';
                         b.ammo = 0;
-                        b.x = blueBase.padX + 4.0;
+                        b.x = blueBase.padX - 3.8;
                         b.z = blueBase.padZ - 0.5;
                         b.root.visible = true;
                       } else {
@@ -9519,7 +9890,15 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
             pk.mesh.position.set(pk.x, pk.y, pk.z);
 
             // 2. Team Buddies Despawn Timer & Rapid Blinking (`Batas Waktu Hilang: mulai berkedip-kedip lalu menghilang`)
-            if (pk.isFromDeathDrop && pk.totalLifeSec > 0) {
+            //    Crafted weapons sitting at a base Stacking Pad (`<= 9.0m` from pad) serve as Base Weapon Stock (`stock senjata`) and do not expire!
+            const isBaseWeaponStock =
+              pk.kind === 'weapon' &&
+              (getPlanetShortestDistance(pk.x, pk.z, blueBase.padX, blueBase.padZ) <= 9.0 ||
+                getPlanetShortestDistance(pk.x, pk.z, redBase.padX, redBase.padZ) <= 9.0);
+            if (isBaseWeaponStock) {
+              pk.lifeRemainingSec = pk.totalLifeSec;
+              pk.mesh.visible = true;
+            } else if (pk.isFromDeathDrop && pk.totalLifeSec > 0) {
               pk.lifeRemainingSec -= dt;
               const despawnState = evaluateDroppedItemDespawnState(pk.lifeRemainingSec, pk.totalLifeSec);
               pk.mesh.visible = despawnState.visible;
@@ -9531,33 +9910,48 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
             }
 
             // 3. Collection by Player OR nearby AI Buddies (Friendly Auto-Loot + Enemy Stealing / No Team-Lock!)
+            const pkWidForLoot: 'pistol' | 'rifle' | 'rocket' =
+              pk.weaponName.includes('Bazooka') ||
+              pk.weaponName.includes('Supazooka') ||
+              pk.weaponName.includes('Rocket') ||
+              pk.weaponName.includes('Nuclear') ||
+              pk.weaponName.includes('Ion') ||
+              pk.weaponName.includes('Homing')
+                ? 'rocket'
+                : pk.weaponName.includes('Rifle') ||
+                    pk.weaponName.includes('Shotgun') ||
+                    pk.weaponName.includes('Plasma') ||
+                    pk.weaponName.includes('Gatling') ||
+                    pk.weaponName.includes('Photon') ||
+                    pk.weaponName.includes('Laser')
+                  ? 'rifle'
+                  : 'pistol';
             let collectorUnit: BuddyUnit | null = null;
             if (getPlanetShortestDistance(pk.x, pk.z, collectorX, collectorZ) < 2.1) {
-              collectorUnit = playerUnit;
-            } else {
+              if (
+                pk.kind !== 'weapon' ||
+                canUnitLootGroundWeapon(
+                  playerUnit.team,
+                  playerUnit.weaponId,
+                  playerUnit.weaponName,
+                  pkWidForLoot,
+                  pk.weaponName,
+                  playerUnit.ammo,
+                ).canLoot
+              ) {
+                collectorUnit = playerUnit;
+              }
+            }
+            if (!collectorUnit) {
               for (const b of buddyUnits) {
                 if (!b.alive || b.isPlayer) continue;
                 if (getPlanetShortestDistance(pk.x, pk.z, b.x, b.z) >= 1.85) continue;
                 if (pk.kind === 'weapon') {
-                  const pkWid: 'pistol' | 'rifle' | 'rocket' =
-                    pk.weaponName.includes('Bazooka') ||
-                    pk.weaponName.includes('Supazooka') ||
-                    pk.weaponName.includes('Rocket') ||
-                    pk.weaponName.includes('Nuclear') ||
-                    pk.weaponName.includes('Ion') ||
-                    pk.weaponName.includes('Homing')
-                      ? 'rocket'
-                      : pk.weaponName.includes('Rifle') ||
-                          pk.weaponName.includes('Shotgun') ||
-                          pk.weaponName.includes('Plasma') ||
-                          pk.weaponName.includes('Gatling')
-                        ? 'rifle'
-                        : 'pistol';
                   const lootCheck = canUnitLootGroundWeapon(
                     b.team,
                     b.weaponId,
                     b.weaponName,
-                    pkWid,
+                    pkWidForLoot,
                     pk.weaponName,
                     b.ammo,
                   );
@@ -9578,8 +9972,9 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
               }
 
               if (pk.kind === 'health') {
-                // Medkit (ONLY dropped from destroyed White Medical Crates with Red Cross logo!)
-                collectorUnit.hp = Math.min(collectorUnit.maxHp, collectorUnit.hp + 35);
+                // Medkit (dropped from destroyed White Medical Crates or Dynamic Supply Drops!)
+                const healVal = pk.healAmount ?? 35;
+                collectorUnit.hp = Math.min(collectorUnit.maxHp, collectorUnit.hp + healVal);
               } else if (pk.kind === 'ammo') {
                 collectorUnit.ammo += 30;
               } else if (pk.kind === 'coin_gold' || pk.kind === 'coin_silver') {
@@ -9604,15 +9999,23 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
               } else if (pk.kind === 'weapon') {
                 collectorUnit.weaponName = pk.weaponName;
                 collectorUnit.weaponId =
-                  pk.weaponName.includes('Bazooka') ||
-                  pk.weaponName.includes('Supazooka') ||
-                  pk.weaponName.includes('Rocket')
-                    ? 'bazooka'
-                    : pk.weaponName.includes('Rifle') ||
-                        pk.weaponName.includes('Shotgun') ||
-                        pk.weaponName.includes('Machine')
-                      ? 'rifle'
-                      : 'pistol';
+                  pk.weaponName.includes('Gatling') ||
+                  pk.weaponName.includes('TITAN-6') ||
+                  pk.weaponName.includes('Rotary')
+                    ? 'gatling'
+                    : pk.weaponName.includes('Laser') ||
+                        pk.weaponName.includes('Photon') ||
+                        pk.weaponName.includes('LG-88')
+                      ? 'laser'
+                      : pk.weaponName.includes('Bazooka') ||
+                          pk.weaponName.includes('Supazooka') ||
+                          pk.weaponName.includes('Rocket')
+                        ? 'bazooka'
+                        : pk.weaponName.includes('Rifle') ||
+                            pk.weaponName.includes('Shotgun') ||
+                            pk.weaponName.includes('Machine')
+                          ? 'rifle'
+                          : 'pistol';
                 collectorUnit.weaponRecoil = 0.38;
                 // Preserves exact remaining ammo from the fallen character (or 120 if freshly crafted on pad)
                 collectorUnit.ammo = pk.remainingAmmo ?? 120;
@@ -9628,6 +10031,123 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
 
         // Update 5-Layer Lyo Explosion & Muzzle Flash System
         lyoExplosionSystem.update(dt);
+
+        // Update 3D Coherent Photon Laser Beams
+        for (let bi = activeLaserBeams.length - 1; bi >= 0; bi--) {
+          const b = activeLaserBeams[bi];
+          b.life += dt;
+          if (b.life >= b.maxLife) {
+            scene.remove(b.group);
+            b.outerMat.dispose();
+            b.coreMat.dispose();
+            activeLaserBeams.splice(bi, 1);
+            continue;
+          }
+          const tNorm = b.life / b.maxLife;
+          b.outerMat.opacity = 0.85 * (1 - tNorm);
+          b.coreMat.opacity = Math.max(0, 1 - tNorm * 1.15);
+        }
+
+        // Update Active 3D Ordnance Devices (CB-24 Cluster Bomb from Lyo Plane, HG-04 Frag Grenade, TM-89 Land Mine)
+        for (let oi = activeOrdnanceDevices.length - 1; oi >= 0; oi--) {
+          const ord = activeOrdnanceDevices[oi];
+          ord.fuseTimer -= dt;
+          const groundY = getTerrainElevation(ord.pos.x, ord.pos.z);
+
+          if (!ord.isGrounded) {
+            ord.vel.y -= 18.5 * dt;
+            ord.pos.addScaledVector(ord.vel, dt);
+            ord.pos.x = wrapPlanetCoord(ord.pos.x);
+            ord.pos.z = wrapPlanetCoord(ord.pos.z);
+            ord.mesh.position.copy(ord.pos);
+            ord.mesh.rotation.x += dt * 4.5;
+            ord.mesh.rotation.z += dt * 3.2;
+
+            if (ord.pos.y <= groundY + 0.22) {
+              ord.pos.y = groundY + 0.22;
+              ord.mesh.position.copy(ord.pos);
+              if (ord.kind === 'cluster_bomb') {
+                // CB-24 Cluster Bomb detonates immediately on aerial impact into 1 central + 6 radial submunition blasts!
+                ord.fuseTimer = 0;
+              } else {
+                ord.vel.y = -ord.vel.y * 0.35;
+                ord.vel.x *= 0.55;
+                ord.vel.z *= 0.55;
+                if (Math.abs(ord.vel.y) < 1.2) {
+                  ord.isGrounded = true;
+                }
+              }
+            }
+          } else if (ord.kind === 'land_mine') {
+            // Check proximity trigger against enemy units or vehicles
+            for (const u of buddyUnits) {
+              if (u.alive && u.team === 'red' && getPlanetShortestDistance(u.x, u.z, ord.pos.x, ord.pos.z) < 2.2) {
+                ord.fuseTimer = 0;
+                break;
+              }
+            }
+            for (const v of tanks) {
+              if (v.hp > 0 && v.team === 'red' && getPlanetShortestDistance(v.x, v.z, ord.pos.x, ord.pos.z) < 3.2) {
+                ord.fuseTimer = 0;
+                break;
+              }
+            }
+          }
+
+          if (ord.fuseTimer <= 0) {
+            const ox = ord.pos.x;
+            const oy = groundY + 0.45;
+            const oz = ord.pos.z;
+            scene.remove(ord.mesh);
+            activeOrdnanceDevices.splice(oi, 1);
+
+            soundEngine.playBarrelExplosion();
+            soundEngine.playTacticalExplosion(ord.kind === 'cluster_bomb' ? 1.65 : 1.15);
+            scratchExplosionPos.set(ox, oy, oz);
+            lyoExplosionSystem.spawnLyoExplosion(
+              scratchExplosionPos,
+              ord.kind === 'cluster_bomb' ? 1.55 : 1.1,
+              'vehicle',
+            );
+            spawnTargetFireParticles(ox, oy, oz, ord.kind === 'cluster_bomb' ? 28 : 16, 1.5);
+            spawnDebrisChunks(ox, oy, oz, 'metal', ord.kind === 'cluster_bomb' ? 14 : 8);
+
+            if (ord.kind === 'cluster_bomb') {
+              // 6 Radial Sub-Munition Cluster Bomblet Detonations around the primary impact crater!
+              for (let sb = 0; sb < 6; sb++) {
+                const ang = (sb / 6) * Math.PI * 2;
+                const sx = wrapPlanetCoord(ox + Math.cos(ang) * 4.2);
+                const sz = wrapPlanetCoord(oz + Math.sin(ang) * 4.2);
+                const sy = getTerrainElevation(sx, sz) + 0.4;
+                scratchExplosionPos.set(sx, sy, sz);
+                lyoExplosionSystem.spawnLyoExplosion(scratchExplosionPos, 0.92, 'cannon');
+                spawnTargetFireParticles(sx, sy, sz, 10, 0.85);
+              }
+            }
+
+            // Area damage to nearby enemies & vehicles
+            const blastRad = ord.kind === 'cluster_bomb' ? 8.5 : 4.8;
+            const maxDmg = ord.kind === 'cluster_bomb' ? 65 : 38;
+            for (const b of buddyUnits) {
+              if (!b.alive || b.team === 'blue') continue;
+              const d = getPlanetShortestDistance(b.x, b.z, ox, oz);
+              if (d <= blastRad) {
+                b.hp = Math.max(0, b.hp - Math.round(maxDmg * (1 - (d / blastRad) * 0.5)));
+                b.hitFlashTimer = 0.2;
+                spawnTargetFireParticles(b.x, getTerrainElevation(b.x, b.z) + 0.8, b.z, 8, 0.45);
+              }
+            }
+            for (const tv of tanks) {
+              if (tv.hp <= 0 || tv === mountedTank) continue;
+              const d = getPlanetShortestDistance(tv.x, tv.z, ox, oz);
+              if (d <= blastRad) {
+                tv.hp = Math.max(0, tv.hp - Math.round(maxDmg * (1 - (d / blastRad) * 0.4)));
+                tv.hitFlashTimer = 0.2;
+              }
+            }
+            shakeTrauma = Math.min(1, shakeTrauma + (ord.kind === 'cluster_bomb' ? 0.48 : 0.28));
+          }
+        }
 
         // Update Explosion Particles (mark inactive on death instead of destroying)
         for (const ep of explosionParticles) {
@@ -9781,19 +10301,146 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         : wrapPlanetCoord(camFollowPos.z + mousePanCurrent.z + recoilOffset.z + shakeZ);
 
       // =======================================================================
+      // 4A. STEP NUCLEAR LAUNCHER 4-PHASE SEQUENCE (MAP ZOOM-OUT -> ROCKET CHASE -> PRE-IMPACT RISE -> RETURN)
+      // =======================================================================
+      if (nukeStrikeState.phase !== 'idle') {
+        const currentOriginPos: Vec3 = {
+          x: activeFocusUnit ? activeFocusUnit.x : playerUnit.x,
+          y: activeTerrainY + 1.0,
+          z: activeFocusUnit ? activeFocusUnit.z : playerUnit.z,
+        };
+
+        if (nukeStrikeState.phase === 'targeting') {
+          // Update target cursor when mouse moves or when player nudges with WASD / Arrow keys
+          if (Math.hypot(mouseNdc.x - nukeLastMouseNdc.x, mouseNdc.y - nukeLastMouseNdc.y) > 0.002) {
+            nukeLastMouseNdc = { x: mouseNdc.x, y: mouseNdc.y };
+            nukeStrikeState = updateNuclearStrikeTargetCursor(
+              nukeStrikeState,
+              aimWorldPoint.x,
+              getTerrainElevation(aimWorldPoint.x, aimWorldPoint.z),
+              aimWorldPoint.z,
+              280.0,
+            );
+          }
+          const nudgeSpeed = 42.0 * dt;
+          let nudgeDx = 0;
+          let nudgeDz = 0;
+          if (keys['KeyW'] || keys['ArrowUp']) nudgeDz -= nudgeSpeed;
+          if (keys['KeyS'] || keys['ArrowDown']) nudgeDz += nudgeSpeed;
+          if (keys['KeyA'] || keys['ArrowLeft']) nudgeDx -= nudgeSpeed;
+          if (keys['KeyD'] || keys['ArrowRight']) nudgeDx += nudgeSpeed;
+          if (nudgeDx !== 0 || nudgeDz !== 0) {
+            const nx = nukeStrikeState.targetPos.x + nudgeDx;
+            const nz = nukeStrikeState.targetPos.z + nudgeDz;
+            nukeStrikeState = updateNuclearStrikeTargetCursor(
+              nukeStrikeState,
+              nx,
+              getTerrainElevation(nx, nz),
+              nz,
+              280.0,
+            );
+          }
+        }
+
+        const nukeStep = stepNuclearStrikeSequence(
+          nukeStrikeState,
+          Math.min(rawDt, 0.25),
+          currentOriginPos,
+        );
+        nukeStrikeState = nukeStep.state;
+
+        if (nukeStep.justDetonated) {
+          triggerNuclearStrikeDetonation(
+            nukeStrikeState.targetPos.x,
+            nukeStrikeState.targetPos.y,
+            nukeStrikeState.targetPos.z,
+          );
+        }
+        if (nukeStep.justCompletedReturn) {
+          camFollowPos = { ...currentOriginPos };
+          camFollowVel = { x: 0, y: 0, z: 0 };
+          nukeTargetReticleGroup.visible = false;
+          nukeCinematicRocketGroup.visible = false;
+        }
+      }
+
+      // =======================================================================
       // 4B. FLAT GROUND WORLD ALIGNMENT & TREE / PROP JIGGLE ANIMATION
       // =======================================================================
+      const activeNukePose =
+        nukeStrikeState.phase !== 'idle'
+          ? computeNuclearStrikeCameraPose(nukeStrikeState, {
+              x: camOffset.x * fovScale,
+              y: camOffset.y * fovScale,
+              z: camOffset.z * fovScale,
+            })
+          : null;
       const planetPivotX =
-        isFullMapOverview || planeViewMode || skyshieldViewMode || buildingViewMode ? 0 : viewCenterX;
+        isFullMapOverview || planeViewMode || skyshieldViewMode || buildingViewMode
+          ? 0
+          : activeNukePose
+          ? activeNukePose.focusPivotPos.x
+          : viewCenterX;
       const planetPivotZ =
-        isFullMapOverview || planeViewMode || skyshieldViewMode || buildingViewMode ? 0 : viewCenterZ;
+        isFullMapOverview || planeViewMode || skyshieldViewMode || buildingViewMode
+          ? 0
+          : activeNukePose
+          ? activeNukePose.focusPivotPos.z
+          : viewCenterZ;
       const highAltFactor = clamp((activePlaneAlt - 3.5) / 11.0, 0, 1);
       const kCurve =
-        isFullMapOverview || planeViewMode || skyshieldViewMode || buildingViewMode
+        isFullMapOverview ||
+        planeViewMode ||
+        skyshieldViewMode ||
+        buildingViewMode ||
+        nukeStrikeState.phase === 'targeting'
           ? 0
           : PLANET_CURVATURE_STRENGTH * (1.0 - 0.34 * highAltFactor);
       if (windUniforms.uCurvatureStrength) {
         windUniforms.uCurvatureStrength.value = kCurve;
+      }
+
+      // Sync 3D Target Reticle & 3D Flying Nuclear Rocket visuals
+      if (nukeStrikeState.phase === 'targeting') {
+        nukeTargetReticleGroup.visible = true;
+        nukeCinematicRocketGroup.visible = false;
+        const tx = nukeStrikeState.targetPos.x;
+        const tz = nukeStrikeState.targetPos.z;
+        const ty = getTerrainElevation(tx, tz);
+        nukeTargetReticleGroup.position.set(tx, ty + 0.05, tz);
+        const midRing = nukeTargetReticleGroup.getObjectByName('MidLockRing');
+        if (midRing) midRing.rotation.z = timeSec * 2.2;
+      } else if (nukeStrikeState.phase === 'tracking_rocket') {
+        nukeTargetReticleGroup.visible = true;
+        nukeCinematicRocketGroup.visible = true;
+        const rx = nukeStrikeState.rocketPos.x;
+        const ry = nukeStrikeState.rocketPos.y;
+        const rz = nukeStrikeState.rocketPos.z;
+        const curvedY =
+          ry + computePlanetYOffset(rx, rz, planetPivotX, planetPivotZ) * (kCurve / PLANET_CURVATURE_STRENGTH);
+        nukeCinematicRocketGroup.position.set(rx, curvedY, rz);
+        const lookAhead = new THREE.Vector3(
+          rx + nukeStrikeState.rocketTangent.x * 5.0,
+          curvedY + nukeStrikeState.rocketTangent.y * 5.0,
+          rz + nukeStrikeState.rocketTangent.z * 5.0,
+        );
+        nukeCinematicRocketGroup.lookAt(lookAhead);
+        const plume = nukeCinematicRocketGroup.getObjectByName('RocketExhaustPlume');
+        if (plume) {
+          plume.scale.set(
+            0.9 + Math.sin(timeSec * 45) * 0.18,
+            1.0 + Math.cos(timeSec * 52) * 0.25,
+            0.9 + Math.sin(timeSec * 45) * 0.18,
+          );
+        }
+        // Continuous rocket exhaust fire & smoke trail along the ballistic trajectory!
+        const tailX = rx - nukeStrikeState.rocketTangent.x * 1.8;
+        const tailY = ry - nukeStrikeState.rocketTangent.y * 1.8;
+        const tailZ = rz - nukeStrikeState.rocketTangent.z * 1.8;
+        spawnTargetFireParticles(tailX, tailY, tailZ, 2, 0.75);
+      } else {
+        nukeTargetReticleGroup.visible = false;
+        nukeCinematicRocketGroup.visible = false;
       }
 
       if (buildingViewMode) {
@@ -9900,6 +10547,18 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         dirLight.shadow.camera.bottom = -148;
         dirLight.shadow.camera.far = 395;
         dirLight.shadow.camera.updateProjectionMatrix();
+      } else if (activeNukePose) {
+        camera.up.set(0, 1, 0);
+        camera.position.set(
+          activeNukePose.cameraPos.x + shakeX,
+          activeNukePose.cameraPos.y,
+          activeNukePose.cameraPos.z + shakeZ,
+        );
+        camera.lookAt(
+          activeNukePose.lookAtPos.x,
+          activeNukePose.lookAtPos.y,
+          activeNukePose.lookAtPos.z,
+        );
       } else {
         camera.up.set(0, 1, 0);
         camera.position.set(
@@ -10023,9 +10682,10 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
             p.worldZ,
             planetPivotX,
             planetPivotZ,
-            Math.PI / 2,
+            0,
             kCurve,
           );
+          p.padGroup.updateMatrixWorld(true);
         }
         applyPlanetCurvatureToObject(
           redBase.baseGroup,
@@ -10045,9 +10705,10 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
             p.worldZ,
             planetPivotX,
             planetPivotZ,
-            -Math.PI / 2,
+            Math.PI,
             kCurve,
           );
+          p.padGroup.updateMatrixWorld(true);
         }
       }
 
@@ -10271,6 +10932,22 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       stepBaseSkyshieldDefense(blueBase, 'blue');
       stepBaseSkyshieldDefense(redBase, 'red');
 
+      // Step Deployed MLRS-MK5 Nuclear Missile Launchers (Long-Range 280m Radar Lock enabled by Command Center Lv.3)
+      for (const nl of activeNuclearLaunchers) {
+        const nlX = nl.root.position.x;
+        const nlZ = nl.root.position.z;
+        const nlY = getTerrainElevation(nlX, nlZ);
+        applyPlanetCurvatureToObject(nl.root, nlX, nlY, nlZ, planetPivotX, planetPivotZ);
+        if (nukeStrikeState.phase === 'targeting' && nl.team === 'blue') {
+          const dx = nukeStrikeState.targetPos.x - nlX;
+          const dz = nukeStrikeState.targetPos.z - nlZ;
+          nl.yawGroup.rotation.y = Math.atan2(dx, dz);
+          nl.pitchGroup.rotation.x = -0.52;
+        } else if (nukeStrikeState.phase === 'idle') {
+          nl.yawGroup.rotation.y = Math.sin(timeSec * 0.45) * 0.35;
+        }
+      }
+
       // Align all Destructible Trees + Apply Elastic Tree Jiggle When Rammed or Shot!
       for (let i = 0; i < trees.length; i++) {
         const tr = trees[i];
@@ -10456,6 +11133,29 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         b.bodyGroup.position.y = floatY + b.jumpOffset + bHitPose.hopY;
         applyPlanetCurvatureToObject(b.root, b.x, localY, b.z, planetPivotX, planetPivotZ, 0, kCurve);
       }
+
+      // 4A. Chunk-Synced 3D Fog of War:
+      // Hide field objects (Crates, Coins/Pickups, Land Mines/Ordnance) and Enemy (Red) Units & Vehicles
+      // outside the player's 21.0m 3D grass chunk streaming radius, with smooth scale fade at the inner edge!
+      const bypassFogOfWar3D =
+        currentPlayMode === 'editor' ||
+        isFullMapOverview ||
+        Boolean(skyshieldViewMode || buildingViewMode || planeViewMode) ||
+        nukeStrikeState.phase !== 'idle';
+      const fogGrassCenterX = activeFocusUnit ? activeFocusUnit.x : playerUnit.x;
+      const fogGrassCenterZ = activeFocusUnit ? activeFocusUnit.z : playerUnit.z;
+      applyGrassChunkSyncedFogOfWar3D({
+        viewerX: fogGrassCenterX,
+        viewerZ: fogGrassCenterZ,
+        playMode: currentPlayMode,
+        bypassFogOfWar: bypassFogOfWar3D,
+        worldCrates,
+        worldPickups,
+        activeOrdnanceDevices,
+        buddyUnits,
+        tanks,
+      });
+
       for (let i = 0; i < projectiles.length; i++) {
         const p = projectiles[i];
         if (!p.active) continue;
@@ -10514,9 +11214,8 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
           sprite.visible = false;
           return;
         }
-        const worldPos = new THREE.Vector3();
-        sprite.getWorldPosition(worldPos);
-        const ndc = worldPos.project(camera);
+        sprite.getWorldPosition(scratchSignWorldPos);
+        const ndc = scratchSignWorldPos.project(camera);
         if (
           ndc.z > 1.0 ||
           ndc.z < -1.0 ||
@@ -10841,6 +11540,21 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         renderer.render(scene, camera);
       }
 
+      // Smoothly rotate & bob the 3D Hologram shape on top of the Kiosk's side scale platform
+      const holoTime = windUniforms.uTime.value;
+      for (const cp of blueBase.commanderPads) {
+        const sh = cp.kioskMesh?.userData?.sideHologram as
+          | { holoTurntable: THREE.Group }
+          | undefined;
+        if (sh) {
+          sh.holoTurntable.rotation.y = holoTime * 1.35;
+          sh.holoTurntable.position.y = 1.05 + Math.sin(holoTime * 2.6) * 0.06;
+        }
+      }
+
+      // Update 2D DOM floating prompt buttons with pixel-perfect Math.round() & Hysteresis at 60 FPS
+      updateDirectDomPrompts();
+
       if (
         dirLight.shadow.map &&
         windUniforms.uDirShadowMap &&
@@ -10853,15 +11567,158 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         windUniforms.uHasDirShadow.value = 1.0;
       }
 
-      // 5. Periodic HUD Snapshot Sync (25Hz for smooth 3D-to-2D floating prompt tracking)
+      // 5. Periodic HUD Snapshot Sync (12.5Hz for smooth HUD/Minimap while halving React App re-render overhead)
       hudSyncAccumulator += dt;
-      if (hudSyncAccumulator >= 0.04) {
+      if (hudSyncAccumulator >= 0.08) {
         hudSyncAccumulator = 0;
         onHudUpdate(buildHudSnapshot(null));
       }
     };
 
     const scratchProjectVec = new THREE.Vector3();
+    const projectWorldToScreenPixels = (
+      wx: number,
+      wy: number,
+      wz: number,
+    ): { x: number; y: number; visible: boolean } => {
+      const pvx = camFollowPos.x;
+      const pvz = camFollowPos.z;
+      const rx = pvx + getPlanetShortestDelta(wx, pvx);
+      const rz = pvz + getPlanetShortestDelta(wz, pvz);
+      const ry = wy + computePlanetYOffset(wx, wz, pvx, pvz, PLANET_CURVATURE_STRENGTH);
+      scratchProjectVec.set(rx, ry, rz);
+      scratchProjectVec.project(camera);
+      if (scratchProjectVec.z < -1.0 || scratchProjectVec.z > 1.0) {
+        return { x: 0, y: 0, visible: false };
+      }
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const sx = Math.round(((scratchProjectVec.x + 1.0) * 0.5) * w);
+      const sy = Math.round(((1.0 - scratchProjectVec.y) * 0.5) * h);
+      const visible = sx >= 12 && sx <= w - 12 && sy >= 12 && sy <= h - 12;
+      return { x: sx, y: sy, visible };
+    };
+
+    const isBuildingViewUrlParam =
+      typeof window !== 'undefined' &&
+      Boolean(new URLSearchParams(window.location.search).get('buildingview'));
+
+    updateDirectDomPrompts = () => {
+      if (
+        playModeRef.current === 'editor' ||
+        gameStateRef.current !== 'playing' ||
+        isBuildingViewUrlParam
+      ) {
+        kioskPromptBtn.style.display = 'none';
+        cratePromptBtn.style.display = 'none';
+        padCraftPromptBtn.style.display = 'none';
+        padDepositPromptBtn.style.display = 'none';
+        return;
+      }
+
+      const actorX = mountedTank ? mountedTank.x : playerUnit.x;
+      const actorZ = mountedTank ? mountedTank.z : playerUnit.z;
+
+      // 1. Kiosk Prompt: [B] KIOSK (True world position via getWorldPosition, Math.round pixel transform, 2.6m -> 2.9m Hysteresis)
+      const kioskWorldPos = getBlueKioskWorldCenter(0);
+      const kx = kioskWorldPos.x;
+      const kz = kioskWorldPos.z;
+      const distToKiosk = getPlanetShortestDistance(actorX, actorZ, kx, kz);
+      const kioskThreshold = isKioskPromptActive ? INTERACT_EXIT_RADIUS : INTERACT_ENTER_RADIUS;
+      const nearKioskNow = distToKiosk <= kioskThreshold;
+      isKioskPromptActive = nearKioskNow;
+
+      if (nearKioskNow && !isKioskModalOpenCanvas) {
+        const ky = getTerrainElevation(kx, kz) + 2.5;
+        const proj = projectWorldToScreenPixels(kx, ky, kz);
+        if (proj.visible) {
+          kioskPromptBtn.style.display = 'block';
+          kioskPromptBtn.style.transform = `translate3d(${proj.x}px, ${proj.y}px, 0) translate(-50%, -50%)`;
+        } else {
+          kioskPromptBtn.style.display = 'none';
+        }
+      } else {
+        kioskPromptBtn.style.display = 'none';
+      }
+
+      // 2. On-Foot Crate Pickup: [E] AMBIL (Static terrain anchor, Math.round pixel transform, 2.6m -> 2.9m Hysteresis)
+      if (!mountedTank && ridingTramCarIdx === null && playerUnit.alive && playerUnit.carryingCrate === 'none') {
+        let nearestCrate: WorldCrate | null = null;
+        let bestDist = 999;
+        for (let i = 0; i < worldCrates.length; i++) {
+          const c = worldCrates[i];
+          if (c.state === 'grounded' || c.state === 'falling') {
+            const d = getPlanetShortestDistance(c.x, c.z, playerUnit.x, playerUnit.z);
+            const limit = activeCratePromptId === c.id ? INTERACT_EXIT_RADIUS : INTERACT_ENTER_RADIUS;
+            if (d <= limit && d < bestDist) {
+              bestDist = d;
+              nearestCrate = c;
+            }
+          }
+        }
+
+        if (nearestCrate) {
+          activeCratePromptId = nearestCrate.id;
+          const cy = getTerrainElevation(nearestCrate.x, nearestCrate.z) + 0.95;
+          const proj = projectWorldToScreenPixels(nearestCrate.x, cy, nearestCrate.z);
+          if (proj.visible) {
+            cratePromptBtn.style.display = 'block';
+            cratePromptBtn.style.transform = `translate3d(${proj.x}px, ${proj.y}px, 0) translate(-50%, -50%)`;
+          } else {
+            cratePromptBtn.style.display = 'none';
+          }
+        } else {
+          activeCratePromptId = null;
+          cratePromptBtn.style.display = 'none';
+        }
+      } else {
+        activeCratePromptId = null;
+        cratePromptBtn.style.display = 'none';
+      }
+
+      // 3. Stacking Pad Prompts (2.6m -> 2.9m Hysteresis)
+      const distToPad = getPlanetShortestDistance(actorX, actorZ, blueBase.padX, blueBase.padZ);
+      const padEval = evaluateStackingPadRecipe(bluePadSlots);
+
+      // Pad Craft Prompt
+      const padCraftThreshold = isPadCraftPromptActive ? INTERACT_EXIT_RADIUS : INTERACT_ENTER_RADIUS;
+      if (distToPad <= padCraftThreshold && padEval.totalCrates > 0) {
+        isPadCraftPromptActive = true;
+        const py = getTerrainElevation(blueBase.padX, blueBase.padZ) + 2.0;
+        const proj = projectWorldToScreenPixels(blueBase.padX, py, blueBase.padZ);
+        if (proj.visible) {
+          padCraftPromptBtn.style.display = 'block';
+          padCraftPromptBtn.style.transform = `translate3d(${proj.x}px, ${proj.y}px, 0) translate(-50%, -50%)`;
+        } else {
+          padCraftPromptBtn.style.display = 'none';
+        }
+      } else {
+        isPadCraftPromptActive = false;
+        padCraftPromptBtn.style.display = 'none';
+      }
+
+      // Pad Deposit Prompt
+      const padDepositThreshold = isPadDepositPromptActive ? INTERACT_EXIT_RADIUS : INTERACT_ENTER_RADIUS;
+      if (
+        distToPad <= padDepositThreshold &&
+        ((!mountedTank && playerUnit.carryingCrate !== 'none') ||
+          (mountedTank && mountedTank.storedCrates.length > 0))
+      ) {
+        isPadDepositPromptActive = true;
+        const py = getTerrainElevation(blueBase.padX, blueBase.padZ) + 1.45;
+        const proj = projectWorldToScreenPixels(blueBase.padX, py, blueBase.padZ);
+        if (proj.visible) {
+          padDepositPromptBtn.style.display = 'block';
+          padDepositPromptBtn.style.transform = `translate3d(${proj.x}px, ${proj.y}px, 0) translate(-50%, -50%)`;
+        } else {
+          padDepositPromptBtn.style.display = 'none';
+        }
+      } else {
+        isPadDepositPromptActive = false;
+        padDepositPromptBtn.style.display = 'none';
+      }
+    };
+
     const projectWorldToScreenPct = (
       wx: number,
       wy: number,
@@ -10930,10 +11787,10 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       } else if (getPlanetShortestDistance(actorX, actorZ, blueBase.padX, blueBase.padZ) <= 8.5 && padEval.totalCrates > 0) {
         contextHint = `Dekat Pad · [F] Rakit ${padEval.outputName} · [B] Mesin Kiosk Pad`;
       } else if (
-        getPlanetShortestDistance(actorX, actorZ, blueBase.padX - 3.45, blueBase.padZ) <= 6.8 ||
+        getPlanetShortestDistance(actorX, actorZ, getBlueKioskWorldCenter(0).x, getBlueKioskWorldCenter(0).z) <= 6.8 ||
         getPlanetShortestDistance(actorX, actorZ, blueBase.padX, blueBase.padZ) <= 6.8
       ) {
-        contextHint = `Dekat Mesin Self-Service Kiosk Pad · [B / E] Buka Menu Prioritas Senjata, Upgrade Base & Beli Crate`;
+        contextHint = `Dekat Mesin Self-Service Kiosk Pad · [B / E / F] Buka Menu Prioritas Senjata, Upgrade Base & Beli Crate`;
       } else {
         let closestVehicle: TankVehicle | null = null;
         let closestDist = 7.5;
@@ -10965,86 +11822,29 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         contextHint = `🎯 TARGET TERKUNCI: ${activeMuzzleRaycastResult.targetLabel} (${activeMuzzleRaycastResult.distance.toFixed(1)}m) · ${contextHint}`;
       }
 
-      // Build Mini-Radar dots from live 3D entities (filtered by Command Center Radar Level!)
+      // Build Mini-Radar dots & Personal Command Center Radar state from live 3D entities
       const myPlot = blueCommanderBases[0];
-      const radarBaseCenterX = 0.0;
-      const radarBaseCenterZ = 81.7;
-      const radarDots: RadarDot[] = [];
-      for (const c of worldCrates) {
-        if (
-          (c.state === 'grounded' || c.state === 'falling') &&
-          isPointVisibleOnCommandCenterRadar(
-            c.x,
-            c.z,
-            false,
-            myPlot.buildingLevel,
-            radarBaseCenterX,
-            radarBaseCenterZ,
-            actorX,
-            actorZ,
-          )
-        ) {
-          radarDots.push({
-            id: `c-${c.id}`,
-            kind:
-              c.kind === 'legend'
-                ? 'crate_legend'
-                : c.kind === 'super'
-                ? 'crate_super'
-                : 'crate_red',
-            x: c.x,
-            z: c.z,
-          });
-        }
-      }
-      for (const t of tanks) {
-        if (
-          t.hp > 0 &&
-          isPointVisibleOnCommandCenterRadar(
-            t.x,
-            t.z,
-            t.team === 'blue',
-            myPlot.buildingLevel,
-            radarBaseCenterX,
-            radarBaseCenterZ,
-            actorX,
-            actorZ,
-          )
-        ) {
-          radarDots.push({
-            id: `t-${t.id}`,
-            kind: t.team === 'blue' ? 'tank_blue' : 'tank_red',
-            x: t.x,
-            z: t.z,
-          });
-        }
-      }
-      for (const b of buddyUnits) {
-        if (!b.alive) continue;
-        const bx = b.isPlayer && mountedTank ? mountedTank.x : b.x;
-        const bz = b.isPlayer && mountedTank ? mountedTank.z : b.z;
-        const isFriendly = b.isPlayer || b.team === 'blue';
-        if (
-          !isPointVisibleOnCommandCenterRadar(
-            bx,
-            bz,
-            isFriendly,
-            myPlot.buildingLevel,
-            radarBaseCenterX,
-            radarBaseCenterZ,
-            actorX,
-            actorZ,
-          )
-        ) {
-          continue;
-        }
-        radarDots.push({
-          id: `b-${b.id}`,
-          kind: b.isPlayer ? 'player' : b.team === 'blue' ? 'ally' : 'enemy',
-          x: bx,
-          z: bz,
-        });
-      }
+      const activeSupplyLocId = supplyDropSchedule.warningActive
+        ? supplyDropSchedule.nextLocationId
+        : supplyDropSchedule.nextLocationId === 'CENTRAL_OASIS'
+          ? 'HARBOR_DOCK'
+          : 'CENTRAL_OASIS';
+      const activeSupplySpec = SUPPLY_DROP_LOCATIONS[activeSupplyLocId];
+      const radarEvaluation = evaluatePlayerCommandCenterRadarAndMinimapDots({
+        myPlot,
+        buddyUnits,
+        tanks,
+        playerUnit,
+        mountedTank,
+        teamCommand: playerUnit.assignedRole ?? teamCommand,
+        actorX,
+        actorZ,
+        activeSupplyDropSignal:
+          supplyDropSchedule.warningActive || supplyDropBeaconLingeringTimer > 0
+            ? { x: activeSupplySpec.x, z: activeSupplySpec.z }
+            : null,
+      });
+      const radarDots: RadarDot[] = radarEvaluation.radarDots;
 
       const personalSquad = buddyUnits.filter(
         (b) => b.team === 'blue' && b.alive && b.ownerCommanderId === 0,
@@ -11056,242 +11856,12 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       const activeRecipeSpec = useCustomHologramRecipe
         ? KIOSK_BUILD_PRIORITY_RECIPES[activePriorityRecipe]
         : null;
+      const hudKioskPos = getBlueKioskWorldCenter(0);
       const isNearKiosk =
-        getPlanetShortestDistance(actorX, actorZ, blueBase.padX - 3.45, blueBase.padZ) <= 7.5 ||
-        getPlanetShortestDistance(actorX, actorZ, blueBase.padX, blueBase.padZ) <= 7.5;
-
-      // Contextual 3D-to-2D Floating Hexagonal Prompts (ONLY shown when player is within interaction range)
+        isKioskPromptActive ||
+        getPlanetShortestDistance(actorX, actorZ, hudKioskPos.x, hudKioskPos.z) <= INTERACT_EXIT_RADIUS;
+      // Floating prompts are rendered via direct 60 FPS DOM overlay with Math.round & hysteresis (zero React re-render)
       const floatingPrompts: FloatingWorldPrompt[] = [];
-      if (playModeRef.current !== 'editor' && gameStateRef.current === 'playing') {
-        const targetCratesCount = activeRecipeSpec
-          ? activeRecipeSpec.targetCrates
-          : orderSpec.targetCrates;
-        const distToPad = getPlanetShortestDistance(actorX, actorZ, blueBase.padX, blueBase.padZ);
-        const distToKiosk = getPlanetShortestDistance(
-          actorX,
-          actorZ,
-          blueBase.padX - 3.45,
-          blueBase.padZ,
-        );
-
-        // 1. Stacking Pad Craft Machine Prompt: [F] RAKIT (when within 8.5m of pad and pad has >= 1 crate)
-        if (distToPad <= 8.5 && padEval.totalCrates > 0) {
-          const padProj = projectWorldToScreenPct(
-            blueBase.padX,
-            getTerrainElevation(blueBase.padX, blueBase.padZ) + 2.15,
-            blueBase.padZ,
-          );
-          if (padProj.visible) {
-            floatingPrompts.push({
-              id: 'prompt-pad-craft',
-              keyLabel: 'F',
-              actionLabel: 'RAKIT',
-              subLabel: `${padEval.outputName.toUpperCase()} (${padEval.totalCrates}/${targetCratesCount})`,
-              actionEvent: 'kickOrCraft',
-              xPct: padProj.xPct,
-              yPct: padProj.yPct,
-              accent: 'lime',
-              iconType: 'machine',
-            });
-          }
-        }
-
-        // 2. Stacking Pad Deposit Item Prompt: [E] ISI PAD (when carrying a crate or driving a crate-loaded vehicle within 9.5m of pad)
-        if (
-          distToPad <= 9.5 &&
-          ((!mountedTank && playerUnit.carryingCrate !== 'none') ||
-            (mountedTank && mountedTank.storedCrates.length > 0))
-        ) {
-          const padDropProj = projectWorldToScreenPct(
-            blueBase.padX,
-            getTerrainElevation(blueBase.padX, blueBase.padZ) + 1.45,
-            blueBase.padZ,
-          );
-          if (padDropProj.visible) {
-            floatingPrompts.push({
-              id: 'prompt-pad-deposit',
-              keyLabel: 'E',
-              actionLabel: mountedTank?.vehicleKind === 'truck' ? 'TUANG PAD' : 'ISI PAD',
-              subLabel: `${padEval.totalCrates}/${targetCratesCount} PETI`,
-              actionEvent: 'pickupOrThrow',
-              xPct: padDropProj.xPct,
-              yPct: padDropProj.yPct,
-              accent: 'yellow',
-              iconType: 'hand',
-            });
-          }
-        }
-
-        // 3. Self-Service Tactical Kiosk Machine Prompt: [B] KIOSK (when within 6.2m of Kiosk)
-        if (distToKiosk <= 6.2) {
-          const kioskProj = projectWorldToScreenPct(
-            blueBase.padX - 3.45,
-            getTerrainElevation(blueBase.padX - 3.45, blueBase.padZ) + 2.65,
-            blueBase.padZ,
-          );
-          if (kioskProj.visible) {
-            floatingPrompts.push({
-              id: 'prompt-kiosk',
-              keyLabel: 'B',
-              actionLabel: 'KIOSK',
-              subLabel: 'RESEP & TOKO',
-              actionEvent: 'toggleKioskUi',
-              xPct: kioskProj.xPct,
-              yPct: kioskProj.yPct,
-              accent: 'cyan',
-              iconType: 'machine',
-            });
-          }
-        }
-
-        // 4. On-Foot Crate Pickup ([E] AMBIL -> Hand Emoji) & Vehicle / Tram Mount ([G] NAIK -> Machine Icon)
-        if (!mountedTank && ridingTramCarIdx === null && playerUnit.alive) {
-          if (playerUnit.carryingCrate === 'none') {
-            let nearestCrate: WorldCrate | null = null;
-            let bestCrateDist = 5.5;
-            for (const c of worldCrates) {
-              if (c.state === 'grounded' || c.state === 'falling') {
-                const d = getPlanetShortestDistance(c.x, c.z, playerUnit.x, playerUnit.z);
-                if (d < bestCrateDist) {
-                  bestCrateDist = d;
-                  nearestCrate = c;
-                }
-              }
-            }
-            if (nearestCrate) {
-              const crateProj = projectWorldToScreenPct(
-                nearestCrate.x,
-                nearestCrate.y + 1.15,
-                nearestCrate.z,
-              );
-              if (crateProj.visible) {
-                floatingPrompts.push({
-                  id: 'prompt-crate-pickup',
-                  keyLabel: 'E',
-                  actionLabel: 'AMBIL',
-                  subLabel:
-                    nearestCrate.kind === 'legend'
-                      ? 'PETI EMAS'
-                      : nearestCrate.kind === 'super'
-                      ? 'PETI BIRU'
-                      : nearestCrate.kind === 'medical'
-                      ? 'MEDKIT'
-                      : 'PETI MERAH',
-                  actionEvent: 'pickupOrThrow',
-                  xPct: crateProj.xPct,
-                  yPct: crateProj.yPct,
-                  accent: 'white',
-                  iconType: 'hand',
-                });
-              }
-            }
-          } else {
-            // Carrying crate near a Dump Truck -> [E] ISI TRUK (Hand Emoji)
-            let nearTruck: TankVehicle | null = null;
-            let bestTruckDist = 6.2;
-            for (const v of tanks) {
-              if (
-                v.vehicleKind === 'truck' &&
-                v.hp > 0 &&
-                v.storedCrates.length < DUMP_TRUCK_MAX_CRATES
-              ) {
-                const d = getPlanetShortestDistance(v.x, v.z, playerUnit.x, playerUnit.z);
-                if (d < bestTruckDist) {
-                  bestTruckDist = d;
-                  nearTruck = v;
-                }
-              }
-            }
-            if (nearTruck) {
-              const truckLoadProj = projectWorldToScreenPct(
-                nearTruck.x,
-                getTerrainElevation(nearTruck.x, nearTruck.z) + 2.35,
-                nearTruck.z,
-              );
-              if (truckLoadProj.visible) {
-                floatingPrompts.push({
-                  id: 'prompt-truck-load',
-                  keyLabel: 'E',
-                  actionLabel: 'ISI TRUK',
-                  subLabel: `${nearTruck.storedCrates.length}/${DUMP_TRUCK_MAX_CRATES} PETI`,
-                  actionEvent: 'pickupOrThrow',
-                  xPct: truckLoadProj.xPct,
-                  yPct: truckLoadProj.yPct,
-                  accent: 'yellow',
-                  iconType: 'hand',
-                });
-              }
-            }
-          }
-
-          // Nearest Mountable Vehicle ([G] NAIK) or City Tram ([G] NAIK TREM)
-          let nearestVeh: TankVehicle | null = null;
-          let bestVehDist = 7.8;
-          for (const t of tanks) {
-            if (!t.occupiedByPlayer && t.hp > 0) {
-              const d = getPlanetShortestDistance(t.x, t.z, playerUnit.x, playerUnit.z);
-              if (d < bestVehDist) {
-                bestVehDist = d;
-                nearestVeh = t;
-              }
-            }
-          }
-          const tramBoard = canUnitBoardCityTramAtAnyPoint(
-            playerUnit.x,
-            playerUnit.z,
-            cityTram.getState(),
-            3.2,
-          );
-          if (tramBoard.canBoard && (!nearestVeh || tramBoard.distanceMeters < bestVehDist)) {
-            const tramNow = cityTram.getState();
-            const car = tramBoard.carIndex === 0 ? tramNow.car1 : tramNow.car2;
-            const tramProj = projectWorldToScreenPct(
-              car.x,
-              getTerrainElevation(car.x, car.z) + 2.6,
-              car.z,
-            );
-            if (tramProj.visible) {
-              floatingPrompts.push({
-                id: 'prompt-tram-mount',
-                keyLabel: 'G',
-                actionLabel: 'NAIK',
-                subLabel: 'TREM KOTA',
-                actionEvent: 'mountOrDismount',
-                xPct: tramProj.xPct,
-                yPct: tramProj.yPct,
-                accent: 'yellow',
-                iconType: 'machine',
-              });
-            }
-          } else if (nearestVeh) {
-            const vehProj = projectWorldToScreenPct(
-              nearestVeh.x,
-              getTerrainElevation(nearestVeh.x, nearestVeh.z) + 2.1,
-              nearestVeh.z,
-            );
-            if (vehProj.visible) {
-              floatingPrompts.push({
-                id: 'prompt-vehicle-mount',
-                keyLabel: 'G',
-                actionLabel: 'NAIK',
-                subLabel:
-                  nearestVeh.vehicleKind === 'plane'
-                    ? 'LYO PLANE'
-                    : nearestVeh.vehicleKind === 'truck'
-                    ? 'DUMP TRUCK'
-                    : nearestVeh.isSuper
-                    ? 'TYRANT TANK'
-                    : 'LYO TANK',
-                actionEvent: 'mountOrDismount',
-                xPct: vehProj.xPct,
-                yPct: vehProj.yPct,
-                accent: 'yellow',
-                iconType: 'machine',
-              });
-            }
-          }
-        }
-      }
 
       return {
         hp: mountedTank ? mountedTank.hp : playerUnit.hp,
@@ -11344,6 +11914,7 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
           ? [...activeRecipeSpec.slotHologramColors]
           : ['empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
         activePriorityRecipe,
+        buildQueue: useCustomHologramRecipe ? [...blueBuildQueue] : [],
         padShape: padEval.shapeKey,
         padOutputName: padEval.outputName,
         padIsMerged: padEval.isMerged,
@@ -11352,6 +11923,9 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         buildOrderLabel: activeRecipeSpec ? activeRecipeSpec.name : orderSpec.label,
         buildOrderTargetCrates: activeRecipeSpec ? activeRecipeSpec.targetCrates : orderSpec.targetCrates,
         baseBuildingLevel: myPlot?.buildingLevel ?? 1,
+        commandCenterLevel: radarEvaluation.operatorStatus.commandCenterLevel,
+        commandCenterRadarActive: radarEvaluation.operatorStatus.radarActive,
+        commandCenterRadarCoveragePct: radarEvaluation.operatorStatus.coveragePct,
         baseBuildingHp: myPlot?.buildingHp ?? 400,
         baseBuildingMaxHp: myPlot?.buildingMaxHp ?? 400,
         baseFenceLevel: myPlot?.fenceLevel ?? 1,
@@ -11361,7 +11935,8 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         baseHasHelipad: myPlot?.hasHelipad ?? true,
         isNearKiosk,
         kioskStatusMessage,
-        teamCommand,
+        supplyDropBanner: supplyDropSchedule.bannerText,
+        teamCommand: playerUnit.assignedRole ?? teamCommand,
         alliedBuddiesCount: buddyUnits.filter((b) => b.team === 'blue' && b.alive).length,
         personalSquadCount: personalSquad.length,
         personalSquadMax: MAX_CHARACTERS_PER_COMMANDER,
@@ -11382,7 +11957,16 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
         editorCursorZ: Math.round(aimWorldPoint.z * 2) / 2,
         editorRotDeg: Math.round((editorRotY * 180) / Math.PI),
         editorScale,
+        nuclearStrikePhase: nukeStrikeState.phase,
+        nuclearTargetCoords: {
+          x: Math.round(nukeStrikeState.targetPos.x),
+          z: Math.round(nukeStrikeState.targetPos.z),
+        },
+        hasDeployedNuclearLauncher: activeNuclearLaunchers.some((n) => n.team === 'blue'),
       };
+    };
+    emitHudImmediately = () => {
+      onHudUpdate(buildHudSnapshot(null));
     };
 
     rafId = requestAnimationFrame(animate);
@@ -11399,7 +11983,11 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('wheel', onWheel);
-      renderer.domElement.removeEventListener('contextmenu', onContextMenu);
+      window.removeEventListener('toggle-kiosk-ui', onKioskUiToggled);
+      window.removeEventListener('close-kiosk-ui', onKioskUiClosed);
+      if (promptOverlay.parentElement) {
+        promptOverlay.parentElement.removeChild(promptOverlay);
+      }
       tolanPlanetEnv.dispose();
       cityTram.dispose();
       lyoGrassSystem.dispose();
@@ -11416,3 +12004,5 @@ export const FactoryPlaygroundCanvas: React.FC<FactoryPlaygroundCanvasProps> = (
     />
   );
 };
+
+export const FactoryPlaygroundCanvas = BuddiesBlitzArena;

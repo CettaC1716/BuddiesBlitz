@@ -1606,7 +1606,7 @@ export function getPropCollisionSpec(kind: string, scale = 1.0): PropCollisionSp
       return {
         category: 'solid',
         materialTag: 'metal',
-        radius: 0.92 * s,
+        radius: 1.05 * s,
         mass: 9999,
         restitution: 0.32,
         destructible: false,
@@ -1650,7 +1650,7 @@ export function getPropCollisionSpec(kind: string, scale = 1.0): PropCollisionSp
       return {
         category: 'solid',
         materialTag: 'metal',
-        radius: 0.42 * s,
+        radius: 0.56 * s,
         mass: 9999,
         restitution: 0.3,
         destructible: false,
@@ -1663,7 +1663,7 @@ export function getPropCollisionSpec(kind: string, scale = 1.0): PropCollisionSp
       return {
         category: 'solid',
         materialTag: 'metal',
-        radius: 0.48 * s,
+        radius: 0.58 * s,
         mass: 9999,
         restitution: 0.32,
         destructible: false,
@@ -1691,7 +1691,7 @@ export function getPropCollisionSpec(kind: string, scale = 1.0): PropCollisionSp
       return {
         category: 'solid',
         materialTag: 'concrete',
-        radius: 0.95 * s,
+        radius: 1.08 * s,
         mass: 9999,
         restitution: 0.25,
         destructible: false,
@@ -1705,7 +1705,7 @@ export function getPropCollisionSpec(kind: string, scale = 1.0): PropCollisionSp
       return {
         category: 'solid',
         materialTag: 'tree',
-        radius: 0.85 * s,
+        radius: 0.96 * s,
         mass: 9999,
         restitution: 0.26,
         destructible: false,
@@ -3184,7 +3184,7 @@ export type SmartBuddyAiAction =
 
 export interface SmartBuddyAiInput {
   buddyClass: BuddyClassId;
-  weaponId: 'unarmed' | 'pistol' | 'rifle' | 'rocket';
+  weaponId: 'unarmed' | 'pistol' | 'rifle' | 'rocket' | 'laser' | 'gatling';
   carryingCrate: boolean;
   hp: number;
   maxHp: number;
@@ -3245,8 +3245,8 @@ export function evaluateBuiltBuddySmartAiDecision(
     }
   }
 
-  // 2. If carrying a crate, always deliver to owner's personal Stacking Pad (`Pad P_i`)
-  if (input.carryingCrate && input.ownerPadHasSpace) {
+  // 2. If carrying a crate (and not in FOLLOW escort mode), always deliver to owner's personal Stacking Pad (`Pad P_i`)
+  if (input.carryingCrate && input.ownerPadHasSpace && input.commandMode !== 'FOLLOW') {
     return {
       action: 'DELIVER_TO_OWNER_PAD',
       recommendedBuildOrder,
@@ -3275,10 +3275,12 @@ export function evaluateBuiltBuddySmartAiDecision(
 
   // 5. Team Buddies Auto-Loot (`Diambil Otomatis oleh AI Tim & Rentan Dicuri Lawan`):
   // Unarmed characters OR characters holding a lower-tier weapon automatically run to pick up a crafted/dropped weapon nearby!
+  // For ATTACK role (`commandMode === 'ATTACK'`), an unarmed Attacker (`weaponId === 'unarmed'`) returns to base/field weapon stock at any distance!
   if (
     (input.weaponId === 'unarmed' || input.canUpgradeFromGroundWeapon) &&
     input.nearestGroundWeaponDist !== null &&
-    input.nearestGroundWeaponDist <= 24.0
+    (input.nearestGroundWeaponDist <= 24.0 ||
+      (input.commandMode === 'ATTACK' && input.weaponId === 'unarmed'))
   ) {
     return {
       action: 'EQUIP_GROUND_WEAPON',
@@ -3320,6 +3322,14 @@ export function evaluateBuiltBuddySmartAiDecision(
   }
 
   if (input.commandMode === 'ATTACK') {
+    // Unarmed Attacker intelligence: if an Attacker has no weapon (`weaponId === 'unarmed'`),
+    // it returns home to base to pick up weapon stock before heading out to attack!
+    if (input.weaponId === 'unarmed') {
+      return {
+        action: 'EQUIP_GROUND_WEAPON',
+        recommendedBuildOrder,
+      };
+    }
     if (
       input.nearestEmptyVehicleDist !== null &&
       input.nearestEmptyVehicleDist <= 14.0 &&
@@ -3337,10 +3347,16 @@ export function evaluateBuiltBuddySmartAiDecision(
   }
 
   if (input.commandMode === 'HARVEST') {
+    if (input.carryingCrate) {
+      return {
+        action: 'DELIVER_TO_OWNER_PAD',
+        recommendedBuildOrder,
+      };
+    }
     if (
       input.ownerPadHasSpace &&
       input.nearestFreeCrateDist !== null &&
-      input.nearestFreeCrateDist <= 180.0
+      input.nearestFreeCrateDist <= 260.0
     ) {
       return {
         action: 'HARVEST_CRATE',
@@ -3353,6 +3369,11 @@ export function evaluateBuiltBuddySmartAiDecision(
         recommendedBuildOrder,
       };
     }
+    // Never fall back to FOLLOW_COMMANDER when assigned to HARVEST!
+    return {
+      action: 'HARVEST_CRATE',
+      recommendedBuildOrder,
+    };
   }
 
   return {
@@ -4441,6 +4462,36 @@ export interface WeaponProjectileVisualSpec {
 
 export function getWeaponProjectileVisualSpec(weaponType: string): WeaponProjectileVisualSpec {
   const w = weaponType.trim();
+
+  // 0. Tactical Nuclear Missile ('NuclearMissile' — MLRS-MK5 'ATLAS' Nuke Rocket)
+  if (w === 'NuclearMissile') {
+    return {
+      shellKind: 'boss',
+      diameter: 0.30,
+      length: 0.96,
+      barrelOuterDiameter: 0.38,
+    };
+  }
+
+  // 0B. LG-88 Photon Lance ('LyoLaserGun' — Directed-Energy Laser Beam)
+  if (w === 'LyoLaserGun') {
+    return {
+      shellKind: 'fodder',
+      diameter: 0.08,
+      length: 0.72,
+      barrelOuterDiameter: 0.14,
+    };
+  }
+
+  // 0C. TITAN-6 Heavy Rotary Gatling Gun ('Titan6Gatling' — 7.62x51mm High-RPM Rotary Stream)
+  if (w === 'Titan6Gatling') {
+    return {
+      shellKind: 'fodder',
+      diameter: 0.09,
+      length: 0.42,
+      barrelOuterDiameter: 0.16,
+    };
+  }
 
   // 1. Heavy Tank Cannon (player.glb barrel outer diameter ~0.32m at 2.45x-2.75x scale)
   if (w === 'TankCannon') {
@@ -5590,6 +5641,8 @@ export interface IndividualCommanderBaseState {
   parkingX: number;
   parkingZ: number;
   buildingLevel: 1 | 2 | 3;
+  /** Personal Command Center radar level (Lv.1 = 45% map, Lv.2 = 75% map, Lv.3 = 100% map), upgraded via Kiosk with Gold */
+  commandCenterLevel: 1 | 2 | 3;
   buildingHp: number;
   buildingMaxHp: number;
   fenceLevel: 1 | 2 | 3;
@@ -5619,19 +5672,20 @@ export function createIndividualCommanderBasesState(
       commanderIdx: idx,
       plotCenterX,
       plotCenterZ,
-      // Compact 2x2 (4-column) Stacking Pad on the right bay (relZ = +5.8) of the plot
-      padX: plotCenterX + sign * 5.8,
-      padZ: plotCenterZ - sign * 4.2,
+      // Compact 2x2 (4-column) Stacking Pad flush against the right fence (relZ = +7.3) of the plot
+      padX: plotCenterX + sign * 7.3,
+      padZ: plotCenterZ - sign * 2.2,
       // Single Upgradeable Main Building at the rear-center of the plot
       buildingX: plotCenterX,
       buildingZ: plotCenterZ + sign * 8.2,
       // Buildable Helipad on the left bay (relZ = -5.8) of the plot
       helipadX: plotCenterX - sign * 5.8,
       helipadZ: plotCenterZ - sign * 4.2,
-      // Buildable Vehicle Parking Bay in the center bay (relZ = 0.0, right beside Helipad)
-      parkingX: plotCenterX,
-      parkingZ: plotCenterZ - sign * 4.2,
+      // Buildable Vehicle Parking Bay beside Helipad in the left bay (relZ = -5.2, lx = 15.0)
+      parkingX: plotCenterX - sign * 5.2,
+      parkingZ: plotCenterZ - sign * 4.2 + sign * 4.8,
       buildingLevel: 1,
+      commandCenterLevel: 1,
       buildingHp: INDIVIDUAL_BASE_LEVEL_SPECS.buildingMaxHpByLevel[0],
       buildingMaxHp: INDIVIDUAL_BASE_LEVEL_SPECS.buildingMaxHpByLevel[0],
       fenceLevel: 1,
@@ -5661,6 +5715,7 @@ export function applyCommanderBaseUpgrade(
       const nextLv = (base.buildingLevel + 1) as 2 | 3;
       const nextMax = INDIVIDUAL_BASE_LEVEL_SPECS.buildingMaxHpByLevel[nextLv - 1];
       base.buildingLevel = nextLv;
+      base.commandCenterLevel = nextLv;
       base.buildingMaxHp = nextMax;
       base.buildingHp = nextMax;
       return {
@@ -5669,6 +5724,7 @@ export function applyCommanderBaseUpgrade(
       };
     }
     // Already Lv.3 -> Repair building HP to full
+    base.commandCenterLevel = 3;
     base.buildingHp = base.buildingMaxHp;
     return { upgraded: true, message: 'Command Center Lv.3 Diperbaiki Penuh!' };
   }
@@ -5812,7 +5868,13 @@ export function stepCommanderSlidingGate(
 export type BuddyPrimaryWeaponId = 'unarmed' | 'pistol' | 'rifle' | 'rocket';
 export type BuddySecondaryItemId = 'none' | 'hand_grenade' | 'cluster_bomb' | 'land_mine';
 export type BuddyMissionItemId = 'none' | 'time_bomb' | 'team_flag' | 'bombball';
-export type WorldCrateKind = 'red' | 'super' | 'legend' | 'medical';
+export type WorldCrateKind =
+  | 'red'
+  | 'super'
+  | 'legend'
+  | 'medical'
+  | 'silver_metallic'
+  | 'gold_metallic';
 
 export type TeamBuddiesDropItemKind =
   | 'weapon'
@@ -5953,6 +6015,8 @@ export function evaluateTeamBuddiesDeathDrops(
       super: 'Peti Senjata Khusus (Biru)',
       legend: 'Peti Super Weapon (Ungu)',
       medical: 'Peti Medis Palang Merah (Putih)',
+      silver_metallic: 'Silver Metallic Supply Box (Indestructible)',
+      gold_metallic: 'Shiny Gold Metallic Supply Box (Indestructible)',
     };
     const crateAngle = -0.85;
     drops.push({
@@ -6235,7 +6299,7 @@ export function computeStackingPadWeaponPopOutTrajectory(
  * - `4`: Purple Special Mass-Destruction Super Weapon (`Nuclear Launcher`, `Ion Cannon`, `Airstrike Marker`, `Supazooka`)
  */
 export function getBuddyWeaponTierRank(
-  weaponId: 'unarmed' | 'pistol' | 'rifle' | 'rocket' | 'bazooka',
+  weaponId: 'unarmed' | 'pistol' | 'rifle' | 'rocket' | 'bazooka' | 'laser' | 'gatling',
   weaponName = '',
 ): number {
   if (weaponId === 'unarmed') return 0;
@@ -6252,11 +6316,15 @@ export function getBuddyWeaponTierRank(
   if (
     weaponId === 'rocket' ||
     weaponId === 'bazooka' ||
+    weaponId === 'laser' ||
+    weaponId === 'gatling' ||
     upper.includes('BAZOOKA') ||
     upper.includes('HOMING') ||
     upper.includes('GATLING') ||
+    upper.includes('TITAN-6') ||
     upper.includes('MORTAR') ||
-    upper.includes('LASER GUN')
+    upper.includes('LASER') ||
+    upper.includes('PHOTON')
   ) {
     return 3;
   }
@@ -6272,20 +6340,11 @@ export function getBuddyWeaponTierRank(
   return 1;
 }
 
-/**
- * Evaluates Team Buddies Ground Weapon Auto-Loot (`Diambil Otomatis oleh AI Tim`) and
- * No Team-Lock / Enemy Stealing (`Rentan Dicuri Lawan`):
- * - Ground weapons have NO `teamLock` (`unitTeam` can be `'blue'` or `'red'` regardless of who built the weapon!).
- * - A unit (Friendly AI Buddy OR infiltrating Enemy Unit) will pick up the ground weapon if:
- *   1. They are currently unarmed (`currentTier === 0`), OR
- *   2. The weapon on the ground has a strictly higher tier than their current weapon (`groundTier > currentTier`), OR
- *   3. They hold the same tier weapon and are critically low on ammo (`unitAmmo < 25`).
- */
 export function canUnitLootGroundWeapon(
   _unitTeam: 'blue' | 'red',
-  unitWeaponId: 'unarmed' | 'pistol' | 'rifle' | 'rocket' | 'bazooka',
+  unitWeaponId: 'unarmed' | 'pistol' | 'rifle' | 'rocket' | 'bazooka' | 'laser' | 'gatling',
   unitWeaponName: string,
-  groundWeaponId: 'pistol' | 'rifle' | 'rocket' | 'bazooka',
+  groundWeaponId: 'pistol' | 'rifle' | 'rocket' | 'bazooka' | 'laser' | 'gatling',
   groundWeaponName: string,
   unitAmmo = 100,
 ): {
@@ -6490,7 +6549,11 @@ export type KioskBuildPriorityRecipeId =
   | 'bazooka'
   | 'laser_gun'
   | 'skyshield_turret'
+  | 'nuclear_launcher'
   | 'gatling_mortar'
+  | 'hand_grenade'
+  | 'land_mine'
+  | 'cluster_bomb'
   | 'buddy_infantry'
   | 'buddy_commando'
   | 'buddy_ninja'
@@ -6523,6 +6586,10 @@ export interface KioskBuildPriorityRecipeSpec {
   /** Exact 8-slot (bottom 0..3, top 4..7) color combination for the 3D Crate Pad Hologram */
   slotHologramColors: PadSlotHologramPattern;
   iconKind: 'pistol' | 'rifle' | 'bazooka' | 'turret' | 'buddy' | 'truck' | 'tank' | 'plane';
+  /** Minimum Command Center level required to unlock/reveal and build this recipe */
+  requiresCommandCenterLevel?: 1 | 2 | 3;
+  /** True if this ordnance can only be dropped/fired while piloting the Lyo Fighter Plane */
+  onlyUsableByPlane?: boolean;
 }
 
 export const KIOSK_BUILD_PRIORITY_RECIPES: Record<
@@ -6595,16 +6662,63 @@ export const KIOSK_BUILD_PRIORITY_RECIPES: Record<
     slotHologramColors: ['super', 'super', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
     iconKind: 'turret',
   },
+  nuclear_launcher: {
+    id: 'nuclear_launcher',
+    category: 'weapons_heavy',
+    name: "MLRS-MK5 'ATLAS' NUCLEAR LAUNCHER",
+    caliberOrSpec: 'Tactical Nuke · Radar Lock Lv.3 (280m)',
+    recipeSummary: '2x2x1 Lantai · 2 Emas + 2 Biru (Wajib HQ Lv.3)',
+    buildOrder: '2x2x1',
+    targetCrates: 4,
+    slotHologramColors: ['legend', 'legend', 'super', 'super', 'empty', 'empty', 'empty', 'empty'],
+    iconKind: 'turret',
+    requiresCommandCenterLevel: 3,
+  },
   gatling_mortar: {
     id: 'gatling_mortar',
     category: 'weapons_heavy',
-    name: 'GATLING / HOMING MORTAR',
-    caliberOrSpec: '7.62x51mm Rotary · Tier 3 Berat',
+    name: 'TITAN-6 ROTARY GATLING',
+    caliberOrSpec: '7.62x51mm 6-Barrel Rotary · Tier 4 Heavy',
     recipeSummary: '2x2x1 · 2 Biru + 2 Merah',
     buildOrder: '2x2x1',
     targetCrates: 4,
     slotHologramColors: ['super', 'super', 'red', 'red', 'empty', 'empty', 'empty', 'empty'],
+    iconKind: 'rifle',
+  },
+  hand_grenade: {
+    id: 'hand_grenade',
+    category: 'weapons_light',
+    name: 'HG-04 FRAG GRENADE',
+    caliberOrSpec: 'Delay 3.5s · Tactical Fragmentation',
+    recipeSummary: '1x1x1 · 1 Peti Merah (Common)',
+    buildOrder: '1x1x1',
+    targetCrates: 1,
+    slotHologramColors: ['red', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
+    iconKind: 'bazooka',
+  },
+  land_mine: {
+    id: 'land_mine',
+    category: 'weapons_light',
+    name: 'TM-89 ANTI-VEHICLE MINE',
+    caliberOrSpec: 'Pressure Fuze · Anti-Tank & Infantry',
+    recipeSummary: '1x1x1 · 1 Peti Biru (Rare)',
+    buildOrder: '1x1x1',
+    targetCrates: 1,
+    slotHologramColors: ['super', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
     iconKind: 'turret',
+  },
+  cluster_bomb: {
+    id: 'cluster_bomb',
+    category: 'weapons_heavy',
+    name: 'CB-24 CLUSTER BOMB DISPENSER',
+    caliberOrSpec: '24x Submunition Bomblets · Khusus Pesawat (Lv.3)',
+    recipeSummary: '2x1x1 · 1 Emas + 1 Merah (Wajib HQ Lv.3 & Pesawat)',
+    buildOrder: '2x1x1',
+    targetCrates: 2,
+    slotHologramColors: ['legend', 'red', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
+    iconKind: 'bazooka',
+    requiresCommandCenterLevel: 3,
+    onlyUsableByPlane: true,
   },
   buddy_infantry: {
     id: 'buddy_infantry',
@@ -6756,7 +6870,7 @@ export function chooseNextPadSlotIndexForHologram(
 export function getRemainingNeededCrateKindsForHologram(
   slots: ReadonlyArray<CrateSlotType>,
   slotHologramColors: PadSlotHologramPattern | null,
-  inFlightCarriedCrates: ReadonlyArray<'red' | 'super' | 'legend'> = [],
+  inFlightCarriedCrates: ReadonlyArray<Exclude<WorldCrateKind, 'medical'>> = [],
 ): {
   unfilledSlotColors: Array<'red' | 'super' | 'legend'>;
   neededAfterInFlight: Array<'red' | 'super' | 'legend'>;
@@ -6773,6 +6887,7 @@ export function getRemainingNeededCrateKindsForHologram(
   }
   const neededAfterInFlight = [...unfilledSlotColors];
   for (const carried of inFlightCarriedCrates) {
+    if (carried === 'silver_metallic' || carried === 'gold_metallic') continue;
     const idx = neededAfterInFlight.indexOf(carried);
     if (idx !== -1) {
       neededAfterInFlight.splice(idx, 1);
@@ -6853,8 +6968,134 @@ export function evaluatePadHologramState(
 }
 
 /**
+ * Maximum number of build recipes that can be queued in the Tactical Kiosk Build Queue (`maximal 6 antrian`).
+ */
+export const MAX_KIOSK_BUILD_QUEUE = 6;
+
+/**
+ * Enqueues a build recipe (`recipeId`) into the Kiosk Build Queue (up to `MAX_KIOSK_BUILD_QUEUE = 6` items).
+ * Any buildable item in `KIOSK_BUILD_PRIORITY_RECIPES` (weapons, buddies, turrets, vehicles, aircraft)
+ * can be added into the continuous build queue.
+ */
+export function enqueueKioskBuildRecipe(
+  currentQueue: ReadonlyArray<KioskBuildPriorityRecipeId>,
+  recipeId: KioskBuildPriorityRecipeId,
+  maxQueue = MAX_KIOSK_BUILD_QUEUE,
+): {
+  enqueued: boolean;
+  queue: KioskBuildPriorityRecipeId[];
+  activeRecipe: KioskBuildPriorityRecipeId;
+  statusMessage: string;
+} {
+  const spec = KIOSK_BUILD_PRIORITY_RECIPES[recipeId];
+  const label = spec ? spec.name.toUpperCase() : recipeId.toUpperCase();
+  if (currentQueue.length >= maxQueue) {
+    return {
+      enqueued: false,
+      queue: [...currentQueue],
+      activeRecipe: currentQueue[0] ?? recipeId,
+      statusMessage: `ANTRIAN BUILD PENUH (${currentQueue.length}/${maxQueue})! TUNGGU ATAU HAPUS ANTRIAN.`,
+    };
+  }
+  const nextQueue = [...currentQueue, recipeId];
+  const activeRecipe = nextQueue[0];
+  return {
+    enqueued: true,
+    queue: nextQueue,
+    activeRecipe,
+    statusMessage:
+      nextQueue.length === 1
+        ? `MULAI BUILD (1/${maxQueue}): ${label} (${spec?.targetCrates ?? 1} PETI)`
+        : `MASUK ANTRIAN BUILD (${nextQueue.length}/${maxQueue}): ${label}`,
+  };
+}
+
+/**
+ * Removes an item at `index` from the Kiosk Build Queue.
+ */
+export function removeKioskBuildQueueAtIndex(
+  currentQueue: ReadonlyArray<KioskBuildPriorityRecipeId>,
+  index: number,
+): {
+  queue: KioskBuildPriorityRecipeId[];
+  activeRecipe: KioskBuildPriorityRecipeId | null;
+} {
+  if (index < 0 || index >= currentQueue.length) {
+    return {
+      queue: [...currentQueue],
+      activeRecipe: currentQueue[0] ?? null,
+    };
+  }
+  const nextQueue = currentQueue.filter((_, i) => i !== index);
+  return {
+    queue: nextQueue,
+    activeRecipe: nextQueue[0] ?? null,
+  };
+}
+
+/**
+ * Advances the Kiosk Build Queue when the active front recipe (`currentQueue[0]`) finishes crafting/bursting on the Stacking Pad.
+ */
+export function advanceKioskBuildQueueOnCraft(
+  currentQueue: ReadonlyArray<KioskBuildPriorityRecipeId>,
+): {
+  queue: KioskBuildPriorityRecipeId[];
+  nextActiveRecipe: KioskBuildPriorityRecipeId | null;
+  hasMoreQueued: boolean;
+} {
+  const nextQueue = currentQueue.length > 0 ? currentQueue.slice(1) : [];
+  return {
+    queue: nextQueue,
+    nextActiveRecipe: nextQueue[0] ?? null,
+    hasMoreQueued: nextQueue.length > 0,
+  };
+}
+
+/**
+ * Checks whether a crate or pickup at `(x, z)` is located inside a teammate's base plot (`idx !== unitOwnerCommanderId`)
+ * or inside the enemy team's base compound (`ai jangan menargetkan mengambil box yang berada di dalam base teman atau musuh`).
+ */
+export function isCrateInsideOtherOrEnemyBase(
+  x: number,
+  z: number,
+  unitTeam: 'blue' | 'red',
+  unitOwnerCommanderId: number,
+): boolean {
+  const halfPlotWidthWithMargin = INDIVIDUAL_BASE_LEVEL_SPECS.plotWidth * 0.5 + 1.0; // 11.5m
+  const halfPlotDepthWithMargin = INDIVIDUAL_BASE_LEVEL_SPECS.plotDepth * 0.5 + 1.5; // 18.5m
+
+  // 1. Check Enemy Base Compound (all 4 enemy plots + compound perimeter)
+  const enemyCenterZ =
+    unitTeam === 'blue'
+      ? INDIVIDUAL_BASE_LEVEL_SPECS.redBaseCenterZ
+      : INDIVIDUAL_BASE_LEVEL_SPECS.blueBaseCenterZ;
+  if (Math.abs(x) <= 58.0 && Math.abs(z - enemyCenterZ) <= halfPlotDepthWithMargin) {
+    return true;
+  }
+
+  // 2. Check Teammate Base Plots (`same team`, `idx !== unitOwnerCommanderId`)
+  const sameTeamSign = unitTeam === 'blue' ? 1 : -1;
+  const sameTeamCenterZ =
+    unitTeam === 'blue'
+      ? INDIVIDUAL_BASE_LEVEL_SPECS.blueBaseCenterZ
+      : INDIVIDUAL_BASE_LEVEL_SPECS.redBaseCenterZ;
+  if (Math.abs(z - sameTeamCenterZ) <= halfPlotDepthWithMargin) {
+    for (let idx = 0; idx < INDIVIDUAL_BASE_LEVEL_SPECS.basePlotCentersX.length; idx++) {
+      if (idx === unitOwnerCommanderId) continue;
+      const plotCenterX = sameTeamSign * INDIVIDUAL_BASE_LEVEL_SPECS.basePlotCentersX[idx];
+      if (Math.abs(x - plotCenterX) <= halfPlotWidthWithMargin) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * Smart, recipe-aware crate selector for AI Buddy harvesters:
  * - NEVER selects `'medical'` crates (which cannot be placed on a Stacking Pad).
+ * - NEVER selects crates located inside a teammate's base plot or enemy's base (`isCrateInsideOtherOrEnemyBase`).
  * - When a hologram recipe (`slotHologramColors`) is active on the owner's pad, strictly selects
  *   ONLY grounded crates whose color matches the remaining unfilled hologram slots (`neededAfterInFlight`),
  *   choosing the closest matching crate and never grabbing random wrong-colored crates!
@@ -6872,8 +7113,10 @@ export function selectSmartCrateForAiHarvester<
   crates: ReadonlyArray<TCrate>,
   slots: ReadonlyArray<CrateSlotType>,
   slotHologramColors: PadSlotHologramPattern | null,
-  inFlightCarriedCrates: ReadonlyArray<'red' | 'super' | 'legend'> = [],
+  inFlightCarriedCrates: ReadonlyArray<Exclude<WorldCrateKind, 'medical'>> = [],
   strictHologramMatch = true,
+  unitTeam: 'blue' | 'red' = 'blue',
+  unitOwnerCommanderId = 0,
 ): {
   selectedCrate: TCrate | null;
   distance: number | null;
@@ -6903,7 +7146,14 @@ export function selectSmartCrateForAiHarvester<
     for (let i = 0; i < crates.length; i++) {
       const c = crates[i];
       if (c.state !== 'grounded' || c.kind === 'medical') continue;
-      if (!neededAfterInFlight.includes(c.kind)) continue;
+      if (isCrateInsideOtherOrEnemyBase(c.x, c.z, unitTeam, unitOwnerCommanderId)) continue;
+      if (
+        c.kind !== 'silver_metallic' &&
+        c.kind !== 'gold_metallic' &&
+        !neededAfterInFlight.includes(c.kind)
+      ) {
+        continue;
+      }
       const d = Math.hypot(c.x - buddyX, c.z - buddyZ);
       if (d < bestMatchingDist) {
         bestMatchingDist = d;
@@ -6922,7 +7172,7 @@ export function selectSmartCrateForAiHarvester<
   }
 
   // Fallback for generic AI pads without a strict hologram recipe:
-  // Never pick up 'medical' crates, and prefer the closest crate matching the existing pad color (or 'red' for standard builds)
+  // Never pick up 'medical' crates or crates inside teammate/enemy bases, and prefer the closest crate matching the existing pad color (or 'red' for standard builds)
   const existingPadColor = slots.find((s) => s !== 'empty') ?? null;
   let bestFallbackCrate: TCrate | null = null;
   let bestFallbackScore = Infinity;
@@ -6931,6 +7181,7 @@ export function selectSmartCrateForAiHarvester<
   for (let i = 0; i < crates.length; i++) {
     const c = crates[i];
     if (c.state !== 'grounded' || c.kind === 'medical') continue;
+    if (isCrateInsideOtherOrEnemyBase(c.x, c.z, unitTeam, unitOwnerCommanderId)) continue;
     const d = Math.hypot(c.x - buddyX, c.z - buddyZ);
     // Prefer matching the color already on the pad so recipes stay pure instead of random mixed colors!
     const colorPenalty =
@@ -6953,6 +7204,7 @@ export function selectSmartCrateForAiHarvester<
 
 export type KioskBaseGoldUpgradeId =
   | 'upgrade_base_combo'
+  | 'upgrade_super_command_lv3'
   | 'upgrade_building_only'
   | 'upgrade_fence_only'
   | 'build_parking_gold'
@@ -6997,6 +7249,19 @@ export function getCommanderBaseGoldUpgradeSpecs(
           ? 'Command Center + Pagar Besi Naik Level Sekaligus'
           : 'Pulihkan 100% HP Command Center & Pagar',
       costGold: comboCost,
+      alreadyMaxed: bothMax,
+    },
+    upgrade_super_command_lv3: {
+      id: 'upgrade_super_command_lv3',
+      name:
+        bLv < 3 || fLv < 3
+          ? '3-STORY SUPER COMMAND (BUKA HQ LV.3 MAX)'
+          : 'REPARASI PENUH SUPER COMMAND LV.3',
+      subtitle:
+        bLv < 3 || fLv < 3
+          ? 'Langsung Buka Command Center Lv.3, Radar 280m, Nuclear Launcher & Cluster Bomb'
+          : 'Pulihkan 100% HP Super Command Center Lv.3 & Pagar',
+      costGold: bLv < 3 || fLv < 3 ? 1200 : 800,
       alreadyMaxed: bothMax,
     },
     upgrade_building_only: {
@@ -7077,6 +7342,7 @@ export function applyCommanderBaseGoldUpgrade(
     if (base.buildingLevel < 3) {
       const nextBLv = (base.buildingLevel + 1) as 2 | 3;
       base.buildingLevel = nextBLv;
+      base.commandCenterLevel = nextBLv;
       base.buildingMaxHp = INDIVIDUAL_BASE_LEVEL_SPECS.buildingMaxHpByLevel[nextBLv - 1];
     }
     base.buildingHp = base.buildingMaxHp;
@@ -7096,10 +7362,28 @@ export function applyCommanderBaseGoldUpgrade(
     };
   }
 
+  if (upgradeId === 'upgrade_super_command_lv3') {
+    base.buildingLevel = 3;
+    base.commandCenterLevel = 3;
+    base.buildingMaxHp = INDIVIDUAL_BASE_LEVEL_SPECS.buildingMaxHpByLevel[2];
+    base.buildingHp = base.buildingMaxHp;
+    base.fenceLevel = 3;
+    base.fenceMaxHp = INDIVIDUAL_BASE_LEVEL_SPECS.fenceTotalMaxHpByLevel[2];
+    base.fenceHp = base.fenceMaxHp;
+    return {
+      upgraded: true,
+      nextGold,
+      spentGold: spec.costGold,
+      message:
+        'SUPER COMMAND LV.3 AKTIF! Nuclear Launcher & CB-24 Cluster Bomb Sekarang Terbuka!',
+    };
+  }
+
   if (upgradeId === 'upgrade_building_only') {
     if (base.buildingLevel < 3) {
       const nextBLv = (base.buildingLevel + 1) as 2 | 3;
       base.buildingLevel = nextBLv;
+      base.commandCenterLevel = nextBLv;
       base.buildingMaxHp = INDIVIDUAL_BASE_LEVEL_SPECS.buildingMaxHpByLevel[nextBLv - 1];
     }
     base.buildingHp = base.buildingMaxHp;
@@ -7158,7 +7442,10 @@ export interface KioskCrateAirdropShopItem {
   accentHex: string;
 }
 
-export const KIOSK_CRATE_AIRDROP_SHOP: Record<WorldCrateKind, KioskCrateAirdropShopItem> = {
+export const KIOSK_CRATE_AIRDROP_SHOP: Record<
+  'red' | 'super' | 'legend' | 'medical',
+  KioskCrateAirdropShopItem
+> = {
   red: {
     kind: 'red',
     name: 'PETI STANDAR (COMMON)',
@@ -7203,7 +7490,8 @@ export function purchaseCrateAirdropWithGold(
   airdropCrateKind: WorldCrateKind | null;
   message: string;
 } {
-  const item = KIOSK_CRATE_AIRDROP_SHOP[crateKind];
+  const item =
+    KIOSK_CRATE_AIRDROP_SHOP[crateKind as keyof typeof KIOSK_CRATE_AIRDROP_SHOP];
   if (!item) {
     return {
       purchased: false,
@@ -7232,50 +7520,290 @@ export function purchaseCrateAirdropWithGold(
 }
 
 // ============================================================================
-// COMMAND CENTER RADAR COVERAGE & MINIMAP CALIBRATION
+// CHUNK-SYNCED FOG OF WAR & PERSONAL COMMAND CENTER RADAR COVERAGE
 // ============================================================================
 
 /** Half-extent (in meters) of the calibrated square radar map [-125, +125] x [-125, +125]. */
 export const RADAR_WORLD_HALF_EXTENT = 125.0;
 
+/** 3D Grass Chunk streaming field diameter (`fieldSize = 42.0m`) and outer radius (`21.0m`) around player */
+export const GRASS_CHUNK_FIELD_SIZE = 42.0;
+export const GRASS_CHUNK_STREAM_RADIUS = 21.0;
+export const GRASS_CHUNK_FADE_START_RADIUS = 18.9; // 90% of 21.0m (`smoothstep(0.90, 1.0, dist / halfField)`)
+
+/** Y-offset applied to Land Mines placed on grass so they sit camouflaged among the 3D grass blades */
+export const LAND_MINE_GRASS_Y_OFFSET = -0.04;
+
+export interface GrassChunkVisibilityResult {
+  visible: boolean;
+  /** Smooth 0..1 scale/fade factor matching the 3D grass shader's inner edge (`18.9m .. 21.0m`) */
+  scaleFactor: number;
+  distance: number;
+}
+
+/**
+ * Evaluates 3D visibility and smooth scale/fade transition synchronized with the player's
+ * 3D grass chunk streaming radius (`GRASS_CHUNK_STREAM_RADIUS = 21.0m`, inner fade `18.9m..21.0m`).
+ * - Inside `18.9m`: `visible = true, scaleFactor = 1.0`
+ * - Between `18.9m` and `21.0m`: `visible = true`, smooth cubic Hermite fade from `1.0` down to `0.0`
+ * - Outside `21.0m`: `visible = false, scaleFactor = 0.0`
+ */
+export function evaluateGrassChunkVisibilityFactor(
+  targetX: number,
+  targetZ: number,
+  viewerX: number,
+  viewerZ: number,
+  innerFadeRadius: number = GRASS_CHUNK_FADE_START_RADIUS,
+  outerRadius: number = GRASS_CHUNK_STREAM_RADIUS,
+): GrassChunkVisibilityResult {
+  const distance = Math.hypot(targetX - viewerX, targetZ - viewerZ);
+  if (distance >= outerRadius) {
+    return {
+      visible: false,
+      scaleFactor: 0,
+      distance,
+    };
+  }
+  if (distance <= innerFadeRadius) {
+    return {
+      visible: true,
+      scaleFactor: 1,
+      distance,
+    };
+  }
+  const t = clamp(
+    (distance - innerFadeRadius) / Math.max(1e-4, outerRadius - innerFadeRadius),
+    0,
+    1,
+  );
+  const smooth = t * t * (3 - 2 * t);
+  const scaleFactor = Math.max(0.02, 1 - smooth);
+  return {
+    visible: true,
+    scaleFactor,
+    distance,
+  };
+}
+
+/**
+ * Computes the vertical Y offset for a Land Mine (`land_mine`) based on the local grass mask (`0..1`).
+ * When placed in a grassy area (`grassMask > 0.25`), lowers Y by `-0.04m` so it is camouflaged among grass blades.
+ */
+export function computeLandMineGrassYOffset(grassMask: number): number {
+  return grassMask > 0.25 ? LAND_MINE_GRASS_Y_OFFSET : 0.0;
+}
+
 export interface CommandCenterRadarSpec {
   level: 1 | 2 | 3;
-  /** Scan radius (in meters) radiating from the Blue Base Command Center complex */
+  /** Map coverage percentage from the player's Command Center (Lv.1 = 45%, Lv.2 = 75%, Lv.3 = 100%) */
+  coveragePct: 45 | 75 | 100;
+  /** Scan radius (in meters) radiating from the player's personal Command Center when operator is active */
   baseRadarRadius: number;
-  /** Local personal scan radius (in meters) around the active Player character/vehicle */
+  /** Local personal scan radius (in meters) around the active Player character/vehicle, synced with 3D grass chunk radius (21.0m) */
   playerVisionRadius: number;
-  /** True at Level 3 when satellite radar unlocks 100% of the arena */
+  /** True at Level 3 when an active radar operator unlocks 100% of the arena */
   fullMapUnlocked: boolean;
+  /** Whether the long-range Command Center radar is currently manned & active */
+  radarActive: boolean;
   /** Short HUD badge label */
   label: string;
 }
 
-export function evaluateCommandCenterRadarSpec(buildingLevel: number): CommandCenterRadarSpec {
+/**
+ * Evaluates the personal Command Center radar specification for a given Command Center level (`1 | 2 | 3`)
+ * and operator activation state (`radarActive`):
+ * - `playerVisionRadius` is strictly synchronized with `GRASS_CHUNK_STREAM_RADIUS` (`21.0m`).
+ * - When `radarActive === true`:
+ *   - Level 1 = 45% map coverage (`112.5m` radius from Command Center)
+ *   - Level 2 = 75% map coverage (`187.5m` radius from Command Center)
+ *   - Level 3 = 100% map coverage (`280.0m` radius / full map unlocked)
+ * - When `radarActive === false`:
+ *   - Long-range Command Center radar is OFF (`baseRadarRadius = 0`, `fullMapUnlocked = false`);
+ *     the dark Fog of War area on the Minimap is completely blind outside the player's 21m circle.
+ */
+export function evaluateCommandCenterRadarSpec(
+  buildingLevel: number,
+  radarActive = true,
+): CommandCenterRadarSpec {
   const lv: 1 | 2 | 3 = buildingLevel >= 3 ? 3 : buildingLevel === 2 ? 2 : 1;
+  const fullMapSpan = RADAR_WORLD_HALF_EXTENT * 2.0; // 250.0m
+  if (!radarActive) {
+    const coveragePct: 45 | 75 | 100 = lv === 3 ? 100 : lv === 2 ? 75 : 45;
+    return {
+      level: lv,
+      coveragePct,
+      baseRadarRadius: 0,
+      playerVisionRadius: GRASS_CHUNK_STREAM_RADIUS,
+      fullMapUnlocked: false,
+      radarActive: false,
+      label: `RADAR LV.${lv} · MATI (BUTUH DEFEND)`,
+    };
+  }
   if (lv === 3) {
     return {
       level: 3,
+      coveragePct: 100,
       baseRadarRadius: 280.0,
-      playerVisionRadius: 65.0,
+      playerVisionRadius: GRASS_CHUNK_STREAM_RADIUS,
       fullMapUnlocked: true,
-      label: 'RADAR LV.3 · MAX',
+      radarActive: true,
+      label: 'RADAR LV.3 · 100% MAP',
     };
   }
   if (lv === 2) {
     return {
       level: 2,
-      baseRadarRadius: 152.0,
-      playerVisionRadius: 44.0,
+      coveragePct: 75,
+      baseRadarRadius: fullMapSpan * 0.75, // 187.5m (75% map)
+      playerVisionRadius: GRASS_CHUNK_STREAM_RADIUS,
       fullMapUnlocked: false,
-      label: 'RADAR LV.2 · 152m',
+      radarActive: true,
+      label: 'RADAR LV.2 · 75% MAP',
     };
   }
   return {
     level: 1,
-    baseRadarRadius: 92.0,
-    playerVisionRadius: 32.0,
+    coveragePct: 45,
+    baseRadarRadius: fullMapSpan * 0.45, // 112.5m (45% map)
+    playerVisionRadius: GRASS_CHUNK_STREAM_RADIUS,
     fullMapUnlocked: false,
-    label: 'RADAR LV.1 · 92m',
+    radarActive: true,
+    label: 'RADAR LV.1 · 45% MAP',
+  };
+}
+
+/**
+ * Checks whether a position `(unitX, unitZ)` is inside the personal Command Center / base plot area
+ * of `base` (either within 13.5m of the Command Center building or inside the plot's perimeter footprint).
+ */
+export function isUnitInPersonalCommandCenterArea(
+  unitX: number,
+  unitZ: number,
+  base: Pick<
+    IndividualCommanderBaseState,
+    'plotCenterX' | 'plotCenterZ' | 'buildingX' | 'buildingZ' | 'destroyed'
+  >,
+): boolean {
+  if (base.destroyed) return false;
+  const distToBuilding = Math.hypot(unitX - base.buildingX, unitZ - base.buildingZ);
+  if (distToBuilding <= 13.5) return true;
+  const halfW = INDIVIDUAL_BASE_LEVEL_SPECS.plotWidth * 0.5 + 1.5; // 12.0m
+  const halfD = INDIVIDUAL_BASE_LEVEL_SPECS.plotDepth * 0.5 + 1.5; // 18.5m
+  return (
+    Math.abs(unitX - base.plotCenterX) <= halfW &&
+    Math.abs(unitZ - base.plotCenterZ) <= halfD
+  );
+}
+
+export interface RadarOperatorCandidateUnit {
+  id: number;
+  team: 'blue' | 'red';
+  ownerCommanderId: number;
+  alive: boolean;
+  command: 'FOLLOW' | 'ATTACK' | 'HARVEST' | 'DEFEND' | 'MOUNT';
+  x: number;
+  z: number;
+}
+
+export interface PersonalCommandCenterRadarOperatorStatus {
+  radarActive: boolean;
+  operatorSource: 'own_defend_unit' | 'player_in_command_center' | 'none';
+  operatorUnitId: number | null;
+  commandCenterLevel: 1 | 2 | 3;
+  coveragePct: 45 | 75 | 100;
+  baseRadarRadius: number;
+  playerVisionRadius: number;
+}
+
+/**
+ * Evaluates whether a commander's Personal Command Center Radar is active:
+ * - Each base and strategy is the sole responsibility of that plot/base owner
+ *   (teammates or allied AI commanders with `ownerCommanderId !== base.commanderIdx` CANNOT activate our radar).
+ * - Long-range Command Center Radar is ONLY active (`radarActive = true`) if:
+ *   1. At least 1 living squad unit owned by that player (`u.team === base.team && u.ownerCommanderId === base.commanderIdx && u.alive`)
+ *      is set to role `DEFEND` (`u.command === 'DEFEND'`) and stationed inside their own Command Center / base area, OR
+ *   2. The player's own main character (`playerMainCharacter`) is alive and currently inside their own Command Center / base area.
+ */
+export function evaluatePersonalCommandCenterRadarOperator(
+  base: IndividualCommanderBaseState,
+  squadUnits: ReadonlyArray<RadarOperatorCandidateUnit>,
+  playerMainCharacter?: {
+    team: 'blue' | 'red';
+    ownerCommanderId: number;
+    alive: boolean;
+    x: number;
+    z: number;
+  } | null,
+): PersonalCommandCenterRadarOperatorStatus {
+  const lv: 1 | 2 | 3 =
+    (base.commandCenterLevel ?? base.buildingLevel) >= 3
+      ? 3
+      : (base.commandCenterLevel ?? base.buildingLevel) === 2
+        ? 2
+        : 1;
+
+  if (base.destroyed || base.buildingHp <= 0) {
+    const specOff = evaluateCommandCenterRadarSpec(lv, false);
+    return {
+      radarActive: false,
+      operatorSource: 'none',
+      operatorUnitId: null,
+      commandCenterLevel: lv,
+      coveragePct: specOff.coveragePct,
+      baseRadarRadius: 0,
+      playerVisionRadius: specOff.playerVisionRadius,
+    };
+  }
+
+  for (let i = 0; i < squadUnits.length; i++) {
+    const u = squadUnits[i];
+    if (!u.alive) continue;
+    if (u.team !== base.team) continue;
+    // Strictly require own squad unit (teammates/AI allies cannot activate our base radar)
+    if (u.ownerCommanderId !== base.commanderIdx) continue;
+    if (u.command !== 'DEFEND') continue;
+    if (isUnitInPersonalCommandCenterArea(u.x, u.z, base)) {
+      const specOn = evaluateCommandCenterRadarSpec(lv, true);
+      return {
+        radarActive: true,
+        operatorSource: 'own_defend_unit',
+        operatorUnitId: u.id,
+        commandCenterLevel: lv,
+        coveragePct: specOn.coveragePct,
+        baseRadarRadius: specOn.baseRadarRadius,
+        playerVisionRadius: specOn.playerVisionRadius,
+      };
+    }
+  }
+
+  if (
+    playerMainCharacter &&
+    playerMainCharacter.alive &&
+    playerMainCharacter.team === base.team &&
+    playerMainCharacter.ownerCommanderId === base.commanderIdx &&
+    isUnitInPersonalCommandCenterArea(playerMainCharacter.x, playerMainCharacter.z, base)
+  ) {
+    const specOn = evaluateCommandCenterRadarSpec(lv, true);
+    return {
+      radarActive: true,
+      operatorSource: 'player_in_command_center',
+      operatorUnitId: null,
+      commandCenterLevel: lv,
+      coveragePct: specOn.coveragePct,
+      baseRadarRadius: specOn.baseRadarRadius,
+      playerVisionRadius: specOn.playerVisionRadius,
+    };
+  }
+
+  const specOff = evaluateCommandCenterRadarSpec(lv, false);
+  return {
+    radarActive: false,
+    operatorSource: 'none',
+    operatorUnitId: null,
+    commandCenterLevel: lv,
+    coveragePct: specOff.coveragePct,
+    baseRadarRadius: 0,
+    playerVisionRadius: specOff.playerVisionRadius,
   };
 }
 
@@ -7299,14 +7827,1473 @@ export function isPointVisibleOnCommandCenterRadar(
   baseCenterZ: number,
   playerX: number,
   playerZ: number,
+  radarActive = true,
 ): boolean {
   if (isFriendlyOrSelf) return true;
-  const spec = evaluateCommandCenterRadarSpec(buildingLevel);
+  const spec = evaluateCommandCenterRadarSpec(buildingLevel, radarActive);
+  const distFromPlayer = Math.hypot(targetX - playerX, targetZ - playerZ);
+  if (distFromPlayer <= spec.playerVisionRadius) return true;
+  if (!spec.radarActive) return false;
   if (spec.fullMapUnlocked) return true;
   const distFromBase = Math.hypot(targetX - baseCenterX, targetZ - baseCenterZ);
-  if (distFromBase <= spec.baseRadarRadius) return true;
-  const distFromPlayer = Math.hypot(targetX - playerX, targetZ - playerZ);
-  return distFromPlayer <= spec.playerVisionRadius;
+  return distFromBase <= spec.baseRadarRadius;
+}
+
+export interface NuclearLauncherAccessEvaluation {
+  allowed: boolean;
+  isRevealed: boolean;
+  requiredLevel: 3;
+  currentLevel: 1 | 2 | 3;
+  maxLockRangeMeters: number;
+  statusMessage: string;
+}
+
+/**
+ * Evaluates whether the Tactical Nuclear Missile Launcher (`MLRS-MK5 'ATLAS'`) is revealed and buildable:
+ * - At Command Center Lv.1 or Lv.2: Locked & hidden as a black silhouette with `?` (`isRevealed: false`, `allowed: false`).
+ * - At Command Center Lv.3: Revealed in full 1:1 detail (`isRevealed: true`, `allowed: true`) with full-map 280m radar lock range.
+ */
+export function evaluateNuclearLauncherAccess(
+  buildingLevel: number,
+): NuclearLauncherAccessEvaluation {
+  const lv: 1 | 2 | 3 = buildingLevel >= 3 ? 3 : buildingLevel === 2 ? 2 : 1;
+  if (lv >= 3) {
+    return {
+      allowed: true,
+      isRevealed: true,
+      requiredLevel: 3,
+      currentLevel: 3,
+      maxLockRangeMeters: 280.0,
+      statusMessage:
+        "COMMAND CENTER LV.3 AKTIF: Radar 280m siap mengunci target jarak jauh untuk MLRS-MK5 'ATLAS' Nuclear Launcher!",
+    };
+  }
+  return {
+    allowed: false,
+    isRevealed: false,
+    requiredLevel: 3,
+    currentLevel: lv,
+    maxLockRangeMeters: 0,
+    statusMessage: `TERKUNCI! Butuh Command Center Lv.3 (Saat ini Lv.${lv}) agar Radar Jarak Jauh dapat mengunci target Nuclear Launcher!`,
+  };
+}
+
+export interface ClusterBombAccessEvaluation {
+  allowedToBuild: boolean;
+  isRevealed: boolean;
+  canDropNow: boolean;
+  onlyUsableByPlane: true;
+  requiredLevel: 3;
+  currentLevel: 1 | 2 | 3;
+  statusMessage: string;
+}
+
+/**
+ * Evaluates whether the CB-24 Cluster Bomb (`cluster_bomb`) is revealed in the Kiosk and whether it can be dropped:
+ * - At Command Center Lv.1 or Lv.2: Locked & hidden as a pure black silhouette + `?` (`isRevealed: false`, `allowedToBuild: false`).
+ * - At Command Center Lv.3: Revealed in full 1:1 detail (`isRevealed: true`, `allowedToBuild: true`),
+ *   and can ONLY be dropped while piloting the Lyo Fighter Plane (`canDropNow = isPilotingPlane`).
+ */
+export function evaluateClusterBombAccess(
+  buildingLevel: number,
+  isPilotingPlane = false,
+): ClusterBombAccessEvaluation {
+  const lv: 1 | 2 | 3 = buildingLevel >= 3 ? 3 : buildingLevel === 2 ? 2 : 1;
+  if (lv < 3) {
+    return {
+      allowedToBuild: false,
+      isRevealed: false,
+      canDropNow: false,
+      onlyUsableByPlane: true,
+      requiredLevel: 3,
+      currentLevel: lv,
+      statusMessage: `TERKUNCI! Butuh Command Center Lv.3 (Saat ini Lv.${lv}) untuk membuka CB-24 Cluster Bomb!`,
+    };
+  }
+  return {
+    allowedToBuild: true,
+    isRevealed: true,
+    canDropNow: isPilotingPlane,
+    onlyUsableByPlane: true,
+    requiredLevel: 3,
+    currentLevel: 3,
+    statusMessage: isPilotingPlane
+      ? 'CB-24 CLUSTER BOMB SIAP DIJATUHKAN DARI PESAWAT TEMPUR!'
+      : 'KHUSUS PESAWAT! CB-24 Cluster Bomb hanya bisa dijatuhkan saat mengendarai Pesawat Tempur (Lyo Plane)!',
+  };
+}
+
+export type NuclearStrikePhase =
+  | 'idle'
+  | 'targeting'
+  | 'tracking_rocket'
+  | 'watching_explosion'
+  | 'returning';
+
+export interface NuclearStrikeSequenceState {
+  phase: NuclearStrikePhase;
+  phaseElapsedSec: number;
+  originPlayerPos: Vec3;
+  launchPos: Vec3;
+  targetPos: Vec3;
+  rocketPos: Vec3;
+  rocketTangent: Vec3;
+  flightDurationSec: number;
+  explosionWatchDurationSec: number;
+  returnDurationSec: number;
+  hasDetonated: boolean;
+}
+
+function smoothstep01(edge0: number, edge1: number, x: number): number {
+  const t = clamp((x - edge0) / Math.max(1e-6, edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+export function createInitialNuclearStrikeState(): NuclearStrikeSequenceState {
+  return {
+    phase: 'idle',
+    phaseElapsedSec: 0,
+    originPlayerPos: { x: 0, y: 1, z: 0 },
+    launchPos: { x: 0, y: 2.35, z: 0 },
+    targetPos: { x: 0, y: 0, z: -24 },
+    rocketPos: { x: 0, y: 2.35, z: 0 },
+    rocketTangent: { x: 0, y: 0.7, z: -0.7 },
+    flightDurationSec: 2.55,
+    explosionWatchDurationSec: 2.15,
+    returnDurationSec: 1.15,
+    hasDetonated: false,
+  };
+}
+
+export function beginNuclearStrikeTargeting(
+  originPlayerPos: Vec3,
+  launchPos: Vec3,
+  initialTargetPos: Vec3,
+): NuclearStrikeSequenceState {
+  return {
+    phase: 'targeting',
+    phaseElapsedSec: 0,
+    originPlayerPos: { ...originPlayerPos },
+    launchPos: { ...launchPos },
+    targetPos: {
+      x: clamp(initialTargetPos.x, -96, 96),
+      y: initialTargetPos.y,
+      z: clamp(initialTargetPos.z, -96, 96),
+    },
+    rocketPos: { ...launchPos },
+    rocketTangent: { x: 0, y: 1, z: 0 },
+    flightDurationSec: 2.55,
+    explosionWatchDurationSec: 2.15,
+    returnDurationSec: 1.15,
+    hasDetonated: false,
+  };
+}
+
+export function updateNuclearStrikeTargetCursor(
+  state: NuclearStrikeSequenceState,
+  cursorX: number,
+  cursorY: number,
+  cursorZ: number,
+  maxRangeMeters = 280.0,
+): NuclearStrikeSequenceState {
+  if (state.phase !== 'targeting') return state;
+  let tx = clamp(cursorX, -96, 96);
+  let tz = clamp(cursorZ, -96, 96);
+  const dx = tx - state.launchPos.x;
+  const dz = tz - state.launchPos.z;
+  const dist = Math.hypot(dx, dz);
+  if (dist > maxRangeMeters && dist > 1e-5) {
+    const s = maxRangeMeters / dist;
+    tx = clamp(state.launchPos.x + dx * s, -96, 96);
+    tz = clamp(state.launchPos.z + dz * s, -96, 96);
+  }
+  return {
+    ...state,
+    targetPos: { x: tx, y: cursorY, z: tz },
+  };
+}
+
+export function confirmNuclearStrikeTargetAndLaunch(
+  state: NuclearStrikeSequenceState,
+  overrideTargetPos?: Vec3,
+): NuclearStrikeSequenceState {
+  const finalTarget = overrideTargetPos
+    ? {
+        x: clamp(overrideTargetPos.x, -96, 96),
+        y: overrideTargetPos.y,
+        z: clamp(overrideTargetPos.z, -96, 96),
+      }
+    : { ...state.targetPos };
+  const dx = finalTarget.x - state.launchPos.x;
+  const dz = finalTarget.z - state.launchPos.z;
+  const horizDist = Math.hypot(dx, dz);
+  // Ensure even short-range or long-range launches have a smooth, dramatic flight time (2.1s .. 2.85s)
+  const flightDurationSec = clamp(1.95 + horizDist * 0.0085, 2.1, 2.85);
+  const arcPeak = Math.max(18.0, Math.min(34.0, horizDist * 0.28 + 12.0));
+  const initDy = finalTarget.y - state.launchPos.y + 4.0 * arcPeak;
+  const tLen = Math.hypot(dx, initDy, dz) || 1;
+
+  return {
+    ...state,
+    phase: 'tracking_rocket',
+    phaseElapsedSec: 0,
+    targetPos: finalTarget,
+    rocketPos: { ...state.launchPos },
+    rocketTangent: { x: dx / tLen, y: initDy / tLen, z: dz / tLen },
+    flightDurationSec,
+    hasDetonated: false,
+  };
+}
+
+export function stepNuclearStrikeSequence(
+  state: NuclearStrikeSequenceState,
+  dt: number,
+  currentOriginPlayerPos?: Vec3,
+): {
+  state: NuclearStrikeSequenceState;
+  justDetonated: boolean;
+  justCompletedReturn: boolean;
+} {
+  if (state.phase === 'idle') {
+    return { state, justDetonated: false, justCompletedReturn: false };
+  }
+
+  const nextOrigin = currentOriginPlayerPos ? { ...currentOriginPlayerPos } : state.originPlayerPos;
+  const nextElapsed = state.phaseElapsedSec + Math.max(0, dt);
+
+  if (state.phase === 'targeting') {
+    return {
+      state: {
+        ...state,
+        phaseElapsedSec: nextElapsed,
+        originPlayerPos: nextOrigin,
+      },
+      justDetonated: false,
+      justCompletedReturn: false,
+    };
+  }
+
+  if (state.phase === 'tracking_rocket') {
+    const u = clamp(nextElapsed / Math.max(0.1, state.flightDurationSec), 0, 1);
+    const dx = state.targetPos.x - state.launchPos.x;
+    const dz = state.targetPos.z - state.launchPos.z;
+    const dyBase = state.targetPos.y - state.launchPos.y;
+    const horizDist = Math.hypot(dx, dz);
+    const arcPeak = Math.max(18.0, Math.min(34.0, horizDist * 0.28 + 12.0));
+
+    const rx = state.launchPos.x + dx * u;
+    const rz = state.launchPos.z + dz * u;
+    const ry = state.launchPos.y + dyBase * u + 4.0 * arcPeak * u * (1.0 - u);
+
+    const tangDy = dyBase + 4.0 * arcPeak * (1.0 - 2.0 * u);
+    const tangLen = Math.hypot(dx, tangDy, dz) || 1;
+    const rocketTangent: Vec3 = {
+      x: dx / tangLen,
+      y: tangDy / tangLen,
+      z: dz / tangLen,
+    };
+
+    if (u >= 1.0) {
+      return {
+        state: {
+          ...state,
+          phase: 'watching_explosion',
+          phaseElapsedSec: 0,
+          originPlayerPos: nextOrigin,
+          rocketPos: { ...state.targetPos },
+          rocketTangent,
+          hasDetonated: true,
+        },
+        justDetonated: true,
+        justCompletedReturn: false,
+      };
+    }
+
+    return {
+      state: {
+        ...state,
+        phaseElapsedSec: nextElapsed,
+        originPlayerPos: nextOrigin,
+        rocketPos: { x: rx, y: ry, z: rz },
+        rocketTangent,
+      },
+      justDetonated: false,
+      justCompletedReturn: false,
+    };
+  }
+
+  if (state.phase === 'watching_explosion') {
+    if (nextElapsed >= state.explosionWatchDurationSec) {
+      return {
+        state: {
+          ...state,
+          phase: 'returning',
+          phaseElapsedSec: 0,
+          originPlayerPos: nextOrigin,
+        },
+        justDetonated: false,
+        justCompletedReturn: false,
+      };
+    }
+    return {
+      state: {
+        ...state,
+        phaseElapsedSec: nextElapsed,
+        originPlayerPos: nextOrigin,
+      },
+      justDetonated: false,
+      justCompletedReturn: false,
+    };
+  }
+
+  // phase === 'returning'
+  if (nextElapsed >= state.returnDurationSec) {
+    return {
+      state: {
+        ...state,
+        phase: 'idle',
+        phaseElapsedSec: 0,
+        originPlayerPos: nextOrigin,
+      },
+      justDetonated: false,
+      justCompletedReturn: true,
+    };
+  }
+
+  return {
+    state: {
+      ...state,
+      phaseElapsedSec: nextElapsed,
+      originPlayerPos: nextOrigin,
+    },
+    justDetonated: false,
+    justCompletedReturn: false,
+  };
+}
+
+export interface NuclearStrikeCameraPose {
+  cameraPos: Vec3;
+  lookAtPos: Vec3;
+  focusPivotPos: Vec3;
+  fov: number;
+  isPreImpactRising: boolean;
+  horizontalDistToTarget: number;
+}
+
+/**
+ * Computes the exact 3D Camera Position & LookAt target for every phase of the Nuclear Launcher sequence:
+ * 1. `targeting`: Map zooms out high above the arena so the player can pick the target coordinate.
+ * 2. `tracking_rocket`:
+ *    - Early/mid flight (`u < 0.65`): Cinematic camera follows close behind/alongside the flying rocket.
+ *    - Pre-impact approach (`u >= 0.65`): Camera rises upward (`isPreImpactRising: true`) and settles at a
+ *      close-medium vantage point (~14.2m horizontal distance, ~12.6m elevation — NEVER too far!) looking down
+ *      at the target impact point.
+ * 3. `watching_explosion`: Holds the close-medium elevated vantage point (~14.2m–15.4m distance) watching the nuclear blast.
+ * 4. `returning`: Smoothly glides back to the player's original camera position (`originPlayerPos`).
+ */
+export function computeNuclearStrikeCameraPose(
+  state: NuclearStrikeSequenceState,
+  defaultCamOffset: Vec3 = { x: 0, y: 16.5, z: 19.5 },
+): NuclearStrikeCameraPose {
+  const originCamPos: Vec3 = {
+    x: state.originPlayerPos.x + defaultCamOffset.x,
+    y: state.originPlayerPos.y + defaultCamOffset.y,
+    z: state.originPlayerPos.z + defaultCamOffset.z,
+  };
+  const originLookAt: Vec3 = {
+    x: state.originPlayerPos.x,
+    y: state.originPlayerPos.y - 1.15,
+    z: state.originPlayerPos.z - 2.5,
+  };
+
+  if (state.phase === 'idle') {
+    return {
+      cameraPos: originCamPos,
+      lookAtPos: originLookAt,
+      focusPivotPos: { ...state.originPlayerPos },
+      fov: 42,
+      isPreImpactRising: false,
+      horizontalDistToTarget: Math.hypot(
+        originCamPos.x - state.targetPos.x,
+        originCamPos.z - state.targetPos.z,
+      ),
+    };
+  }
+
+  if (state.phase === 'targeting') {
+    const zoomBlend = smoothstep01(0, 0.42, state.phaseElapsedSec);
+    // Center the zoomed-out tactical view gently toward the target reticle so the whole arena is visible
+    const mapFocusX = clamp(state.targetPos.x * 0.45, -45, 45);
+    const mapFocusZ = clamp(state.targetPos.z * 0.45, -45, 45);
+    const topCamPos: Vec3 = {
+      x: mapFocusX,
+      y: 108.0,
+      z: mapFocusZ + 26.0,
+    };
+    const topLookAt: Vec3 = {
+      x: mapFocusX,
+      y: 0.0,
+      z: mapFocusZ - 3.5,
+    };
+    const cameraPos: Vec3 = {
+      x: originCamPos.x + (topCamPos.x - originCamPos.x) * zoomBlend,
+      y: originCamPos.y + (topCamPos.y - originCamPos.y) * zoomBlend,
+      z: originCamPos.z + (topCamPos.z - originCamPos.z) * zoomBlend,
+    };
+    const lookAtPos: Vec3 = {
+      x: originLookAt.x + (topLookAt.x - originLookAt.x) * zoomBlend,
+      y: originLookAt.y + (topLookAt.y - originLookAt.y) * zoomBlend,
+      z: originLookAt.z + (topLookAt.z - originLookAt.z) * zoomBlend,
+    };
+    return {
+      cameraPos,
+      lookAtPos,
+      focusPivotPos: { ...state.targetPos },
+      fov: 42 + 4 * zoomBlend,
+      isPreImpactRising: false,
+      horizontalDistToTarget: Math.hypot(
+        cameraPos.x - state.targetPos.x,
+        cameraPos.z - state.targetPos.z,
+      ),
+    };
+  }
+
+  // Direction vector from launchPos to targetPos in XZ plane
+  const rawDx = state.targetPos.x - state.launchPos.x;
+  const rawDz = state.targetPos.z - state.launchPos.z;
+  const rawHorizLen = Math.hypot(rawDx, rawDz);
+  const dirX = rawHorizLen > 1e-4 ? rawDx / rawHorizLen : 0;
+  const dirZ = rawHorizLen > 1e-4 ? rawDz / rawHorizLen : -1;
+  const rightX = -dirZ;
+  const rightZ = dirX;
+
+  // Close-medium explosion observation pose (13.6m behind + 3.8m right => ~14.1m horizontal distance, 12.8m height)
+  // Critically satisfies: "setelah mau mendekat camera naik dan melihat ledakan nya (kamera jangan terlalu jauh)"
+  const impactWatchCamPos: Vec3 = {
+    x: state.targetPos.x - dirX * 13.6 + rightX * 3.8,
+    y: state.targetPos.y + 12.8,
+    z: state.targetPos.z - dirZ * 13.6 + rightZ * 3.8,
+  };
+  const impactWatchLookAt: Vec3 = {
+    x: state.targetPos.x,
+    y: state.targetPos.y + 1.8,
+    z: state.targetPos.z,
+  };
+
+  if (state.phase === 'tracking_rocket') {
+    const u = clamp(state.phaseElapsedSec / Math.max(0.1, state.flightDurationSec), 0, 1);
+    // Rocket chase camera (follows closely behind & slightly right of the rocket)
+    const chaseCamPos: Vec3 = {
+      x: state.rocketPos.x - dirX * 8.4 + rightX * 3.4,
+      y: state.rocketPos.y + 2.8,
+      z: state.rocketPos.z - dirZ * 8.4 + rightZ * 3.4,
+    };
+    const chaseLookAt: Vec3 = {
+      x: state.rocketPos.x + state.rocketTangent.x * 3.2,
+      y: state.rocketPos.y + state.rocketTangent.y * 1.6,
+      z: state.rocketPos.z + state.rocketTangent.z * 3.2,
+    };
+
+    // When u >= 0.65 (rocket gets close to target), camera rises upward and locks onto the explosion view!
+    const isPreImpactRising = u >= 0.65;
+    const riseBlend = smoothstep01(0.65, 1.0, u);
+    const extraRiseLift = isPreImpactRising ? Math.sin(riseBlend * Math.PI * 0.5) * 2.4 : 0;
+
+    const cameraPos: Vec3 = {
+      x: chaseCamPos.x + (impactWatchCamPos.x - chaseCamPos.x) * riseBlend,
+      y: chaseCamPos.y + (impactWatchCamPos.y - chaseCamPos.y) * riseBlend + extraRiseLift,
+      z: chaseCamPos.z + (impactWatchCamPos.z - chaseCamPos.z) * riseBlend,
+    };
+    const lookAtPos: Vec3 = {
+      x: chaseLookAt.x + (impactWatchLookAt.x - chaseLookAt.x) * riseBlend,
+      y: chaseLookAt.y + (impactWatchLookAt.y - chaseLookAt.y) * riseBlend,
+      z: chaseLookAt.z + (impactWatchLookAt.z - chaseLookAt.z) * riseBlend,
+    };
+
+    return {
+      cameraPos,
+      lookAtPos,
+      focusPivotPos: isPreImpactRising ? { ...state.targetPos } : { ...state.rocketPos },
+      fov: 42,
+      isPreImpactRising,
+      horizontalDistToTarget: Math.hypot(
+        cameraPos.x - state.targetPos.x,
+        cameraPos.z - state.targetPos.z,
+      ),
+    };
+  }
+
+  // Slow cinematic drift during explosion watch (stays close: ~14.1m to ~15.4m horizontal distance)
+  const watchProgress = clamp(
+    state.phaseElapsedSec / Math.max(0.1, state.explosionWatchDurationSec),
+    0,
+    1,
+  );
+  const endWatchCamPos: Vec3 = {
+    x: impactWatchCamPos.x - dirX * 1.1 + rightX * 1.2 * watchProgress,
+    y: impactWatchCamPos.y + 2.4 + 1.4 * watchProgress,
+    z: impactWatchCamPos.z - dirZ * 1.1 + rightZ * 1.2 * watchProgress,
+  };
+  const endWatchLookAt: Vec3 = {
+    x: impactWatchLookAt.x,
+    y: impactWatchLookAt.y + 0.6 * watchProgress,
+    z: impactWatchLookAt.z,
+  };
+
+  if (state.phase === 'watching_explosion') {
+    return {
+      cameraPos: endWatchCamPos,
+      lookAtPos: endWatchLookAt,
+      focusPivotPos: { ...state.targetPos },
+      fov: 42,
+      isPreImpactRising: true,
+      horizontalDistToTarget: Math.hypot(
+        endWatchCamPos.x - state.targetPos.x,
+        endWatchCamPos.z - state.targetPos.z,
+      ),
+    };
+  }
+
+  // phase === 'returning': Smoothly glide from the explosion vantage point back to originCamPos
+  const returnBlend = smoothstep01(
+    0,
+    1,
+    state.phaseElapsedSec / Math.max(0.1, state.returnDurationSec),
+  );
+  const startReturnCamPos: Vec3 = {
+    x: impactWatchCamPos.x - dirX * 1.1 + rightX * 1.2,
+    y: impactWatchCamPos.y + 3.8,
+    z: impactWatchCamPos.z - dirZ * 1.1 + rightZ * 1.2,
+  };
+  const cameraPos: Vec3 = {
+    x: startReturnCamPos.x + (originCamPos.x - startReturnCamPos.x) * returnBlend,
+    y: startReturnCamPos.y + (originCamPos.y - startReturnCamPos.y) * returnBlend,
+    z: startReturnCamPos.z + (originCamPos.z - startReturnCamPos.z) * returnBlend,
+  };
+  const lookAtPos: Vec3 = {
+    x: impactWatchLookAt.x + (originLookAt.x - impactWatchLookAt.x) * returnBlend,
+    y: impactWatchLookAt.y + 0.6 + (originLookAt.y - (impactWatchLookAt.y + 0.6)) * returnBlend,
+    z: impactWatchLookAt.z + (originLookAt.z - impactWatchLookAt.z) * returnBlend,
+  };
+  const focusPivotPos: Vec3 = {
+    x: state.targetPos.x + (state.originPlayerPos.x - state.targetPos.x) * returnBlend,
+    y: state.targetPos.y + (state.originPlayerPos.y - state.targetPos.y) * returnBlend,
+    z: state.targetPos.z + (state.originPlayerPos.z - state.targetPos.z) * returnBlend,
+  };
+
+  return {
+    cameraPos,
+    lookAtPos,
+    focusPivotPos,
+    fov: 42,
+    isPreImpactRising: false,
+    horizontalDistToTarget: Math.hypot(
+      cameraPos.x - state.targetPos.x,
+      cameraPos.z - state.targetPos.z,
+    ),
+  };
+}
+
+// ============================================================================
+// DYNAMIC SUPPLY DROP EVENT (CENTRAL OASIS & HARBOR DOCK) + METALLIC BOX BOOST
+// ============================================================================
+
+export type SupplyDropLocationId = 'CENTRAL_OASIS' | 'HARBOR_DOCK';
+
+export interface SupplyDropLocationSpec {
+  id: SupplyDropLocationId;
+  name: 'CENTRAL OASIS' | 'HARBOR DOCK';
+  x: number;
+  z: number;
+}
+
+export const SUPPLY_DROP_LOCATIONS: Record<SupplyDropLocationId, SupplyDropLocationSpec> = {
+  CENTRAL_OASIS: {
+    id: 'CENTRAL_OASIS',
+    name: 'CENTRAL OASIS',
+    x: -20.5,
+    z: 0.0,
+  },
+  HARBOR_DOCK: {
+    id: 'HARBOR_DOCK',
+    name: 'HARBOR DOCK',
+    x: 84.0,
+    z: 0.0,
+  },
+};
+
+export const SUPPLY_DROP_INTERVAL_MIN_SEC = 45.0;
+export const SUPPLY_DROP_INTERVAL_MAX_SEC = 70.0;
+export const SUPPLY_DROP_WARNING_WINDOW_SEC = 15.0;
+
+export interface SupplyDropLandingPayload {
+  locationId: SupplyDropLocationId;
+  locationName: 'CENTRAL OASIS' | 'HARBOR DOCK';
+  x: number;
+  z: number;
+  goldCoinCount: number; // 5..8 large gold coins (@ +150 G)
+  goldCoinValue: number; // 150 G
+  medkitCount: number; // 2..3 medkits
+  medkitHealAmount: number; // +65 HP significant heal
+  metallicCrateKind: 'silver_metallic' | 'gold_metallic'; // 65% Silver, 35% Shiny Gold
+  indestructible: true;
+}
+
+export interface SupplyDropScheduleState {
+  nextLocationId: SupplyDropLocationId;
+  timeRemainingSec: number;
+  intervalDurationSec: number;
+  warningActive: boolean;
+  countdownSec: number;
+  bannerText: string | null;
+  activeBeaconLocation: SupplyDropLocationSpec | null;
+  lastLandingLocation: SupplyDropLocationSpec | null;
+  lastLandingAgeSec: number;
+  dropCycleCount: number;
+}
+
+export function computeNextSupplyDropIntervalSec(rng: () => number = Math.random): number {
+  const u = clamp(rng(), 0, 1);
+  return SUPPLY_DROP_INTERVAL_MIN_SEC + u * (SUPPLY_DROP_INTERVAL_MAX_SEC - SUPPLY_DROP_INTERVAL_MIN_SEC);
+}
+
+export function formatSupplyDropCountdownBanner(
+  locationName: 'CENTRAL OASIS' | 'HARBOR DOCK',
+  countdownSec: number,
+): string {
+  const sec = Math.max(1, Math.ceil(countdownSec));
+  return `⚠️ SUPPLY DROP DI ${locationName} DALAM ${sec} DETIK!`;
+}
+
+export function createInitialSupplyDropScheduleState(
+  rng: () => number = Math.random,
+  initialLocationId: SupplyDropLocationId = 'CENTRAL_OASIS',
+): SupplyDropScheduleState {
+  const interval = computeNextSupplyDropIntervalSec(rng);
+  return {
+    nextLocationId: initialLocationId,
+    timeRemainingSec: interval,
+    intervalDurationSec: interval,
+    warningActive: false,
+    countdownSec: Math.ceil(interval),
+    bannerText: null,
+    activeBeaconLocation: null,
+    lastLandingLocation: null,
+    lastLandingAgeSec: 999,
+    dropCycleCount: 0,
+  };
+}
+
+export function generateSupplyDropLandingPayload(
+  locationId: SupplyDropLocationId,
+  rng: () => number = Math.random,
+): SupplyDropLandingPayload {
+  const loc = SUPPLY_DROP_LOCATIONS[locationId];
+  const goldCoinCount = clamp(5 + Math.floor(rng() * 4), 5, 8); // 5..8 coins
+  const medkitCount = clamp(2 + Math.floor(rng() * 2), 2, 3); // 2..3 medkits
+  const metallicCrateKind: 'silver_metallic' | 'gold_metallic' =
+    rng() < 0.65 ? 'silver_metallic' : 'gold_metallic';
+
+  return {
+    locationId: loc.id,
+    locationName: loc.name,
+    x: loc.x,
+    z: loc.z,
+    goldCoinCount,
+    goldCoinValue: 150,
+    medkitCount,
+    medkitHealAmount: 65,
+    metallicCrateKind,
+    indestructible: true,
+  };
+}
+
+export function stepSupplyDropSchedule(
+  state: SupplyDropScheduleState,
+  dt: number,
+  rng: () => number = Math.random,
+): {
+  state: SupplyDropScheduleState;
+  landedPayload: SupplyDropLandingPayload | null;
+} {
+  const safeDt = clamp(dt, 0, 1.0);
+  const nextRemaining = state.timeRemainingSec - safeDt;
+  const nextLandingAge = state.lastLandingAgeSec + safeDt;
+  const currentLoc = SUPPLY_DROP_LOCATIONS[state.nextLocationId];
+
+  if (nextRemaining <= 0) {
+    const landedPayload = generateSupplyDropLandingPayload(state.nextLocationId, rng);
+    const alternateLocId: SupplyDropLocationId =
+      state.nextLocationId === 'CENTRAL_OASIS' ? 'HARBOR_DOCK' : 'CENTRAL_OASIS';
+    const nextInterval = computeNextSupplyDropIntervalSec(rng);
+
+    return {
+      state: {
+        nextLocationId: alternateLocId,
+        timeRemainingSec: nextInterval,
+        intervalDurationSec: nextInterval,
+        warningActive: false,
+        countdownSec: Math.ceil(nextInterval),
+        bannerText: null,
+        activeBeaconLocation: currentLoc,
+        lastLandingLocation: currentLoc,
+        lastLandingAgeSec: 0,
+        dropCycleCount: state.dropCycleCount + 1,
+      },
+      landedPayload,
+    };
+  }
+
+  const warningActive = nextRemaining <= SUPPLY_DROP_WARNING_WINDOW_SEC;
+  const countdownSec = Math.max(1, Math.ceil(nextRemaining));
+  const bannerText = warningActive
+    ? formatSupplyDropCountdownBanner(currentLoc.name, countdownSec)
+    : null;
+  const activeBeaconLocation = warningActive
+    ? currentLoc
+    : nextLandingAge <= 25.0 && state.lastLandingLocation
+    ? state.lastLandingLocation
+    : null;
+
+  return {
+    state: {
+      ...state,
+      timeRemainingSec: nextRemaining,
+      warningActive,
+      countdownSec,
+      bannerText,
+      activeBeaconLocation,
+      lastLandingAgeSec: nextLandingAge,
+    },
+    landedPayload: null,
+  };
+}
+
+export function canDamageWorldCrate(crate: {
+  indestructible?: boolean;
+  kind?: WorldCrateKind;
+}): boolean {
+  if (crate.indestructible) return false;
+  if (crate.kind === 'silver_metallic' || crate.kind === 'gold_metallic') return false;
+  return true;
+}
+
+export interface MetallicCratePadBoostResult {
+  kind: 'silver_metallic' | 'gold_metallic';
+  bonusGold: number;
+  bonusScore: number;
+  boostType: 'overpower_weapon' | 'overpower_vehicle';
+  buildOrder: BuildOrderTarget;
+  filledSlots: CrateSlotType[];
+  rewardLabel: string;
+  overpowerWeaponId?: 'laser' | 'gatling' | 'rocket';
+  overpowerWeaponName?: string;
+  overpowerVehicleKind?: 'tank' | 'plane';
+  overpowerVehicleIsSuper?: boolean;
+}
+
+/**
+ * Evaluates the instant Stacking Pad reward when a special indestructible Metallic Supply Box
+ * is delivered back to a Commander's Stacking Pad:
+ * - `silver_metallic` (Silver Metallic Box): Instant full boost to craft an Overpower Weapon (highest tier) + `+300 G`.
+ * - `gold_metallic` (Shiny Gold Metallic Box): Instant full `2x2x2` boost to craft an Overpower Vehicle (Heavy Tank / Elite Vehicle) + `+600 G`.
+ */
+export function evaluateSpecialMetallicCratePadBoost(
+  kind: 'silver_metallic' | 'gold_metallic',
+): MetallicCratePadBoostResult {
+  if (kind === 'silver_metallic') {
+    return {
+      kind: 'silver_metallic',
+      bonusGold: 300,
+      bonusScore: 300,
+      boostType: 'overpower_weapon',
+      buildOrder: '2x2x1',
+      filledSlots: ['legend', 'legend', 'super', 'super', 'empty', 'empty', 'empty', 'empty'],
+      rewardLabel: 'SILVER SUPPLY BOOST: SENJATA OVERPOWER + 300G!',
+      overpowerWeaponId: 'laser',
+      overpowerWeaponName: 'LG-88 Photon Lance (Overpower Tier)',
+    };
+  }
+  return {
+    kind: 'gold_metallic',
+    bonusGold: 600,
+    bonusScore: 600,
+    boostType: 'overpower_vehicle',
+    buildOrder: '2x2x2',
+    filledSlots: ['legend', 'legend', 'legend', 'legend', 'super', 'super', 'super', 'super'],
+    rewardLabel: 'GOLD SUPPLY BOOST: HEAVY TANK 2x2x2 OVERPOWER + 600G!',
+    overpowerVehicleKind: 'tank',
+    overpowerVehicleIsSuper: true,
+  };
+}
+
+// ============================================================================
+// BOTTOM SCREEN ROLE UI FORMATTER & AUTONOMOUS TACTICAL ESCORT AI FOR FOLLOWER
+// ============================================================================
+
+export type BuddyRoleNoun = 'Harvester' | 'Attacker' | 'Follower' | 'Defender';
+
+/**
+ * Formats a unit's tactical role (`TeamCommandMode`) into the bottom-screen UI label format:
+ * - `HARVEST` -> `"Role : Harvester"`
+ * - `ATTACK`  -> `"Role : Attacker"`
+ * - `FOLLOW`  -> `"Role : Follower"`
+ * - `DEFEND`  -> `"Role : Defender"`
+ */
+export function formatBuddyRoleUiLabel(role: TeamCommandMode): string {
+  switch (role) {
+    case 'HARVEST':
+      return 'Role : Harvester';
+    case 'ATTACK':
+    case 'MOUNT':
+      return 'Role : Attacker';
+    case 'FOLLOW':
+      return 'Role : Follower';
+    case 'DEFEND':
+      return 'Role : Defender';
+  }
+}
+
+export const FOLLOWER_COMFORT_ZONE_MIN_M = 2.5;
+export const FOLLOWER_COMFORT_ZONE_MAX_M = 4.2;
+export const FOLLOWER_REACTION_DELAY_SEC = 0.22;
+export const FOLLOWER_NEARBY_PICKUP_RADIUS_M = 3.0;
+export const FOLLOWER_SEPARATION_RADIUS_M = 2.5;
+
+export function stepFollowerSmoothYaw(
+  currentYaw: number,
+  targetYaw: number,
+  dt: number,
+  turnRateRadPerSec = 9.5,
+): number {
+  const safeDt = clamp(dt, 0, 0.1);
+  const diff = shortestAngleDelta(currentYaw, targetYaw);
+  const blend = 1 - Math.exp(-turnRateRadPerSec * safeDt);
+  return currentYaw + diff * blend;
+}
+
+export interface AutonomousFollowerEscortInput {
+  followerId: string;
+  followerX: number;
+  followerZ: number;
+  followerVx: number;
+  followerVz: number;
+  followerYaw: number;
+  followerMaxSpeed: number;
+  followerCarryingCrate: boolean;
+  reactionTimerSec: number;
+  idleLookTimerSec: number;
+  idleLookYaw: number;
+  strafeTimerSec: number;
+  strafeSign: 1 | -1;
+  playerX: number;
+  playerZ: number;
+  playerVx: number;
+  playerVz: number;
+  playerCarryingCrate: boolean;
+  alliedFollowers: ReadonlyArray<{ id: string; x: number; z: number }>;
+  nearestEnemy: { x: number; z: number; dist: number } | null;
+  nearbyItemsAndCrates: ReadonlyArray<{
+    id: string;
+    kind: 'crate' | 'pickup';
+    x: number;
+    z: number;
+    dist: number;
+  }>;
+  combatRangeMeters?: number;
+  navGrid?: AStarNavGrid | null;
+  aStarSteerDirX?: number;
+  aStarSteerDirZ?: number;
+  dt: number;
+}
+
+export interface AutonomousFollowerEscortResult {
+  vx: number;
+  vz: number;
+  yaw: number;
+  goalX: number;
+  goalZ: number;
+  isInsideComfortZone: boolean;
+  isPursuingPlayer: boolean;
+  isEngagingEnemy: boolean;
+  isStrafing: boolean;
+  shouldFire: boolean;
+  usedAStarPathfinding: boolean;
+  pathWaypoints: Array<{ x: number; z: number }>;
+  targetPickupOrCrateId: string | null;
+  reactionTimerSec: number;
+  idleLookTimerSec: number;
+  idleLookYaw: number;
+  strafeTimerSec: number;
+  strafeSign: 1 | -1;
+}
+
+/**
+ * Evaluates Autonomous Tactical Escort behavior for a `Follower` unit (replacing rigid offset mirroring
+ * and giving each Follower its own independent A* pathfinder in the area around the player):
+ * a) Independent Tactical Slot & Hysteresis Comfort Zone (`2.5m` to `4.2m`, zero mirroring):
+ *    - Never mirrors `playerVx` / `playerVz`!
+ *    - If inside the comfort zone (`distToPlayer <= 4.2m`) and not actively completing a catch-up run,
+ *      the Follower holds guard in the area around the player without moving when the player shifts.
+ *    - When `distToPlayer > 4.2m`, waits for a brief reaction delay (`0.22s`), picks an independent
+ *      tactical flank slot (`~2.75m` radius around the player at a personal flank angle), and walks all the way
+ *      into the inner comfort ring (`<= 3.05m`) using its own A* pathfinder before stopping.
+ * b) Independent A* Pathfinding (`navGrid` / `aStarSteerDirX, aStarSteerDirZ`):
+ *    - Computes obstacle-avoiding A* waypoints around walls, fences, gates, and water toward `(goalX, goalZ)`.
+ * c) Tactical Separation:
+ *    - Pushes apart from other Followers/allies within `2.5m` so multiple Followers spread around the player naturally.
+ * d) Independent Combat Engagement & Strafing:
+ *    - When an enemy is within `combatRangeMeters` (default `15.5m`), independently aims smoothly at the enemy,
+ *      strafes laterally left/right to dodge incoming fire while staying near the player, and sets `shouldFire = true`.
+ * e) Idle Look-Around & Nearby `< 3.0m` Pickup:
+ *    - When stationary and out of combat, periodically glances around (`idleLookYaw`).
+ *    - If an item or crate is within `< 3.0m`, proactively pathfinds to pick it up while continuing to escort the player.
+ */
+export function evaluateAutonomousFollowerEscortStep(
+  input: AutonomousFollowerEscortInput,
+): AutonomousFollowerEscortResult {
+  const safeDt = clamp(input.dt, 0.001, 0.1);
+  const combatRange = input.combatRangeMeters ?? 15.5;
+
+  const toPlayerDx = input.playerX - input.followerX;
+  const toPlayerDz = input.playerZ - input.followerZ;
+  const distToPlayer = Math.hypot(toPlayerDx, toPlayerDz);
+  const isInsideComfortZone =
+    distToPlayer >= FOLLOWER_COMFORT_ZONE_MIN_M && distToPlayer <= FOLLOWER_COMFORT_ZONE_MAX_M;
+
+  // Deterministic personal flank offset so each Follower chooses its own spot around the player (never mirroring playerVx/Vz)
+  let idHash = 0;
+  for (let i = 0; i < input.followerId.length; i++) {
+    idHash = (idHash * 31 + input.followerId.charCodeAt(i)) & 0x7fffffff;
+  }
+  const flankSectorSign = idHash % 2 === 0 ? 1 : -1;
+  const flankSpreadRad = (0.38 + ((idHash % 5) * 0.12)) * flankSectorSign;
+
+  // 1. Check nearby (< 3.0m) item or crate for proactive pickup
+  let chosenItem: { id: string; kind: 'crate' | 'pickup'; x: number; z: number; dist: number } | null =
+    null;
+  for (let i = 0; i < input.nearbyItemsAndCrates.length; i++) {
+    const item = input.nearbyItemsAndCrates[i];
+    if (item.dist >= FOLLOWER_NEARBY_PICKUP_RADIUS_M) continue;
+    if (item.kind === 'crate' && input.followerCarryingCrate) continue;
+    if (!chosenItem || item.dist < chosenItem.dist) {
+      chosenItem = item;
+    }
+  }
+
+  // 2. Tactical separation from other Followers/allies so they never stack on one spot
+  let sepX = 0;
+  let sepZ = 0;
+  for (let i = 0; i < input.alliedFollowers.length; i++) {
+    const ally = input.alliedFollowers[i];
+    if (ally.id === input.followerId) continue;
+    const adx = input.followerX - ally.x;
+    const adz = input.followerZ - ally.z;
+    const adist = Math.hypot(adx, adz);
+    if (adist < FOLLOWER_SEPARATION_RADIUS_M) {
+      if (adist > 0.01) {
+        const pushWeight = (FOLLOWER_SEPARATION_RADIUS_M - adist) / FOLLOWER_SEPARATION_RADIUS_M;
+        sepX += (adx / adist) * pushWeight * 4.2;
+        sepZ += (adz / adist) * pushWeight * 4.2;
+      } else {
+        const hashAngle = ((idHash || 1) % 11) * 0.58;
+        sepX += Math.cos(hashAngle) * 3.5;
+        sepZ += Math.sin(hashAngle) * 3.5;
+      }
+    }
+  }
+
+  // 3. Hysteresis Pursuit & Independent Tactical Goal Selection around the player (zero mirroring)
+  let nextReactionTimer = input.reactionTimerSec;
+  let isPursuingPlayer = false;
+  let goalX = input.followerX;
+  let goalZ = input.followerZ;
+  let baseMoveSpeed = 0;
+
+  const wasAlreadyPursuing = input.reactionTimerSec >= FOLLOWER_REACTION_DELAY_SEC;
+  const shouldCatchUpToPlayer =
+    distToPlayer > FOLLOWER_COMFORT_ZONE_MAX_M ||
+    (wasAlreadyPursuing && distToPlayer > 3.05);
+
+  if (chosenItem) {
+    goalX = chosenItem.x;
+    goalZ = chosenItem.z;
+    baseMoveSpeed = input.followerMaxSpeed * 0.88;
+  } else if (shouldCatchUpToPlayer) {
+    nextReactionTimer += safeDt;
+    if (nextReactionTimer >= FOLLOWER_REACTION_DELAY_SEC) {
+      isPursuingPlayer = true;
+      // Compute an angled tactical flank position in the area around the player (~2.75m radius)
+      // rotated by `flankSpreadRad` so the Follower does not trace a straight tether line behind the player
+      const approachAngle = Math.atan2(input.followerZ - input.playerZ, input.followerX - input.playerX);
+      const tacticalSlotAngle = approachAngle + flankSpreadRad;
+      const targetRingRadius = 2.75;
+      goalX = input.playerX + Math.cos(tacticalSlotAngle) * targetRingRadius + sepX * 0.35;
+      goalZ = input.playerZ + Math.sin(tacticalSlotAngle) * targetRingRadius + sepZ * 0.35;
+
+      const excessDist = Math.max(0, distToPlayer - 3.05);
+      const speedScale = clamp(0.62 + excessDist * 0.16, 0.62, 1.08);
+      baseMoveSpeed = input.followerMaxSpeed * speedScale;
+    }
+  } else {
+    // Inside comfort zone (<= 4.2m and reached inner ring): reset pursuit timer and do NOT mirror player motion!
+    nextReactionTimer = 0;
+    if (distToPlayer < 1.55) {
+      // Gently step out to a comfortable 2.6m personal radius around the player
+      const awayAngle =
+        distToPlayer > 0.02
+          ? Math.atan2(-toPlayerDz, -toPlayerDx) + flankSpreadRad * 0.5
+          : flankSpreadRad;
+      goalX = input.playerX + Math.cos(awayAngle) * 2.6;
+      goalZ = input.playerZ + Math.sin(awayAngle) * 2.6;
+      baseMoveSpeed = input.followerMaxSpeed * 0.52;
+    }
+  }
+
+  // 4. Independent A* Pathfinder Steering toward (goalX, goalZ)
+  let desiredVelX = sepX;
+  let desiredVelZ = sepZ;
+  let usedAStarPathfinding = false;
+  let pathWaypoints: Array<{ x: number; z: number }> = [];
+
+  const goalDx = goalX - input.followerX;
+  const goalDz = goalZ - input.followerZ;
+  const distToGoal = Math.hypot(goalDx, goalDz);
+
+  if (baseMoveSpeed > 0.05 && distToGoal > 0.25) {
+    let steerDirX = goalDx / distToGoal;
+    let steerDirZ = goalDz / distToGoal;
+
+    if (
+      input.aStarSteerDirX !== undefined &&
+      input.aStarSteerDirZ !== undefined &&
+      Math.hypot(input.aStarSteerDirX, input.aStarSteerDirZ) > 0.01
+    ) {
+      const sLen = Math.hypot(input.aStarSteerDirX, input.aStarSteerDirZ);
+      steerDirX = input.aStarSteerDirX / sLen;
+      steerDirZ = input.aStarSteerDirZ / sLen;
+      usedAStarPathfinding = true;
+    } else if (input.navGrid && distToGoal > 1.1) {
+      const aStarRes = findPathAStar(
+        input.navGrid,
+        input.followerX,
+        input.followerZ,
+        goalX,
+        goalZ,
+        { allowDiagonal: true, maxIterations: 1600 },
+      );
+      pathWaypoints = aStarRes.waypoints;
+      if (aStarRes.waypoints.length > 0) {
+        usedAStarPathfinding = true;
+        let chosenWp = aStarRes.waypoints[aStarRes.waypoints.length - 1];
+        for (let wi = 0; wi < aStarRes.waypoints.length; wi++) {
+          const wp = aStarRes.waypoints[wi];
+          if (Math.hypot(wp.x - input.followerX, wp.z - input.followerZ) >= 0.85) {
+            chosenWp = wp;
+            break;
+          }
+        }
+        const wdx = chosenWp.x - input.followerX;
+        const wdz = chosenWp.z - input.followerZ;
+        const wlen = Math.hypot(wdx, wdz);
+        if (wlen > 0.01) {
+          steerDirX = wdx / wlen;
+          steerDirZ = wdz / wlen;
+        }
+      }
+    }
+
+    desiredVelX = steerDirX * baseMoveSpeed + sepX * 0.65;
+    desiredVelZ = steerDirZ * baseMoveSpeed + sepZ * 0.65;
+  }
+
+  // 5. Independent Combat Engagement & Tactical Strafing
+  let isEngagingEnemy = false;
+  let isStrafing = false;
+  let shouldFire = false;
+  let nextStrafeTimer = input.strafeTimerSec;
+  let nextStrafeSign: 1 | -1 = input.strafeSign;
+
+  if (input.nearestEnemy && input.nearestEnemy.dist <= combatRange) {
+    isEngagingEnemy = true;
+    shouldFire = true;
+    nextStrafeTimer -= safeDt;
+    if (nextStrafeTimer <= 0) {
+      nextStrafeTimer = 0.85 + ((idHash % 5) * 0.14);
+      nextStrafeSign = input.strafeSign === 1 ? -1 : 1;
+    }
+
+    const edx = input.nearestEnemy.x - input.followerX;
+    const edz = input.nearestEnemy.z - input.followerZ;
+    const edist = Math.max(0.01, Math.hypot(edx, edz));
+    // Perpendicular strafe vector in XZ plane
+    const perpX = (-edz / edist) * nextStrafeSign;
+    const perpZ = (edx / edist) * nextStrafeSign;
+
+    // Only strafe if not far outside the player's escort leash (< 7.5m)
+    if (distToPlayer <= 7.5) {
+      isStrafing = true;
+      const strafeSpeed = input.followerMaxSpeed * 0.48;
+      desiredVelX += perpX * strafeSpeed;
+      desiredVelZ += perpZ * strafeSpeed;
+    }
+  }
+
+  // Clamp total desired speed
+  const desiredSpeed = Math.hypot(desiredVelX, desiredVelZ);
+  const maxAllowedSpeed = input.followerMaxSpeed * 1.08;
+  if (desiredSpeed > maxAllowedSpeed && desiredSpeed > 0.001) {
+    desiredVelX = (desiredVelX / desiredSpeed) * maxAllowedSpeed;
+    desiredVelZ = (desiredVelZ / desiredSpeed) * maxAllowedSpeed;
+  }
+
+  // Smooth velocity acceleration / damping (never snaps instantly)
+  const accelRate = desiredSpeed > 0.15 ? 9.5 : 11.5;
+  const velBlend = 1 - Math.exp(-accelRate * safeDt);
+  let nextVx = input.followerVx + (desiredVelX - input.followerVx) * velBlend;
+  let nextVz = input.followerVz + (desiredVelZ - input.followerVz) * velBlend;
+  if (Math.hypot(nextVx, nextVz) < 0.06 && desiredSpeed < 0.06) {
+    nextVx = 0;
+    nextVz = 0;
+  }
+
+  // 6. Smooth Yaw Rotation (Combat Aim > Movement Heading > Idle Look-Around)
+  let nextIdleLookTimer = input.idleLookTimerSec - safeDt;
+  let nextIdleLookYaw = input.idleLookYaw;
+  let targetYaw = input.followerYaw;
+
+  if (isEngagingEnemy && input.nearestEnemy) {
+    const edx = input.nearestEnemy.x - input.followerX;
+    const edz = input.nearestEnemy.z - input.followerZ;
+    targetYaw = Math.atan2(-edz, edx);
+  } else if (Math.hypot(nextVx, nextVz) > 0.35) {
+    targetYaw = Math.atan2(-nextVz, nextVx);
+    nextIdleLookYaw = targetYaw;
+  } else {
+    // Stationary & out of combat: periodically look around scanning the area
+    if (nextIdleLookTimer <= 0) {
+      nextIdleLookTimer = 1.8 + ((idHash % 4) * 0.45);
+      const turnStep = ((Math.round(input.followerX * 10 + input.followerZ * 10) % 3) - 1) * 0.95 || 0.85;
+      nextIdleLookYaw = input.idleLookYaw + turnStep;
+    }
+    targetYaw = nextIdleLookYaw;
+  }
+
+  const nextYaw = stepFollowerSmoothYaw(
+    input.followerYaw,
+    targetYaw,
+    safeDt,
+    isEngagingEnemy ? 12.0 : 8.5,
+  );
+
+  return {
+    vx: nextVx,
+    vz: nextVz,
+    yaw: nextYaw,
+    goalX,
+    goalZ,
+    isInsideComfortZone,
+    isPursuingPlayer,
+    isEngagingEnemy,
+    isStrafing,
+    shouldFire,
+    usedAStarPathfinding,
+    pathWaypoints,
+    targetPickupOrCrateId: chosenItem ? chosenItem.id : null,
+    reactionTimerSec: nextReactionTimer,
+    idleLookTimerSec: nextIdleLookTimer,
+    idleLookYaw: nextIdleLookYaw,
+    strafeTimerSec: nextStrafeTimer,
+    strafeSign: nextStrafeSign,
+  };
+}
+
+// ============================================================================
+// KIOSK SIDE HOLOGRAM PROJECTOR & CRATE PAD KICK-TO-CANCEL SHATTER MECHANICS
+// ============================================================================
+
+export type KioskSideHologramModelKind =
+  | 'pistol_uzi'
+  | 'assault_plasma'
+  | 'bazooka'
+  | 'supazooka'
+  | 'laser_gun'
+  | 'gatling_mortar'
+  | 'hand_grenade'
+  | 'land_mine'
+  | 'cluster_bomb'
+  | 'skyshield_turret'
+  | 'nuclear_launcher'
+  | 'buddy_unit'
+  | 'tank'
+  | 'plane'
+  | 'truck'
+  | 'upgrade';
+
+export interface KioskSideHologramDisplayState {
+  visible: boolean;
+  modelKind: KioskSideHologramModelKind;
+  titleText: string;
+  progressFractionText: string;
+  subtitleText: string;
+  filledCrates: number;
+  targetCrates: number;
+  progressRatio: number;
+  hologramHexColor: string;
+  hologramColorInt: number;
+}
+
+/**
+ * Evaluates the 3D Hologram shape and progress readout (`misal 1/5`) displayed on top of the
+ * Tactical Kiosk's side scale platform (`sx = 0.58`) for the weapon, squad unit, or item currently being built.
+ */
+export function evaluateKioskSideHologramDisplay(
+  useCustomHologramRecipe: boolean,
+  activePriorityRecipe: KioskBuildPriorityRecipeId,
+  buildOrder: BuildOrderTarget,
+  padSlots: ReadonlyArray<CrateSlotType>,
+  buildQueue: ReadonlyArray<KioskBuildPriorityRecipeId> = [],
+): KioskSideHologramDisplayState {
+  const filledCrates = padSlots.reduce((acc, s) => (s !== 'empty' ? acc + 1 : acc), 0);
+
+  if (useCustomHologramRecipe && KIOSK_BUILD_PRIORITY_RECIPES[activePriorityRecipe]) {
+    const spec = KIOSK_BUILD_PRIORITY_RECIPES[activePriorityRecipe];
+    const targetCrates = Math.max(1, spec.targetCrates);
+    const progressFractionText = `${filledCrates}/${targetCrates}`;
+    const progressRatio = Math.max(0, Math.min(1, filledCrates / targetCrates));
+
+    let modelKind: KioskSideHologramModelKind = 'pistol_uzi';
+    switch (activePriorityRecipe) {
+      case 'pistol_uzi':
+        modelKind = 'pistol_uzi';
+        break;
+      case 'assault_plasma':
+        modelKind = 'assault_plasma';
+        break;
+      case 'bazooka':
+        modelKind = 'bazooka';
+        break;
+      case 'supazooka':
+        modelKind = 'supazooka';
+        break;
+      case 'laser_gun':
+        modelKind = 'laser_gun';
+        break;
+      case 'gatling_mortar':
+        modelKind = 'gatling_mortar';
+        break;
+      case 'hand_grenade':
+        modelKind = 'hand_grenade';
+        break;
+      case 'land_mine':
+        modelKind = 'land_mine';
+        break;
+      case 'cluster_bomb':
+        modelKind = 'cluster_bomb';
+        break;
+      case 'skyshield_turret':
+        modelKind = 'skyshield_turret';
+        break;
+      case 'nuclear_launcher':
+        modelKind = 'nuclear_launcher';
+        break;
+      case 'buddy_infantry':
+      case 'buddy_commando':
+      case 'buddy_ninja':
+      case 'buddy_super_wall':
+        modelKind = 'buddy_unit';
+        break;
+      case 'dump_truck':
+        modelKind = 'truck';
+        break;
+      case 'mini_tank':
+      case 'lyo_tank':
+      case 'tyrant_tank':
+        modelKind = 'tank';
+        break;
+      case 'lyo_plane':
+        modelKind = 'plane';
+        break;
+      default:
+        modelKind = 'pistol_uzi';
+        break;
+    }
+
+    const hasLegend = spec.slotHologramColors.includes('legend');
+    const hasSuper = spec.slotHologramColors.includes('super');
+    const hologramHexColor =
+      filledCrates >= targetCrates
+        ? '#4ade80'
+        : hasLegend
+          ? '#ffd700'
+          : hasSuper
+            ? '#00d2ff'
+            : '#38bdf8';
+    const hologramColorInt =
+      filledCrates >= targetCrates
+        ? 0x4ade80
+        : hasLegend
+          ? 0xffd700
+          : hasSuper
+            ? 0x00d2ff
+            : 0x38bdf8;
+
+    const queueBadge =
+      buildQueue.length > 1 ? ` [ANTRIAN 1/${buildQueue.length}]` : '';
+
+    return {
+      visible: true,
+      modelKind,
+      titleText: `${spec.name.toUpperCase()}${queueBadge}`,
+      progressFractionText,
+      subtitleText:
+        filledCrates > 0
+          ? `BOX: ${progressFractionText} · [F] TENDANG PAD = BATAL`
+          : `BOX: ${progressFractionText} · SEDANG DIBANGUN`,
+      filledCrates,
+      targetCrates,
+      progressRatio,
+      hologramHexColor,
+      hologramColorInt,
+    };
+  }
+
+  // Fallback when using manual [Q] buildOrder or when build queue is empty
+  const orderSpec = BUILD_ORDER_SPECS[buildOrder] ?? BUILD_ORDER_SPECS['1x1x1'];
+  const targetCrates = Math.max(1, orderSpec.targetCrates);
+  const progressFractionText = `${filledCrates}/${targetCrates}`;
+  const progressRatio = Math.max(0, Math.min(1, filledCrates / targetCrates));
+
+  let modelKind: KioskSideHologramModelKind = 'pistol_uzi';
+  if (buildOrder === '1x1x2' || buildOrder === '2x1x2') {
+    modelKind = 'buddy_unit';
+  } else if (buildOrder === '2x1x1') {
+    modelKind = 'bazooka';
+  } else if (buildOrder === '2x2x1') {
+    modelKind = 'truck';
+  } else if (buildOrder === '2x2x2') {
+    modelKind = 'tank';
+  } else if (
+    buildOrder === 'upgrade_building' ||
+    buildOrder === 'upgrade_fence' ||
+    buildOrder === 'build_parking' ||
+    buildOrder === 'build_helipad'
+  ) {
+    modelKind = 'upgrade';
+  }
+
+  return {
+    visible: true,
+    modelKind,
+    titleText:
+      filledCrates === 0 && !useCustomHologramRecipe
+        ? `PILIH BUILD DI KIOSK [B]`
+        : orderSpec.label.toUpperCase(),
+    progressFractionText,
+    subtitleText:
+      filledCrates > 0
+        ? `BOX: ${progressFractionText} · [F] TENDANG PAD = BATAL`
+        : `BOX: ${progressFractionText} · [B] BUKA KIOSK`,
+    filledCrates,
+    targetCrates,
+    progressRatio,
+    hologramHexColor: '#00d2ff',
+    hologramColorInt: 0x00d2ff,
+  };
+}
+
+export interface PadCancelKickShatterDropSpec {
+  kind: 'weapon' | 'secondary' | 'health' | 'ammo' | 'coin_gold';
+  label: string;
+  weaponId?: 'pistol' | 'rifle';
+  remainingAmmo?: number;
+  secondaryId?: 'hand_grenade' | 'land_mine';
+  secondaryCount?: number;
+  coinValue?: number;
+}
+
+/**
+ * Evaluates the cancellation of an in-progress Crate Pad build when the player kicks (`[F]`)
+ * the stacked boxes on the Crate Pad:
+ * - Cancels the active build on the pad.
+ * - Shatters all stacked boxes on the pad into small ground pickups such as Pistol (`pistol`),
+ *   Granat (`hand_grenade`), Medkit (`health`), Land Mine (`land_mine`), Ammo (`ammo`), and Coin (`coin_gold`).
+ */
+export function evaluatePadCancelKickShatterDrops(
+  padSlots: ReadonlyArray<CrateSlotType>,
+  rollFn: () => number = Math.random,
+): {
+  cancelled: boolean;
+  shatteredCrateCount: number;
+  drops: PadCancelKickShatterDropSpec[];
+} {
+  const nonEmptyCrates = padSlots.filter((s) => s !== 'empty');
+  if (nonEmptyCrates.length === 0) {
+    return {
+      cancelled: false,
+      shatteredCrateCount: 0,
+      drops: [],
+    };
+  }
+
+  const smallItemPool: PadCancelKickShatterDropSpec[] = [
+    {
+      kind: 'weapon',
+      label: 'UZI / Pistol T1',
+      weaponId: 'pistol',
+      remainingAmmo: 60,
+    },
+    {
+      kind: 'secondary',
+      label: 'HG-04 Frag Grenade',
+      secondaryId: 'hand_grenade',
+      secondaryCount: 2,
+    },
+    {
+      kind: 'health',
+      label: 'Medkit (+65 HP)',
+    },
+    {
+      kind: 'secondary',
+      label: 'TM-89 Land Mine',
+      secondaryId: 'land_mine',
+      secondaryCount: 1,
+    },
+    {
+      kind: 'ammo',
+      label: 'Ammo Pack (+50%)',
+    },
+    {
+      kind: 'coin_gold',
+      label: 'Scrap Gold (+50G)',
+      coinValue: 50,
+    },
+  ];
+
+  const drops: PadCancelKickShatterDropSpec[] = [];
+  // Each shattered crate yields 2 small items (up to max 8 drops) so even 1-2 kicked crates
+  // reliably burst into a mix of Pistol, Grenade, Medkit, etc.!
+  for (let i = 0; i < nonEmptyCrates.length; i++) {
+    const crateKind = nonEmptyCrates[i];
+    // Primary deterministic item cycles through Pistol -> Grenade -> Medkit -> Land Mine -> Ammo -> Coin
+    const primarySpec = smallItemPool[i % smallItemPool.length];
+    drops.push({ ...primarySpec });
+
+    if (drops.length < 8) {
+      // Bonus secondary small item based on crate tier + rollFn
+      const bonusIdx =
+        crateKind === 'legend' || crateKind === 'super'
+          ? (i + 1 + Math.floor(rollFn() * 2)) % 3 // Pistol, Grenade, or Medkit
+          : (i + 2 + Math.floor(rollFn() * 3)) % smallItemPool.length;
+      drops.push({ ...smallItemPool[bonusIdx] });
+    }
+  }
+
+  return {
+    cancelled: true,
+    shatteredCrateCount: nonEmptyCrates.length,
+    drops,
+  };
 }
 
 

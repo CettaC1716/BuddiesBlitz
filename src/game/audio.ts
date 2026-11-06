@@ -1,4 +1,4 @@
-import { clamp, CollisionMaterialTag, computeCollisionAudioParams } from './rules';
+import { clamp, CollisionMaterialTag, computeCollisionAudioParams } from './buddiesBlitzRules';
 
 /**
  * Authentic Long Hoang (Lyo) Audio & Physics Impact Sound Engine
@@ -1704,6 +1704,81 @@ class SoundEngine {
     gain.connect(this.getOutputNode(ctx));
     osc.start(now);
     osc.stop(now + 0.16);
+  }
+
+  /**
+   * LG-88 Photon Lance Directed-Energy Laser Beam Discharge + Thermal Target Ignition Sizzle
+   */
+  public playLaserGunFire(): void {
+    this.playSample('player-shoot', 0.45, 1.55 + Math.random() * 0.12, 35);
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const out = this.getOutputNode(ctx);
+
+    // 1. Coherent Photon Beam Frequency Sweep (1850 Hz -> 340 Hz)
+    const beamOsc = ctx.createOscillator();
+    const beamGain = ctx.createGain();
+    beamOsc.type = 'sawtooth';
+    beamOsc.frequency.setValueAtTime(1850 + Math.random() * 140, now);
+    beamOsc.frequency.exponentialRampToValueAtTime(340, now + 0.13);
+    beamGain.gain.setValueAtTime(0.22, now);
+    beamGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+    beamOsc.connect(beamGain);
+    beamGain.connect(out);
+    beamOsc.start(now);
+    beamOsc.stop(now + 0.15);
+
+    // 2. Harmonic Crystal Plasma Resonance (2600 Hz -> 920 Hz)
+    const harmOsc = ctx.createOscillator();
+    const harmGain = ctx.createGain();
+    harmOsc.type = 'sine';
+    harmOsc.frequency.setValueAtTime(2600, now);
+    harmOsc.frequency.exponentialRampToValueAtTime(920, now + 0.11);
+    harmGain.gain.setValueAtTime(0.16, now);
+    harmGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    harmOsc.connect(harmGain);
+    harmGain.connect(out);
+    harmOsc.start(now);
+    harmOsc.stop(now + 0.13);
+  }
+
+  /**
+   * TITAN-6 Rotary Gatling Gun: High-RPM 6-Barrel Rotary Motor Whirr + Heavy 7.62mm Percussive Burst + Brass Casing Clatter
+   */
+  public playGatlingGunFire(): void {
+    this.playSample('player-shoot', 0.72, 1.18 + Math.random() * 0.14, 22);
+    this.playSample('hit-metal', 0.24, 1.65 + Math.random() * 0.2, 28);
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const out = this.getOutputNode(ctx);
+
+    // 1. Heavy 7.62mm Rotary Muzzle Punch (290 Hz -> 58 Hz)
+    const punchOsc = ctx.createOscillator();
+    const punchGain = ctx.createGain();
+    punchOsc.type = 'square';
+    punchOsc.frequency.setValueAtTime(290 + Math.random() * 35, now);
+    punchOsc.frequency.exponentialRampToValueAtTime(58, now + 0.055);
+    punchGain.gain.setValueAtTime(0.26, now);
+    punchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+    punchOsc.connect(punchGain);
+    punchGain.connect(out);
+    punchOsc.start(now);
+    punchOsc.stop(now + 0.065);
+
+    // 2. Electric 6-Barrel Rotary Drive Whirr (480 Hz -> 540 Hz)
+    const motorOsc = ctx.createOscillator();
+    const motorGain = ctx.createGain();
+    motorOsc.type = 'triangle';
+    motorOsc.frequency.setValueAtTime(480, now);
+    motorOsc.frequency.linearRampToValueAtTime(545, now + 0.06);
+    motorGain.gain.setValueAtTime(0.11, now);
+    motorGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+    motorOsc.connect(motorGain);
+    motorGain.connect(out);
+    motorOsc.start(now);
+    motorOsc.stop(now + 0.075);
   }
 }
 

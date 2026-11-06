@@ -100,10 +100,43 @@ import {
   applyCommanderBaseGoldUpgrade,
   KIOSK_CRATE_AIRDROP_SHOP,
   purchaseCrateAirdropWithGold,
+  GRASS_CHUNK_STREAM_RADIUS,
+  GRASS_CHUNK_FADE_START_RADIUS,
+  LAND_MINE_GRASS_Y_OFFSET,
+  evaluateGrassChunkVisibilityFactor,
+  computeLandMineGrassYOffset,
+  isUnitInPersonalCommandCenterArea,
+  evaluatePersonalCommandCenterRadarOperator,
   evaluateCommandCenterRadarSpec,
   worldCoordToRadarPercent,
   isPointVisibleOnCommandCenterRadar,
-} from './rules';
+  evaluateNuclearLauncherAccess,
+  evaluateClusterBombAccess,
+  createInitialNuclearStrikeState,
+  beginNuclearStrikeTargeting,
+  updateNuclearStrikeTargetCursor,
+  confirmNuclearStrikeTargetAndLaunch,
+  stepNuclearStrikeSequence,
+  computeNuclearStrikeCameraPose,
+  SUPPLY_DROP_LOCATIONS,
+  computeNextSupplyDropIntervalSec,
+  formatSupplyDropCountdownBanner,
+  createInitialSupplyDropScheduleState,
+  generateSupplyDropLandingPayload,
+  stepSupplyDropSchedule,
+  canDamageWorldCrate,
+  evaluateSpecialMetallicCratePadBoost,
+  formatBuddyRoleUiLabel,
+  stepFollowerSmoothYaw,
+  evaluateAutonomousFollowerEscortStep,
+  MAX_KIOSK_BUILD_QUEUE,
+  enqueueKioskBuildRecipe,
+  removeKioskBuildQueueAtIndex,
+  advanceKioskBuildQueueOnCraft,
+  isCrateInsideOtherOrEnemyBase,
+  evaluateKioskSideHologramDisplay,
+  evaluatePadCancelKickShatterDrops,
+} from './buddiesBlitzRules';
 import { evaluateRoadNetworkSdf } from './planetCurvature';
 import {
   computeExplosionDucking,
@@ -2141,15 +2174,748 @@ test('Self-Service Tactical Kiosk: Multi-Color Pad Hologram Slot Matching, Base 
     isPointVisibleOnCommandCenterRadar(0, -81.7, false, 3, 0, 81.7, -45, 75),
     true,
   );
+
+  // 9. Nuclear Launcher Lv.3 Command Center Gate & Silhouette Reveal + LG-88 Laser Rifle Projectile Spec:
+  const nukeLv1 = evaluateNuclearLauncherAccess(1);
+  const nukeLv2 = evaluateNuclearLauncherAccess(2);
+  const nukeLv3 = evaluateNuclearLauncherAccess(3);
+  assert.equal(nukeLv1.allowed, false);
+  assert.equal(nukeLv1.isRevealed, false);
+  assert.equal(nukeLv2.allowed, false);
+  assert.equal(nukeLv2.isRevealed, false);
+  assert.equal(nukeLv3.allowed, true);
+  assert.equal(nukeLv3.isRevealed, true);
+  assert.equal(nukeLv3.maxLockRangeMeters, 280.0);
+  assert.equal(KIOSK_BUILD_PRIORITY_RECIPES.nuclear_launcher.requiresCommandCenterLevel, 3);
+  assert.equal(getWeaponProjectileVisualSpec('NuclearMissile').shellKind, 'boss');
+  assert.equal(getWeaponProjectileVisualSpec('LyoLaserGun').length, 0.72);
 });
 
+test('CB-24 Cluster Bomb requires Command Center Lv.3, is Plane-only, and upgrade_super_command_lv3 directly unlocks Lv.3', () => {
+  const cbLv1 = evaluateClusterBombAccess(1, true);
+  const cbLv2 = evaluateClusterBombAccess(2, true);
+  const cbLv3OnFoot = evaluateClusterBombAccess(3, false);
+  const cbLv3InPlane = evaluateClusterBombAccess(3, true);
 
+  assert.equal(cbLv1.isRevealed, false);
+  assert.equal(cbLv1.allowedToBuild, false);
+  assert.equal(cbLv1.canDropNow, false);
+  assert.equal(cbLv2.isRevealed, false);
+  assert.equal(cbLv2.allowedToBuild, false);
+  assert.equal(cbLv3OnFoot.isRevealed, true);
+  assert.equal(cbLv3OnFoot.allowedToBuild, true);
+  assert.equal(cbLv3OnFoot.canDropNow, false);
+  assert.equal(cbLv3InPlane.isRevealed, true);
+  assert.equal(cbLv3InPlane.allowedToBuild, true);
+  assert.equal(cbLv3InPlane.canDropNow, true);
+  assert.equal(KIOSK_BUILD_PRIORITY_RECIPES.cluster_bomb.requiresCommandCenterLevel, 3);
+  assert.equal(KIOSK_BUILD_PRIORITY_RECIPES.cluster_bomb.onlyUsableByPlane, true);
 
+  const bases = createIndividualCommanderBasesState('blue');
+  const upgRes = applyCommanderBaseGoldUpgrade(bases[0], 'upgrade_super_command_lv3', 2500);
+  assert.equal(upgRes.upgraded, true);
+  assert.equal(bases[0].buildingLevel, 3);
+  assert.equal(bases[0].fenceLevel, 3);
+  assert.equal(evaluateNuclearLauncherAccess(bases[0].buildingLevel).isRevealed, true);
+  assert.equal(evaluateClusterBombAccess(bases[0].buildingLevel, true).isRevealed, true);
+});
 
+test('Nuclear Launcher 4-phase sequence: map zoom-out targeting -> cinematic rocket chase -> pre-impact camera rise (not too far) -> return to origin', () => {
+  const originPlayerPos = { x: -45, y: 1.0, z: 75 };
+  const launchPos = { x: -48, y: 2.35, z: 70 };
+  const initialTarget = { x: -10, y: 0, z: 20 };
 
+  // 0. Starts idle
+  let state = createInitialNuclearStrikeState();
+  assert.equal(state.phase, 'idle');
 
+  // 1. Activate Nuclear Launcher -> enters 'targeting' (Map Zoom-Out)
+  state = beginNuclearStrikeTargeting(originPlayerPos, launchPos, initialTarget);
+  assert.equal(state.phase, 'targeting');
+  state = stepNuclearStrikeSequence(state, 0.5).state;
+  const zoomOutCam = computeNuclearStrikeCameraPose(state);
+  assert.ok(zoomOutCam.cameraPos.y > 95, 'Camera zooms out high above map during targeting');
 
+  // Player moves cursor to select target at (12, 0, -45)
+  state = updateNuclearStrikeTargetCursor(state, 12, 0, -45, 280);
+  assert.equal(state.targetPos.x, 12);
+  assert.equal(state.targetPos.z, -45);
 
+  // 2. Confirm target -> transitions to 'tracking_rocket'
+  state = confirmNuclearStrikeTargetAndLaunch(state);
+  assert.equal(state.phase, 'tracking_rocket');
+
+  // Early/mid flight (u ~ 0.35): camera follows closely behind the flying rocket
+  state = stepNuclearStrikeSequence(state, state.flightDurationSec * 0.35).state;
+  assert.equal(state.phase, 'tracking_rocket');
+  const midFlightCam = computeNuclearStrikeCameraPose(state);
+  assert.equal(midFlightCam.isPreImpactRising, false);
+  const camToRocketDist = Math.hypot(
+    midFlightCam.cameraPos.x - state.rocketPos.x,
+    midFlightCam.cameraPos.y - state.rocketPos.y,
+    midFlightCam.cameraPos.z - state.rocketPos.z,
+  );
+  assert.ok(camToRocketDist < 14.0, 'Cinematic camera follows closely behind the flying rocket');
+
+  // 3. Approaching target (u ~ 0.85): camera rises upward and watches impact from close-medium distance (not too far!)
+  state = stepNuclearStrikeSequence(state, state.flightDurationSec * 0.5).state;
+  assert.equal(state.phase, 'tracking_rocket');
+  const preImpactCam = computeNuclearStrikeCameraPose(state);
+  assert.equal(preImpactCam.isPreImpactRising, true);
+  assert.ok(preImpactCam.cameraPos.y > state.targetPos.y + 10.0, 'Camera rises above target before impact');
+  assert.ok(
+    preImpactCam.horizontalDistToTarget < 20.0,
+    'Camera stays close enough to watch the explosion clearly (not too far)',
+  );
+
+  // 4. Rocket reaches target (u = 1.0) -> triggers detonation & transitions to 'watching_explosion'
+  const impactStep = stepNuclearStrikeSequence(state, state.flightDurationSec * 0.25);
+  state = impactStep.state;
+  assert.equal(impactStep.justDetonated, true);
+  assert.equal(state.phase, 'watching_explosion');
+  const explosionCam = computeNuclearStrikeCameraPose(state);
+  assert.ok(
+    explosionCam.horizontalDistToTarget >= 12.0 && explosionCam.horizontalDistToTarget <= 18.0,
+    'Explosion observation camera is at ideal close-medium distance (~14-16m, not too far)',
+  );
+
+  // 5. Finish watching explosion -> transitions to 'returning' -> returns smoothly to original player position
+  state = stepNuclearStrikeSequence(state, state.explosionWatchDurationSec + 0.05).state;
+  assert.equal(state.phase, 'returning');
+  state = stepNuclearStrikeSequence(state, state.returnDurationSec * 0.99).state;
+  const nearEndReturnCam = computeNuclearStrikeCameraPose(state, { x: 0, y: 16.5, z: 19.5 });
+  assert.ok(Math.abs(nearEndReturnCam.cameraPos.x - originPlayerPos.x) < 1.0);
+  assert.ok(Math.abs(nearEndReturnCam.cameraPos.z - (originPlayerPos.z + 19.5)) < 1.0);
+
+  const finishStep = stepNuclearStrikeSequence(state, 0.1);
+  assert.equal(finishStep.justCompletedReturn, true);
+  assert.equal(finishStep.state.phase, 'idle');
+});
+
+test('Chunk-Synced 3D Fog of War & Personal Command Center Radar Operator (Lv.1=45%, Lv.2=75%, Lv.3=100%)', () => {
+  // 1. 3D Grass Chunk Visibility & Smooth Inner Edge Scale Transition
+  assert.equal(GRASS_CHUNK_STREAM_RADIUS, 21.0);
+  assert.equal(GRASS_CHUNK_FADE_START_RADIUS, 18.9);
+  const insideVis = evaluateGrassChunkVisibilityFactor(0, 0, 10, 0);
+  assert.equal(insideVis.visible, true);
+  assert.equal(insideVis.scaleFactor, 1);
+
+  const edgeVis = evaluateGrassChunkVisibilityFactor(0, 0, 20.0, 0);
+  assert.equal(edgeVis.visible, true);
+  assert.ok(edgeVis.scaleFactor > 0.05 && edgeVis.scaleFactor < 0.95);
+
+  const outsideVis = evaluateGrassChunkVisibilityFactor(0, 0, 22.5, 0);
+  assert.equal(outsideVis.visible, false);
+  assert.equal(outsideVis.scaleFactor, 0);
+
+  // 2. Land Mine Grass Camouflage Y-Offset (-0.04m in grass, 0m on road/concrete)
+  assert.equal(computeLandMineGrassYOffset(0.85), LAND_MINE_GRASS_Y_OFFSET);
+  assert.equal(computeLandMineGrassYOffset(0.05), 0);
+
+  // 3. Command Center Radar Levels (45% / 75% / 100%)
+  const lv1 = evaluateCommandCenterRadarSpec(1);
+  const lv2 = evaluateCommandCenterRadarSpec(2);
+  const lv3 = evaluateCommandCenterRadarSpec(3);
+  assert.equal(lv1.coveragePct, 45);
+  assert.equal(lv2.coveragePct, 75);
+  assert.equal(lv3.coveragePct, 100);
+  assert.equal(lv1.playerVisionRadius, 21.0);
+
+  // 4. Personal Command Center Radar Operator Responsibility:
+  //    Plot 0 is at x = -45.0, buildingZ = 91.5, padZ = 77.8
+  const bases = createIndividualCommanderBasesState('blue');
+  const myPlot = bases[0];
+  assert.equal(myPlot.commandCenterLevel, 1);
+  assert.equal(isUnitInPersonalCommandCenterArea(-45.0, 88.0, myPlot), true);
+  assert.equal(isUnitInPersonalCommandCenterArea(0.0, 0.0, myPlot), false);
+
+  // Case A: Player is in the field (0, 0), Teammate AI (ownerCommanderId = 1) is standing in our plot -> Radar MUST STAY OFF!
+  const withTeammateOnly = evaluatePersonalCommandCenterRadarOperator(
+    myPlot,
+    [
+      {
+        id: 101,
+        alive: true,
+        team: 'blue',
+        ownerCommanderId: 1,
+        command: 'DEFEND',
+        x: -45.0,
+        z: 88.0,
+      },
+    ],
+    {
+      team: 'blue',
+      ownerCommanderId: 0,
+      alive: true,
+      x: 0,
+      z: 0,
+    },
+  );
+  assert.equal(withTeammateOnly.radarActive, false);
+
+  // Case B: Player's own squad unit (ownerCommanderId = 0) is in our plot, but role is HARVEST -> Radar stays OFF
+  const withOwnHarvesterAtBase = evaluatePersonalCommandCenterRadarOperator(
+    myPlot,
+    [
+      {
+        id: 102,
+        alive: true,
+        team: 'blue',
+        ownerCommanderId: 0,
+        command: 'HARVEST',
+        x: -45.0,
+        z: 88.0,
+      },
+    ],
+    {
+      team: 'blue',
+      ownerCommanderId: 0,
+      alive: true,
+      x: 0,
+      z: 0,
+    },
+  );
+  assert.equal(withOwnHarvesterAtBase.radarActive, false);
+
+  // Case C: Player's own squad unit (ownerCommanderId = 0) is set to DEFEND and stationed in our Command Center plot -> Radar ACTIVE!
+  const withOwnDefenderAtBase = evaluatePersonalCommandCenterRadarOperator(
+    myPlot,
+    [
+      {
+        id: 103,
+        alive: true,
+        team: 'blue',
+        ownerCommanderId: 0,
+        command: 'DEFEND',
+        x: -45.0,
+        z: 88.0,
+      },
+    ],
+    {
+      team: 'blue',
+      ownerCommanderId: 0,
+      alive: true,
+      x: 0,
+      z: 0,
+    },
+  );
+  assert.equal(withOwnDefenderAtBase.radarActive, true);
+  assert.equal(withOwnDefenderAtBase.operatorSource, 'own_defend_unit');
+
+  // Case D: Player's main character themselves is inside their own Command Center plot -> Radar ACTIVE!
+  const withPlayerAtBase = evaluatePersonalCommandCenterRadarOperator(
+    myPlot,
+    [],
+    {
+      team: 'blue',
+      ownerCommanderId: 0,
+      alive: true,
+      x: -45.0,
+      z: 88.0,
+    },
+  );
+  assert.equal(withPlayerAtBase.radarActive, true);
+  assert.equal(withPlayerAtBase.operatorSource, 'player_in_command_center');
+
+  // Case E: When radarActive = false, enemy outside 21m circle is completely invisible even at Lv.3!
+  assert.equal(
+    isPointVisibleOnCommandCenterRadar(0, -50, false, 3, -45, 91.5, 0, 0, false),
+    false,
+  );
+  // Enemy within 21m grass chunk circle around player (0, 0) is visible even when radar is OFF:
+  assert.equal(
+    isPointVisibleOnCommandCenterRadar(10, 10, false, 1, -45, 91.5, 0, 0, false),
+    true,
+  );
+});
+
+test('Dynamic Supply Drop Event alternates between CENTRAL OASIS and HARBOR DOCK every 45-70s, shows 15s countdown banner, and drops 5-8 Gold Coins (@ +150G), 2-3 Medkits, and 1 Indestructible Metallic Box (65% Silver / 35% Gold)', () => {
+  // 1. Interval bounds (45-70s)
+  assert.equal(computeNextSupplyDropIntervalSec(() => 0), 45.0);
+  assert.equal(computeNextSupplyDropIntervalSec(() => 1), 70.0);
+
+  // 2. Countdown banner formatting
+  assert.equal(
+    formatSupplyDropCountdownBanner('CENTRAL OASIS', 14.2),
+    '⚠️ SUPPLY DROP DI CENTRAL OASIS DALAM 15 DETIK!',
+  );
+  assert.equal(
+    formatSupplyDropCountdownBanner('HARBOR DOCK', 5.0),
+    '⚠️ SUPPLY DROP DI HARBOR DOCK DALAM 5 DETIK!',
+  );
+
+  // 3. Payload generation: 65% Silver Metallic Box vs 35% Shiny Gold Metallic Box
+  const silverPayload = generateSupplyDropLandingPayload('CENTRAL_OASIS', () => 0.40);
+  assert.equal(silverPayload.locationId, 'CENTRAL_OASIS');
+  assert.equal(silverPayload.x, SUPPLY_DROP_LOCATIONS.CENTRAL_OASIS.x);
+  assert.equal(silverPayload.z, SUPPLY_DROP_LOCATIONS.CENTRAL_OASIS.z);
+  assert.equal(silverPayload.metallicCrateKind, 'silver_metallic');
+  assert.equal(silverPayload.indestructible, true);
+  assert.equal(silverPayload.goldCoinValue, 150);
+  assert.ok(silverPayload.goldCoinCount >= 5 && silverPayload.goldCoinCount <= 8);
+  assert.ok(silverPayload.medkitCount >= 2 && silverPayload.medkitCount <= 3);
+
+  const goldPayload = generateSupplyDropLandingPayload('HARBOR_DOCK', () => 0.85);
+  assert.equal(goldPayload.locationId, 'HARBOR_DOCK');
+  assert.equal(goldPayload.metallicCrateKind, 'gold_metallic');
+  assert.equal(goldPayload.indestructible, true);
+
+  // 4. Schedule state stepping alternates CENTRAL_OASIS -> HARBOR_DOCK -> CENTRAL_OASIS
+  let sched = createInitialSupplyDropScheduleState(() => 0.0); // 45s initial countdown
+  assert.equal(sched.nextLocationId, 'CENTRAL_OASIS');
+  assert.equal(sched.warningActive, false);
+
+  for (let i = 0; i < 31; i++) {
+    sched = stepSupplyDropSchedule(sched, 1.0, () => 0.2).state;
+  }
+  // 14s remaining -> warning active!
+  assert.equal(sched.warningActive, true);
+  assert.ok(sched.bannerText?.includes('CENTRAL OASIS DALAM 14 DETIK'));
+
+  for (let i = 0; i < 13; i++) {
+    sched = stepSupplyDropSchedule(sched, 1.0, () => 0.2).state;
+  }
+  const landingStep = stepSupplyDropSchedule(sched, 1.0, () => 0.9); // Lands!
+  assert.ok(landingStep.landedPayload !== null);
+  assert.equal(landingStep.landedPayload?.locationId, 'CENTRAL_OASIS');
+  assert.equal(landingStep.landedPayload?.metallicCrateKind, 'gold_metallic');
+  assert.equal(landingStep.state.nextLocationId, 'HARBOR_DOCK');
+});
+
+test('Indestructible Metallic Crates cannot be damaged/destroyed and grant instant full Stacking Pad boosts (+300G Overpower Weapon for Silver, +600G 2x2x2 Overpower Vehicle for Gold)', () => {
+  // 1. Indestructibility check
+  assert.equal(canDamageWorldCrate({ kind: 'red' }), true);
+  assert.equal(canDamageWorldCrate({ kind: 'super' }), true);
+  assert.equal(canDamageWorldCrate({ kind: 'legend' }), true);
+  assert.equal(canDamageWorldCrate({ kind: 'silver_metallic' }), false);
+  assert.equal(canDamageWorldCrate({ kind: 'gold_metallic' }), false);
+  assert.equal(canDamageWorldCrate({ kind: 'red', indestructible: true }), false);
+
+  // 2. Silver Metallic Box Pad Boost -> Instant Overpower Weapon + 300 G
+  const silverBoost = evaluateSpecialMetallicCratePadBoost('silver_metallic');
+  assert.equal(silverBoost.kind, 'silver_metallic');
+  assert.equal(silverBoost.bonusGold, 300);
+  assert.equal(silverBoost.boostType, 'overpower_weapon');
+  assert.equal(silverBoost.buildOrder, '2x2x1');
+
+  // 3. Shiny Gold Metallic Box Pad Boost -> Instant 2x2x2 Overpower Vehicle (Heavy Tank) + 600 G
+  const goldBoost = evaluateSpecialMetallicCratePadBoost('gold_metallic');
+  assert.equal(goldBoost.kind, 'gold_metallic');
+  assert.equal(goldBoost.bonusGold, 600);
+  assert.equal(goldBoost.boostType, 'overpower_vehicle');
+  assert.equal(goldBoost.buildOrder, '2x2x2');
+  assert.equal(goldBoost.filledSlots.filter((s) => s !== 'empty').length, 8);
+});
+
+test('Role UI formatting uses "Role : <Noun>" and Autonomous Tactical Escort AI eliminates rigid mirroring on Follower role', () => {
+  // 1. Role UI format
+  assert.equal(formatBuddyRoleUiLabel('HARVEST'), 'Role : Harvester');
+  assert.equal(formatBuddyRoleUiLabel('ATTACK'), 'Role : Attacker');
+  assert.equal(formatBuddyRoleUiLabel('FOLLOW'), 'Role : Follower');
+  assert.equal(formatBuddyRoleUiLabel('DEFEND'), 'Role : Defender');
+
+  // 2. Comfort Zone (2.5m - 4.2m): Follower stays relaxed and does NOT mirror small player shifts
+  const inComfortZone = evaluateAutonomousFollowerEscortStep({
+    followerId: '2',
+    followerX: 0,
+    followerZ: 0,
+    followerVx: 0,
+    followerVz: 0,
+    followerYaw: 0,
+    followerMaxSpeed: 7.1,
+    followerCarryingCrate: false,
+    reactionTimerSec: 0,
+    idleLookTimerSec: 1.0,
+    idleLookYaw: 0.5,
+    strafeTimerSec: 0.5,
+    strafeSign: 1,
+    playerX: 3.2,
+    playerZ: 0,
+    playerVx: 0,
+    playerVz: 0,
+    playerCarryingCrate: false,
+    alliedFollowers: [],
+    nearestEnemy: null,
+    nearbyItemsAndCrates: [],
+    combatRangeMeters: 15.5,
+    dt: 0.05,
+  });
+  assert.equal(inComfortZone.isInsideComfortZone, true);
+  assert.ok(Math.hypot(inComfortZone.vx, inComfortZone.vz) < 0.01, 'Follower inside comfort zone must not mirror small player movements');
+
+  // 3. Delayed Elastic Pursuit: When leader moves > 4.2m away, Follower waits 0.22s reaction delay before pursuing smoothly
+  const preReaction = evaluateAutonomousFollowerEscortStep({
+    followerId: '2',
+    followerX: 0,
+    followerZ: 0,
+    followerVx: 0,
+    followerVz: 0,
+    followerYaw: 0,
+    followerMaxSpeed: 7.1,
+    followerCarryingCrate: false,
+    reactionTimerSec: 0,
+    idleLookTimerSec: 1.0,
+    idleLookYaw: 0,
+    strafeTimerSec: 0.5,
+    strafeSign: 1,
+    playerX: 8.0,
+    playerZ: 0,
+    playerVx: 5.0,
+    playerVz: 0,
+    playerCarryingCrate: false,
+    alliedFollowers: [],
+    nearestEnemy: null,
+    nearbyItemsAndCrates: [],
+    combatRangeMeters: 15.5,
+    dt: 0.10, // < 0.22s reaction threshold
+  });
+  assert.equal(preReaction.isPursuingPlayer, false);
+  assert.ok(preReaction.reactionTimerSec > 0.09);
+
+  const postReaction = evaluateAutonomousFollowerEscortStep({
+    followerId: '2',
+    followerX: 0,
+    followerZ: 0,
+    followerVx: preReaction.vx,
+    followerVz: preReaction.vz,
+    followerYaw: preReaction.yaw,
+    followerMaxSpeed: 7.1,
+    followerCarryingCrate: false,
+    reactionTimerSec: 0.16,
+    idleLookTimerSec: 1.0,
+    idleLookYaw: 0,
+    strafeTimerSec: 0.5,
+    strafeSign: 1,
+    playerX: 8.0,
+    playerZ: 0,
+    playerVx: 5.0,
+    playerVz: 0,
+    playerCarryingCrate: false,
+    alliedFollowers: [],
+    nearestEnemy: null,
+    nearbyItemsAndCrates: [],
+    combatRangeMeters: 15.5,
+    dt: 0.08, // crosses 0.22s reaction threshold -> pursues!
+  });
+  assert.equal(postReaction.isPursuingPlayer, true);
+  assert.ok(postReaction.vx > 0.2, 'Follower must smoothly accelerate toward leader after reaction delay');
+
+  // 4. Independent Combat Engagement: When enemy enters weapon range, Follower independently aims and strafes
+  const combatStep = evaluateAutonomousFollowerEscortStep({
+    followerId: '2',
+    followerX: 0,
+    followerZ: 0,
+    followerVx: 0,
+    followerVz: 0,
+    followerYaw: 0,
+    followerMaxSpeed: 7.1,
+    followerCarryingCrate: false,
+    reactionTimerSec: 0,
+    idleLookTimerSec: 1.0,
+    idleLookYaw: 0,
+    strafeTimerSec: 0.5,
+    strafeSign: 1,
+    playerX: 3.0,
+    playerZ: 0,
+    playerVx: 0,
+    playerVz: 0,
+    playerCarryingCrate: false,
+    alliedFollowers: [],
+    nearestEnemy: { x: 0, z: -10.0, dist: 10.0 },
+    nearbyItemsAndCrates: [],
+    combatRangeMeters: 15.5,
+    dt: 0.08,
+  });
+  assert.equal(combatStep.isEngagingEnemy, true);
+  assert.equal(combatStep.shouldFire, true);
+  assert.ok(Math.hypot(combatStep.vx, combatStep.vz) > 0.2, 'Follower must strafe tactically while engaging enemy');
+  assert.ok(combatStep.yaw > 0, 'Follower must smoothly rotate yaw toward enemy at (0, -10)');
+
+  // 5. Proactive Nearby (< 3.0m) Pickup / Crate Collection when out of combat
+  const pickupStep = evaluateAutonomousFollowerEscortStep({
+    followerId: '2',
+    followerX: 0,
+    followerZ: 0,
+    followerVx: 0,
+    followerVz: 0,
+    followerYaw: 0,
+    followerMaxSpeed: 7.1,
+    followerCarryingCrate: false,
+    reactionTimerSec: 0,
+    idleLookTimerSec: 1.0,
+    idleLookYaw: 0,
+    strafeTimerSec: 0.5,
+    strafeSign: 1,
+    playerX: 3.0,
+    playerZ: 0,
+    playerVx: 0,
+    playerVz: 0,
+    playerCarryingCrate: false,
+    alliedFollowers: [],
+    nearestEnemy: null,
+    nearbyItemsAndCrates: [{ id: 'crate_99', kind: 'crate', x: 0, z: 2.2, dist: 2.2 }],
+    combatRangeMeters: 15.5,
+    dt: 0.08,
+  });
+  assert.equal(pickupStep.targetPickupOrCrateId, 'crate_99');
+  assert.ok(pickupStep.vz > 0.2, 'Follower must move toward nearby < 3.0m item/crate');
+
+  // 6. HARVEST role never falls back to FOLLOW_COMMANDER even when pad is temporarily full or no crates are nearby
+  const harvestWhenNoCrate = evaluateBuiltBuddySmartAiDecision({
+    buddyClass: 'Infuntry',
+    weaponId: 'pistol',
+    carryingCrate: false,
+    hp: 100,
+    maxHp: 100,
+    commandMode: 'HARVEST',
+    ownerBuildOrder: '1x1x2',
+    ownerPadHasSpace: false,
+    ownerPadReadyToCraft: false,
+    ownerIsAiCommander: false,
+    ownerAliveBuddyCount: 2,
+    ownerHasBuiltTurret: true,
+    ownerHasBuiltVehicle: false,
+    woundedAllyDist: null,
+    nearestEnemyDist: null,
+    nearestFreeCrateDist: null,
+    nearestGroundWeaponDist: null,
+    nearestEmptyVehicleDist: null,
+  });
+  assert.equal(
+    harvestWhenNoCrate.action,
+    'HARVEST_CRATE',
+    'Unit in HARVEST role must stay on HARVEST_CRATE duty and NEVER fall back to FOLLOW_COMMANDER',
+  );
+
+  // 7. Intelligent FOLLOW A* Pathfinder around obstacle wall:
+  //    Build a solid fence wall at z = 0 from x = -20 to x = +8 (gate opening at x > +8).
+  //    Follower is at (0, -8) and player is at (0, +8) on the other side of the fence.
+  //    Instead of walking straight +Z into the wall, Follower uses its own A* pathfinder to steer +X toward the gate!
+  const obstacleGrid = createAStarNavGrid(-24, 24, -24, 24, 1.5);
+  rasterizeObbObstacleToNavGrid(obstacleGrid, -6.0, 0.0, 14.0, 0.75, 0, 0.45);
+  const pathfoundFollow = evaluateAutonomousFollowerEscortStep({
+    followerId: '3',
+    followerX: 0,
+    followerZ: -8,
+    followerVx: 0,
+    followerVz: 0,
+    followerYaw: 0,
+    followerMaxSpeed: 7.1,
+    followerCarryingCrate: false,
+    reactionTimerSec: 0.30,
+    idleLookTimerSec: 1.0,
+    idleLookYaw: 0,
+    strafeTimerSec: 0.5,
+    strafeSign: 1,
+    playerX: 0,
+    playerZ: 8,
+    playerVx: -6.0, // Player moving -X, Follower must NOT mirror -X and must instead route +X to the gate!
+    playerVz: 0,
+    playerCarryingCrate: false,
+    alliedFollowers: [],
+    nearestEnemy: null,
+    nearbyItemsAndCrates: [],
+    combatRangeMeters: 15.5,
+    navGrid: obstacleGrid,
+    dt: 0.08,
+  });
+  assert.equal(pathfoundFollow.isPursuingPlayer, true);
+  assert.equal(pathfoundFollow.usedAStarPathfinding, true);
+  assert.ok(pathfoundFollow.pathWaypoints.length > 4);
+  assert.ok(
+    pathfoundFollow.vx > 0.25,
+    'Follower must steer +X toward the open gate via its own A* pathfinder (even while player moves -X)',
+  );
+});
+
+test('AI excludes crates inside teammate/enemy bases, Kiosk supports max-6 continuous auto-burst build queue, and unarmed Attacker returns to base weapon stock', () => {
+  // 1. Base Crate Exclusion: AI belonging to Blue Plot 0 (centerX = -45, centerZ = 75)
+  //    - Crate inside Blue Plot 0 (-46.8, 68.5) -> ALLOWED (false)
+  //    - Crate inside Teammate Blue Plot 1 (-15.0, 68.5) -> EXCLUDED (true)
+  //    - Crate inside Enemy Red Plot 0 (-45.0, -68.5) -> EXCLUDED (true)
+  //    - Crate in Open Warzone (0.0, 12.0) -> ALLOWED (false)
+  assert.equal(isCrateInsideOtherOrEnemyBase(-46.8, 68.5, 'blue', 0), false);
+  assert.equal(isCrateInsideOtherOrEnemyBase(-15.0, 68.5, 'blue', 0), true);
+  assert.equal(isCrateInsideOtherOrEnemyBase(15.0, 68.5, 'blue', 0), true);
+  assert.equal(isCrateInsideOtherOrEnemyBase(-45.0, -68.5, 'blue', 0), true);
+  assert.equal(isCrateInsideOtherOrEnemyBase(0.0, 12.0, 'blue', 0), false);
+
+  const selectedCrate = selectSmartCrateForAiHarvester(
+    -20.0,
+    55.0,
+    [
+      // Closer crate, but inside teammate Blue Plot 1 -> MUST BE IGNORED
+      { id: 1, kind: 'red' as const, x: -15.0, z: 68.5, state: 'grounded' },
+      // Crate inside Enemy Red Base -> MUST BE IGNORED
+      { id: 2, kind: 'red' as const, x: -15.0, z: -68.5, state: 'grounded' },
+      // Crate in open warzone -> MUST BE SELECTED
+      { id: 3, kind: 'red' as const, x: -20.0, z: 25.0, state: 'grounded' },
+    ],
+    ['empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
+    ['red', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
+    [],
+    true,
+    'blue',
+    0,
+  );
+  assert.equal(
+    selectedCrate.selectedCrate?.id,
+    3,
+    'AI Harvester must ignore crates inside teammate or enemy bases',
+  );
+
+  // 2. Continuous Build Queue (max 6 items) + Auto-Burst when Hologram Fulfilled
+  assert.equal(MAX_KIOSK_BUILD_QUEUE, 6);
+  let qRes = enqueueKioskBuildRecipe([], 'pistol_uzi');
+  qRes = enqueueKioskBuildRecipe(qRes.queue, 'assault_plasma');
+  qRes = enqueueKioskBuildRecipe(qRes.queue, 'bazooka');
+  qRes = enqueueKioskBuildRecipe(qRes.queue, 'buddy_infantry');
+  qRes = enqueueKioskBuildRecipe(qRes.queue, 'gatling_mortar');
+  qRes = enqueueKioskBuildRecipe(qRes.queue, 'laser_gun');
+  // 7th item should be rejected (capped at 6)
+  const overflowQueue = enqueueKioskBuildRecipe(qRes.queue, 'supazooka');
+  assert.equal(qRes.queue.length, 6);
+  assert.equal(overflowQueue.enqueued, false);
+  assert.equal(overflowQueue.queue.length, 6);
+
+  // When 'pistol_uzi' (needs 1 'red' crate in slot 0) has its hologram target fulfilled,
+  // evaluatePadHologramState reports isFulfilled = true so the box bursts automatically without kicking [F]
+  const uziPadState = evaluatePadHologramState(true, true, 'pistol_uzi', [
+    'red',
+    'empty',
+    'empty',
+    'empty',
+    'empty',
+    'empty',
+    'empty',
+    'empty',
+  ]);
+  assert.equal(uziPadState.isFulfilled, true);
+
+  // Advancing the build queue after auto-bursting 'pistol_uzi' activates 'assault_plasma' next
+  const afterFirstCraft = advanceKioskBuildQueueOnCraft(qRes.queue);
+  assert.equal(afterFirstCraft.queue.length, 5);
+  assert.equal(afterFirstCraft.nextActiveRecipe, 'assault_plasma');
+
+  // Removing index 1 ('bazooka') leaves 4 items
+  const afterRemove = removeKioskBuildQueueAtIndex(afterFirstCraft.queue, 1);
+  assert.equal(afterRemove.queue.length, 4);
+  assert.equal(afterRemove.queue[0], 'assault_plasma');
+  assert.equal(afterRemove.queue[1], 'buddy_infantry');
+
+  // 3. Unarmed Attacker AI Intelligence: returns to base weapon stock when unarmed
+  const unarmedAttackerWithStockAtBase = evaluateBuiltBuddySmartAiDecision({
+    buddyClass: 'Infuntry',
+    weaponId: 'unarmed',
+    carryingCrate: false,
+    hp: 100,
+    maxHp: 100,
+    commandMode: 'ATTACK',
+    ownerBuildOrder: '1x1x1',
+    ownerPadHasSpace: true,
+    ownerPadReadyToCraft: false,
+    ownerIsAiCommander: false,
+    ownerAliveBuddyCount: 2,
+    ownerHasBuiltTurret: false,
+    ownerHasBuiltVehicle: false,
+    woundedAllyDist: null,
+    nearestEnemyDist: 30,
+    nearestFreeCrateDist: 10,
+    nearestGroundWeaponDist: 95, // Far away back at base pad stock
+    nearestEmptyVehicleDist: null,
+  });
+  assert.equal(
+    unarmedAttackerWithStockAtBase.action,
+    'EQUIP_GROUND_WEAPON',
+    'Unarmed Attacker must travel back to base weapon stock even when far away (> 36m)',
+  );
+
+  const unarmedAttackerWaitingForStock = evaluateBuiltBuddySmartAiDecision({
+    buddyClass: 'Infuntry',
+    weaponId: 'unarmed',
+    carryingCrate: false,
+    hp: 100,
+    maxHp: 100,
+    commandMode: 'ATTACK',
+    ownerBuildOrder: '1x1x1',
+    ownerPadHasSpace: true,
+    ownerPadReadyToCraft: false,
+    ownerIsAiCommander: false,
+    ownerAliveBuddyCount: 2,
+    ownerHasBuiltTurret: false,
+    ownerHasBuiltVehicle: false,
+    woundedAllyDist: null,
+    nearestEnemyDist: 30,
+    nearestFreeCrateDist: 10,
+    nearestGroundWeaponDist: null, // No weapon dropped yet -> return to base pad stock area
+    nearestEmptyVehicleDist: null,
+  });
+  assert.equal(
+    unarmedAttackerWaitingForStock.action,
+    'EQUIP_GROUND_WEAPON',
+    'Unarmed Attacker without any weapon must return to base weapon stock area instead of charging unarmed',
+  );
+
+  // 4. Kiosk Side Platform 3D Hologram Shape & Progress Counter (e.g. "1/4", "1/2")
+  const gatlingHolo = evaluateKioskSideHologramDisplay(
+    true,
+    'gatling_mortar',
+    '2x2x1',
+    ['super', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
+    ['gatling_mortar', 'buddy_infantry'],
+  );
+  assert.equal(gatlingHolo.visible, true);
+  assert.equal(gatlingHolo.modelKind, 'gatling_mortar');
+  assert.equal(gatlingHolo.progressFractionText, '1/4');
+  assert.equal(gatlingHolo.filledCrates, 1);
+  assert.equal(gatlingHolo.targetCrates, 4);
+  assert.ok(gatlingHolo.subtitleText.includes('1/4'));
+  assert.ok(gatlingHolo.titleText.includes('TITAN-6 ROTARY GATLING'));
+
+  const squadHolo = evaluateKioskSideHologramDisplay(
+    true,
+    'buddy_infantry',
+    '1x1x2',
+    ['red', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
+    ['buddy_infantry'],
+  );
+  assert.equal(squadHolo.modelKind, 'buddy_unit');
+  assert.equal(squadHolo.progressFractionText, '1/2');
+
+  // 5. Kicking ([F]) stacked boxes on Crate Pad cancels build and shatters into small items (Pistol, Grenade, Medkit, etc.)
+  const emptyCancel = evaluatePadCancelKickShatterDrops([
+    'empty',
+    'empty',
+    'empty',
+    'empty',
+    'empty',
+    'empty',
+    'empty',
+    'empty',
+  ]);
+  assert.equal(emptyCancel.cancelled, false);
+  assert.equal(emptyCancel.drops.length, 0);
+
+  const shatterTwoCrates = evaluatePadCancelKickShatterDrops(
+    ['red', 'super', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
+    () => 0.1,
+  );
+  assert.equal(shatterTwoCrates.cancelled, true);
+  assert.equal(shatterTwoCrates.shatteredCrateCount, 2);
+  assert.equal(shatterTwoCrates.drops.length, 4);
+  assert.ok(
+    shatterTwoCrates.drops.some((d) => d.kind === 'weapon' && d.weaponId === 'pistol'),
+    'Shattered pad crates must include Pistol drop',
+  );
+  assert.ok(
+    shatterTwoCrates.drops.some((d) => d.kind === 'secondary' && d.secondaryId === 'hand_grenade'),
+    'Shattered pad crates must include Hand Grenade drop',
+  );
+  assert.ok(
+    shatterTwoCrates.drops.some((d) => d.kind === 'health'),
+    'Shattered pad crates must include Medkit drop',
+  );
+});
 
 
 

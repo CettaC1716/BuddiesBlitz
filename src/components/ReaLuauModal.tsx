@@ -4,7 +4,7 @@ import {
   BUDDY_BLITZ_EXPLORER_TREE,
   BUDDY_BLITZ_LUAU_SCRIPTS,
 } from '../data/buddyBlitzLuauSuite';
-import { REA_CONSTANTS } from '../game/rules';
+import { REA_CONSTANTS } from '../game/buddiesBlitzRules';
 import { soundEngine } from '../game/audio';
 
 interface ReaLuauModalProps {

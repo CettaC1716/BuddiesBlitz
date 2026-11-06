@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  FactoryPlaygroundCanvas,
+  BuddiesBlitzArena,
   GameState,
   PlayMode,
   EditorToolId,
   HudSnapshot,
-} from './game/FactoryPlaygroundCanvas';
+} from './game/BuddiesBlitzArena';
 import {
   REA_CONSTANTS,
   LIGHTING_PRESETS,
@@ -14,7 +14,8 @@ import {
   RADAR_WORLD_HALF_EXTENT,
   evaluateCommandCenterRadarSpec,
   worldCoordToRadarPercent,
-} from './game/rules';
+  formatBuddyRoleUiLabel,
+} from './game/buddiesBlitzRules';
 import { soundEngine } from './game/audio';
 import { ReaLuauModal } from './components/ReaLuauModal';
 import { TacticalKioskModal } from './components/TacticalKioskModal';
@@ -46,6 +47,7 @@ const INITIAL_HUD: HudSnapshot = {
   padSlots: ['empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
   padHologramColors: ['red', 'empty', 'empty', 'empty', 'red', 'empty', 'empty', 'empty'],
   activePriorityRecipe: 'buddy_infantry',
+  buildQueue: ['buddy_infantry'],
   padShape: 'Empty',
   padOutputName: 'Pad Kosong',
   padIsMerged: false,
@@ -54,6 +56,9 @@ const INITIAL_HUD: HudSnapshot = {
   buildOrderLabel: 'Buddy Infanteri',
   buildOrderTargetCrates: 2,
   baseBuildingLevel: 1,
+  commandCenterLevel: 1,
+  commandCenterRadarActive: false,
+  commandCenterRadarCoveragePct: 45,
   baseBuildingHp: 400,
   baseBuildingMaxHp: 400,
   baseFenceLevel: 1,
@@ -84,6 +89,9 @@ const INITIAL_HUD: HudSnapshot = {
   editorCursorZ: 0,
   editorRotDeg: 0,
   editorScale: 1.0,
+  nuclearStrikePhase: 'idle',
+  nuclearTargetCoords: { x: 0, z: 18 },
+  hasDeployedNuclearLauncher: false,
 };
 
 const PRESET_ORDER: LightingPresetKey[] = ['day', 'dusk', 'night', 'dawn'];
@@ -155,6 +163,10 @@ export default function App() {
   const [mapSaveStatus, setMapSaveStatus] = useState<string | null>(null);
 
   const [hud, setHud] = useState<HudSnapshot>(INITIAL_HUD);
+  const hudRef = useRef<HudSnapshot>(INITIAL_HUD);
+  useEffect(() => {
+    hudRef.current = hud;
+  }, [hud]);
   const [finalRunStats, setFinalRunStats] = useState<HudSnapshot | null>(null);
   const [lightingPreset, setLightingPreset] = useState<LightingPresetKey>('day');
   const [cameraFovMode, setCameraFovMode] = useState<'webgl35' | 'roblox18'>('webgl35');
@@ -278,9 +290,24 @@ export default function App() {
     const onToggleKiosk = () => {
       setIsKioskModalOpen((prev) => !prev);
     };
+    const onCloseKiosk = () => {
+      setIsKioskModalOpen(false);
+      setIsSpawnDrawerOpen(false);
+    };
     window.addEventListener('toggle-kiosk-ui', onToggleKiosk);
-    return () => window.removeEventListener('toggle-kiosk-ui', onToggleKiosk);
+    window.addEventListener('close-kiosk-ui', onCloseKiosk);
+    return () => {
+      window.removeEventListener('toggle-kiosk-ui', onToggleKiosk);
+      window.removeEventListener('close-kiosk-ui', onCloseKiosk);
+    };
   }, []);
+
+  useEffect(() => {
+    if (isKioskModalOpen && !hud.isNearKiosk) {
+      setIsKioskModalOpen(false);
+      window.dispatchEvent(new CustomEvent('close-kiosk-ui'));
+    }
+  }, [isKioskModalOpen, hud.isNearKiosk]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -289,6 +316,7 @@ export default function App() {
           e.preventDefault();
           e.stopImmediatePropagation();
           setIsKioskModalOpen(false);
+          window.dispatchEvent(new CustomEvent('close-kiosk-ui'));
         }
         return;
       }
@@ -342,7 +370,7 @@ export default function App() {
   return (
     <main className="relative w-screen h-screen overflow-hidden select-none">
       {/* 1. 60FPS 3D Team Buddies x Lyo Grassland Arena */}
-      <FactoryPlaygroundCanvas
+      <BuddiesBlitzArena
         gameState={gameState}
         playMode={playMode}
         editorTool={editorTool}
@@ -589,20 +617,20 @@ export default function App() {
                     left: `${fp.xPct}%`,
                     top: `${fp.yPct}%`,
                   }}
-                  className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 transition-transform duration-100 hover:scale-115 active:scale-90 cursor-pointer select-none"
+                  className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer select-none"
                 >
                   {fp.iconType === 'hand' ? (
                     <span
                       role="img"
                       aria-hidden="true"
-                      className="inline-block text-[32px] sm:text-[36px] leading-none drop-shadow-[0_3px_0_#14161d] filter-[drop-shadow(0_0_2px_#ffffff)]"
+                      className="inline-block text-[16px] sm:text-[18px] leading-none drop-shadow-[0_1.5px_0_#14161d] filter-[drop-shadow(0_0_1px_#ffffff)]"
                     >
                       ✋
                     </span>
                   ) : (
                     <svg
                       viewBox="0 0 64 64"
-                      className="w-11 h-11 sm:w-12 sm:h-12 drop-shadow-[0_3px_6px_rgba(0,0,0,0.35)]"
+                      className="w-[22px] h-[22px] sm:w-[24px] sm:h-[24px] drop-shadow-[0_1.5px_3px_rgba(0,0,0,0.35)]"
                       aria-hidden="true"
                     >
                       {/* Outer Crisp White Polygon Sticker Silhouette */}
@@ -632,16 +660,18 @@ export default function App() {
               3B. TOP-LEFT: COMPACT RADAR/MINIMAP + [Q: 1x1x2] PAD STATUS
              ================================================================= */}
           <div className="fixed top-3 left-3 z-30 flex flex-col items-start gap-2 pointer-events-none">
-            {/* Compact 1:1 Calibrated Radar with Command Center Level Coverage & Fog-of-War */}
+            {/* Compact 1:1 Calibrated Radar with Chunk-Synced Bright Circle & Personal Command Center Radar */}
             {(() => {
-              const radarSpec = evaluateCommandCenterRadarSpec(hud.baseBuildingLevel);
+              const ccLevel = hud.commandCenterLevel ?? hud.baseBuildingLevel;
+              const radarSpec = evaluateCommandCenterRadarSpec(ccLevel);
+              const isRadarActive = Boolean(hud.commandCenterRadarActive);
               const arenaSpan = RADAR_WORLD_HALF_EXTENT * 2.0; // 250m
-              const baseCenter = worldCoordToRadarPercent(0.0, 81.7);
+              const personalCcCenter = worldCoordToRadarPercent(-45.0, 91.5);
               const baseRadiusPct = (radarSpec.baseRadarRadius / arenaSpan) * 100;
               const playerDot = hud.radarDots.find((d) => d.kind === 'player');
               const playerPos = playerDot
                 ? worldCoordToRadarPercent(playerDot.x, playerDot.z)
-                : baseCenter;
+                : personalCcCenter;
               const playerRadiusPct = (radarSpec.playerVisionRadius / arenaSpan) * 100;
               const plotOffsetsX = [-45.0, -15.0, 15.0, 45.0];
 
@@ -649,7 +679,8 @@ export default function App() {
                 <div
                   aria-label="Mini Radar Arena"
                   data-radar-level={radarSpec.level}
-                  className="pointer-events-auto relative w-32 h-32 sm:w-36 sm:h-36 bg-[#2c661c] border-3 border-[#1a1a1a] ring-2 ring-white rounded-xl overflow-hidden shadow-[4px_4px_0_#1a1a1a] shrink-0"
+                  data-radar-active={isRadarActive ? 'true' : 'false'}
+                  className="pointer-events-auto relative w-32 h-32 sm:w-36 sm:h-36 bg-[#070a0f] border-3 border-[#1a1a1a] ring-2 ring-white rounded-xl overflow-hidden shadow-[4px_4px_0_#1a1a1a] shrink-0"
                 >
                   {/* 1:1 Orthographic Top-Down Map of the Current 3-Part Mirrored Arena ([-125, +125]) */}
                   <img
@@ -681,7 +712,7 @@ export default function App() {
                     );
                   })}
 
-                  {/* Command Center Radar Range Mask (Fog of War outside Radar Radius when Lv.1 / Lv.2) */}
+                  {/* Chunk-Synced Bright Vision Circle & Dark Fog-of-War Outside */}
                   <svg
                     viewBox="0 0 100 100"
                     className="absolute inset-0 w-full h-full pointer-events-none"
@@ -689,97 +720,120 @@ export default function App() {
                     <defs>
                       <mask id="command-center-radar-fog-mask">
                         <rect x="0" y="0" width="100" height="100" fill="white" />
-                        {radarSpec.fullMapUnlocked ? (
-                          <rect x="0" y="0" width="100" height="100" fill="black" />
-                        ) : (
-                          <>
-                            <circle
-                              cx={baseCenter.leftPct}
-                              cy={baseCenter.topPct}
-                              r={baseRadiusPct}
-                              fill="black"
-                            />
-                            <circle
-                              cx={playerPos.leftPct}
-                              cy={playerPos.topPct}
-                              r={playerRadiusPct}
-                              fill="black"
-                            />
-                          </>
-                        )}
-                      </mask>
-                    </defs>
-
-                    {/* Darkened Unscanned Fog-of-War Zone */}
-                    {!radarSpec.fullMapUnlocked && (
-                      <rect
-                        x="0"
-                        y="0"
-                        width="100"
-                        height="100"
-                        fill="rgba(6, 12, 18, 0.72)"
-                        mask="url(#command-center-radar-fog-mask)"
-                      />
-                    )}
-
-                    {/* Command Center Radar Coverage Perimeter Ring */}
-                    {!radarSpec.fullMapUnlocked && (
-                      <>
-                        <circle
-                          cx={baseCenter.leftPct}
-                          cy={baseCenter.topPct}
-                          r={baseRadiusPct}
-                          fill="rgba(184, 255, 60, 0.05)"
-                          stroke="#b8ff3c"
-                          strokeWidth="1.2"
-                          strokeDasharray="3 2"
-                        />
+                        {/* Bright circle strictly represents the 21m 3D grass chunk streaming radius around the player */}
                         <circle
                           cx={playerPos.leftPct}
                           cy={playerPos.topPct}
                           r={playerRadiusPct}
-                          fill="none"
-                          stroke="rgba(0, 210, 255, 0.65)"
-                          strokeWidth="0.9"
-                          strokeDasharray="2 2"
+                          fill="black"
                         />
-                      </>
+                      </mask>
+                    </defs>
+
+                    {/* Darkened Fog-of-War Zone outside the player's grass chunk streaming circle */}
+                    <rect
+                      x="0"
+                      y="0"
+                      width="100"
+                      height="100"
+                      fill="rgba(5, 8, 14, 0.86)"
+                      mask="url(#command-center-radar-fog-mask)"
+                    />
+
+                    {/* Personal Command Center Radar Scan Range Indicator (only shown when Operator DEFEND is active) */}
+                    {isRadarActive && !radarSpec.fullMapUnlocked && (
+                      <circle
+                        cx={personalCcCenter.leftPct}
+                        cy={personalCcCenter.topPct}
+                        r={baseRadiusPct}
+                        fill="rgba(184, 255, 60, 0.04)"
+                        stroke="rgba(184, 255, 60, 0.55)"
+                        strokeWidth="1.0"
+                        strokeDasharray="2.5 2"
+                      />
                     )}
+
+                    {/* Bright Circle Border around Player's 3D Grass Chunk Streaming Radius */}
+                    <circle
+                      cx={playerPos.leftPct}
+                      cy={playerPos.topPct}
+                      r={playerRadiusPct}
+                      fill="none"
+                      stroke="rgba(184, 255, 60, 0.88)"
+                      strokeWidth="1.0"
+                    />
                   </svg>
 
-                  {/* Live Scanned Radar Dots (Crates, Vehicles, Allies, Enemies, Player) */}
+                  {/* Live Scanned Radar Dots (No Crates! Differentiated Small Pedestrian vs Large Heavy Vehicle Blinking Red Dots) */}
                   {hud.radarDots.map((dot) => {
                     const { leftPct, topPct } = worldCoordToRadarPercent(dot.x, dot.z);
-                    let dotStyle = 'w-2 h-2 bg-[#ff3b30] rounded-xs';
+  if (dot.kind === 'supply_drop') {
+                      // Blinking Dynamic Supply Drop Beacon Signal (Central Oasis / Harbor Dock)
+                      return (
+                        <span
+                          key={dot.id}
+                          data-radar-dot="supply-drop-beacon"
+                          style={{ left: `${leftPct}%`, top: `${topPct}%` }}
+                          className="absolute -translate-x-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center z-30 pointer-events-none"
+                        >
+                          <span className="absolute inset-0 rounded-full bg-[#facc15]/80 animate-ping" />
+                          <span className="relative w-3 h-3 rounded-full bg-[#facc15] border-2 border-[#1a1a1a] shadow-[0_0_10px_#facc15] animate-pulse" />
+                        </span>
+                      );
+                    }
+                    if (dot.kind === 'tank_red') {
+                      // Enemy Heavy Vehicle (Tank, Heavy Truck, Aircraft): LARGE PROMINENT BLINKING RED CIRCLE DOT
+                      return (
+                        <span
+                          key={dot.id}
+                          data-radar-dot="enemy-heavy-vehicle"
+                          style={{ left: `${leftPct}%`, top: `${topPct}%` }}
+                          className="absolute -translate-x-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center z-30 pointer-events-none"
+                        >
+                          <span className="absolute inset-0 rounded-full bg-[#ff1e27]/75 animate-ping" />
+                          <span className="relative w-3.5 h-3.5 rounded-full bg-[#ff1e27] border-2 border-[#ffe066] shadow-[0_0_10px_#ff1e27] animate-pulse" />
+                        </span>
+                      );
+                    }
+                    if (dot.kind === 'enemy') {
+                      // Enemy Infantry / Pedestrian Attacker: SMALL BLINKING RED DOT
+                      return (
+                        <span
+                          key={dot.id}
+                          data-radar-dot="enemy-infantry"
+                          style={{ left: `${leftPct}%`, top: `${topPct}%` }}
+                          className="absolute -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-[#ff3b30] ring-1 ring-[#ff9aa8] shadow-[0_0_6px_#ff3b30] animate-pulse z-20 pointer-events-none"
+                        />
+                      );
+                    }
+                    let dotStyle = 'w-2.5 h-2.5 bg-[#2979ff] rounded-full border border-white z-10';
                     if (dot.kind === 'player') {
                       dotStyle =
                         'w-3 h-3 bg-[#b8ff3c] rounded-full ring-2 ring-[#1a1a1a] shadow-[0_0_6px_#b8ff3c] z-20';
-                    } else if (dot.kind === 'ally') {
-                      dotStyle = 'w-2.5 h-2.5 bg-[#2979ff] rounded-full border border-white z-10';
-                    } else if (dot.kind === 'enemy') {
+                    } else if (dot.kind === 'tank_blue') {
                       dotStyle =
-                        'w-2.5 h-2.5 bg-[#ff3b30] rounded-full border border-[#1a1a1a] z-10';
-                    } else if (dot.kind === 'crate_legend') {
-                      dotStyle = 'w-2.5 h-2.5 bg-[#ffd700] border border-[#1a1a1a] rounded-xs z-10';
-                    } else if (dot.kind === 'crate_super') {
-                      dotStyle = 'w-2 h-2 bg-[#00d2ff] border border-[#1a1a1a] z-10';
-                    } else if (dot.kind === 'crate_red') {
-                      dotStyle = 'w-1.5 h-1.5 bg-[#ff3b30] border border-[#1a1a1a]';
-                    } else if (dot.kind === 'tank_blue' || dot.kind === 'tank_red') {
-                      dotStyle = 'w-3 h-2.5 bg-[#fec83e] border border-[#1a1a1a] rounded-xs z-10';
+                        'w-3 h-2.5 bg-[#00d2ff] border border-white rounded-xs shadow-[0_0_5px_#00d2ff] z-10';
                     }
                     return (
                       <span
                         key={dot.id}
                         style={{ left: `${leftPct}%`, top: `${topPct}%` }}
-                        className={`absolute -translate-x-1/2 -translate-y-1/2 ${dotStyle}`}
+                        className={`absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none ${dotStyle}`}
                       />
                     );
                   })}
 
-                  {/* Top-Left Radar Level & Range Pill */}
-                  <div className="absolute top-1 left-1.5 z-20 px-1.5 py-0.5 bg-[#1a1a1a]/92 border border-white/30 text-[#b8ff3c] text-[8px] font-black tracking-wider rounded-xs shadow">
-                    {radarSpec.label}
+                  {/* Top-Left Personal Command Center Radar Status Pill */}
+                  <div
+                    className={`absolute top-1 left-1.5 z-30 px-1.5 py-0.5 bg-[#11121a]/92 border text-[7.5px] font-black tracking-wider rounded-xs shadow ${
+                      isRadarActive
+                        ? 'border-[#b8ff3c]/60 text-[#b8ff3c]'
+                        : 'border-[#ff3b30]/60 text-[#ff6b6b]'
+                    }`}
+                  >
+                    {isRadarActive
+                      ? `RADAR LV.${radarSpec.level} · ${radarSpec.coveragePct}%`
+                      : `RADAR MATI · LV.${radarSpec.level}`}
                   </div>
                 </div>
               );
@@ -1148,6 +1202,18 @@ export default function App() {
             </div>
           </div>
 
+          {/* Dynamic Supply Drop Countdown Warning Banner */}
+          {hud.supplyDropBanner && (
+            <div
+              data-supply-drop-banner="true"
+              className="fixed top-14 left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+            >
+              <div className="-skew-x-12 px-4 py-1.5 bg-[#fec83e] text-[#1a1a1a] border-3 border-[#1a1a1a] ring-2 ring-white shadow-[4px_4px_0_#1a1a1a] font-black text-xs sm:text-sm tracking-wider uppercase animate-pulse">
+                <span className="skew-x-12 inline-block">{hud.supplyDropBanner}</span>
+              </div>
+            </div>
+          )}
+
           {/* =================================================================
               3D. TOP-RIGHT: PROMINENT [RUN MATCH] BUTTON + SKEWED GEAR [⚙] DRAWER
              ================================================================= */}
@@ -1345,6 +1411,71 @@ export default function App() {
                       +Dump Truck
                     </button>
                   </div>
+
+                  <div className="pt-1 text-[10px] font-black uppercase tracking-widest text-[#1a1a1a]/70">
+                    SENJATA &amp; ORDNANCE BARU (TESTING)
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      data-sandbox-btn="equip-laser"
+                      onClick={() => dispatchBuddyAction('sandboxEquipLaserGun')}
+                      className="py-1.5 px-1.5 bg-[#00f0ff] text-[#1a1a1a] font-black text-[10px] border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] cursor-pointer"
+                    >
+                      +Laser Gun (LG-88)
+                    </button>
+                    <button
+                      type="button"
+                      data-sandbox-btn="equip-gatling"
+                      onClick={() => dispatchBuddyAction('sandboxEquipGatlingGun')}
+                      className="py-1.5 px-1.5 bg-[#b8ff3c] text-[#1a1a1a] font-black text-[10px] border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] cursor-pointer"
+                    >
+                      +Gatling (TITAN-6)
+                    </button>
+                    <button
+                      type="button"
+                      data-sandbox-btn="give-grenade"
+                      onClick={() => dispatchBuddyAction('sandboxGiveHandGrenade')}
+                      className="py-1.5 px-1.5 bg-[#78825b] text-white font-black text-[10px] border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] cursor-pointer"
+                    >
+                      +Hand Grenade
+                    </button>
+                    <button
+                      type="button"
+                      data-sandbox-btn="give-mine"
+                      onClick={() => dispatchBuddyAction('sandboxGiveLandMine')}
+                      className="py-1.5 px-1.5 bg-[#f59e0b] text-[#1a1a1a] font-black text-[10px] border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] cursor-pointer"
+                    >
+                      +Land Mine (TM-89)
+                    </button>
+                    <button
+                      type="button"
+                      data-sandbox-btn="spawn-cluster-plane"
+                      onClick={() => dispatchBuddyAction('sandboxSpawnPlaneWithClusterBomb')}
+                      className="py-1.5 px-1.5 bg-[#38bdf8] text-[#1a1a1a] font-black text-[10px] border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] cursor-pointer"
+                    >
+                      +Cluster + Pesawat
+                    </button>
+                    <button
+                      type="button"
+                      data-sandbox-btn="deploy-nuke"
+                      onClick={() => {
+                        setIsSpawnDrawerOpen(false);
+                        dispatchBuddyAction('sandboxDeployNuclearLauncher');
+                      }}
+                      className="py-1.5 px-1.5 bg-[#ff3b30] text-white font-black text-[10px] border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] cursor-pointer"
+                    >
+                      +Nuclear Launcher
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    data-sandbox-btn="unlock-base-lv3"
+                    onClick={() => dispatchBuddyAction('sandboxUnlockBaseLv3')}
+                    className="w-full py-1.5 px-2 bg-[#1a1a1a] hover:bg-[#2bb3b1] hover:text-[#1a1a1a] text-[#ffd700] font-black text-[10px] border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] cursor-pointer transition-colors"
+                  >
+                    ★ BUKA COMMAND CENTER LV.3 (REVEAL ALL)
+                  </button>
                 </div>
               </div>
             )}
@@ -1364,14 +1495,15 @@ export default function App() {
                 <button
                   type="button"
                   tabIndex={-1}
+                  data-buddy-btn="cycle-role"
                   onClick={(e) => {
                     e.currentTarget.blur();
                     dispatchBuddyAction('cycleCommand');
                   }}
-                  title="Tekan [V] untuk perintah AI Tim"
-                  className="-skew-x-12 px-2.5 py-1 bg-[#1a1a1a] text-[#fec83e] border-2 border-white shadow-[3px_3px_0_#1a1a1a] font-black text-[10px] uppercase cursor-pointer"
+                  title="Tekan [V] untuk mengganti Peran Karakter Aktif"
+                  className="-skew-x-12 px-2.5 py-1 bg-[#1a1a1a] text-[#fec83e] border-2 border-white shadow-[3px_3px_0_#1a1a1a] font-black text-[10px] cursor-pointer"
                 >
-                  <span className="skew-x-12 inline-block">[V] AI: {hud.teamCommand}</span>
+                  <span className="skew-x-12 inline-block">[V] {formatBuddyRoleUiLabel(hud.teamCommand)}</span>
                 </button>
 
                 <button
@@ -1392,7 +1524,72 @@ export default function App() {
                     {Math.max(0, Math.round(hud.hp))} HP
                   </span>
                 </button>
+
+                {hud.hasDeployedNuclearLauncher && hud.nuclearStrikePhase === 'idle' && (
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    data-nuke-btn="open-targeting"
+                    onClick={(e) => {
+                      e.currentTarget.blur();
+                      dispatchBuddyAction('startNuclearStrikeTargeting');
+                    }}
+                    title="Tekan [N] untuk membuka Satelit Target Nuklir (Map Zoom-Out)"
+                    className="-skew-x-12 px-2.5 py-1 bg-[#ff3b30] hover:bg-[#ff554a] text-white border-2 border-[#1a1a1a] shadow-[3px_3px_0_#1a1a1a] font-black text-[10px] uppercase cursor-pointer"
+                  >
+                    <span className="skew-x-12 inline-block">☢️ [N] TARGET NUKLIR</span>
+                  </button>
+                )}
               </div>
+
+              {/* NUCLEAR LAUNCHER TACTICAL MAP ZOOM-OUT & CINEMATIC ROCKET OVERLAY */}
+              {hud.nuclearStrikePhase !== 'idle' && (
+                <div
+                  data-testid="nuclear-strike-hud-banner"
+                  className="fixed top-16 left-1/2 -translate-x-1/2 z-40 pointer-events-auto flex flex-col items-center gap-2"
+                >
+                  {hud.nuclearStrikePhase === 'targeting' ? (
+                    <div className="bg-[#0d0f12] text-white border-[3px] border-[#ff3b30] shadow-[0_5px_0_#0d0f12] px-4 py-2.5 flex flex-col sm:flex-row items-center gap-3">
+                      <div className="flex flex-col">
+                        <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-[#fec83e]">
+                          ☢️ SATELIT TARGET NUKLIR (MAP ZOOM-OUT)
+                        </span>
+                        <span className="text-[11px] font-bold text-white/90">
+                          Arahkan Kursor / WASD &amp; Klik Kiri Peta untuk Meluncurkan Roket (Target X:{hud.nuclearTargetCoords.x} · Z:{hud.nuclearTargetCoords.z})
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          data-testid="nuke-confirm-launch-btn"
+                          onClick={() => dispatchBuddyAction('confirmNuclearStrikeTarget')}
+                          className="-skew-x-6 px-3.5 py-1.5 bg-[#ff3b30] hover:bg-[#ff554a] text-white border-2 border-white shadow-[2px_2px_0_#000] font-black text-xs uppercase cursor-pointer"
+                        >
+                          <span className="skew-x-6 inline-block">🚀 LUNCURKAN [ENTER]</span>
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="nuke-cancel-targeting-btn"
+                          onClick={() => dispatchBuddyAction('cancelNuclearStrikeTarget')}
+                          className="-skew-x-6 px-2.5 py-1.5 bg-[#262b30] hover:bg-[#3a4149] text-white border-2 border-white/60 font-black text-xs uppercase cursor-pointer"
+                        >
+                          <span className="skew-x-6 inline-block">BATAL</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-[#0d0f12]/95 text-white border-[3px] border-[#fec83e] shadow-[0_4px_0_#0d0f12] px-4 py-1.5 flex items-center gap-2.5">
+                      <span className="text-xs font-black uppercase tracking-wider text-[#fec83e]">
+                        {hud.nuclearStrikePhase === 'tracking_rocket'
+                          ? "🚀 KAMERA SINEMATIK MENGIKUTI ROKET NUKLIR MLRS-MK5 'ATLAS'..."
+                          : hud.nuclearStrikePhase === 'watching_explosion'
+                          ? '💥 DETONASI NUKLIR — KAMERA NAIK MELIHAT LEDAKAN TARGET!'
+                          : '↩️ LEDAKAN SELESAI — KAMERA KEMBALI KE POSISI ASAL...'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* 3 Compact Skewed Weapon Slots ([1] Pistol, [2] Rifle, [3] Bazooka) */}
               {hud.controlMode === 'tank' ? (
@@ -1666,6 +1863,12 @@ export default function App() {
         hud={hud}
         onSelectRecipe={(recipeId) => {
           dispatchBuddyAction(`kioskSelectRecipe:${recipeId}`);
+        }}
+        onRemoveQueueIndex={(index) => {
+          dispatchBuddyAction(`kioskRemoveQueueIndex:${index}`);
+        }}
+        onClearQueue={() => {
+          dispatchBuddyAction('kioskClearQueue');
         }}
         onUpgradeBase={(upgradeId) => {
           dispatchBuddyAction(`kioskUpgradeBase:${upgradeId}`);

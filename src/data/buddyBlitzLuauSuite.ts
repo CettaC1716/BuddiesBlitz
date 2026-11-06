@@ -249,6 +249,45 @@ for teamKey, teamInfo in pairs(PaletteLyo.Teams) do
 		end
 	end
 
+	-- Helipad Bulat (relZ = -5.8) & Parkiran Mobil Kotak (relZ = -5.2, lx = 15.0) di Sebelah Kiri Markas
+	local heliOrigin = padOrigin + Vector3.new((teamInfo.Spawn.X < 0 and -11.6 or 11.6), 0.05, 0)
+	local helipadModel = Instance.new("Model")
+	helipadModel.Name = "HelipadBlueprint_" .. teamKey
+	helipadModel.Parent = baseModel
+	local heliRing = makePart("HeliRing", Vector3.new(4.5, 0.1, 4.5), Color3.fromRGB(56, 189, 248), heliOrigin, helipadModel, true)
+	heliRing.Transparency = 0.58
+
+	local parkingOrigin = padOrigin + Vector3.new((teamInfo.Spawn.X < 0 and -11.0 or 11.0), 0.05, (teamInfo.Spawn.X < 0 and -4.8 or 4.8))
+	local parkingModel = Instance.new("Model")
+	parkingModel.Name = "ParkingBayBlueprint_" .. teamKey
+	parkingModel.Parent = baseModel
+	local parkBox = makePart("ParkBox", Vector3.new(4.8, 0.1, 4.8), Color3.fromRGB(56, 189, 248), parkingOrigin, parkingModel, true)
+	parkBox.Transparency = 0.58
+
+	-- Pohon Sakura Bonsai Kotak Sudut Courtyard (Sakura Planter Bed)
+	local treeOrigin = padOrigin + Vector3.new((teamInfo.Spawn.X < 0 and 2.5 or -2.5), 0, (teamInfo.Spawn.X < 0 and -14.2 or 14.2))
+	local sakuraModel = Instance.new("Model")
+	sakuraModel.Name = "CourtyardSakura_" .. teamKey
+	sakuraModel.Parent = baseModel
+
+	-- 1. Pot Kotak Kayu Cedar & Granit
+	local planterPlinth = makePart("PlanterPlinth", Vector3.new(4.8, 0.4, 4.4), Color3.fromRGB(57, 59, 73), treeOrigin + Vector3.new(0, 0.2, 0), sakuraModel, true)
+	local planterWood = makePart("PlanterWood", Vector3.new(4.6, 0.6, 4.2), Color3.fromRGB(140, 83, 43), treeOrigin + Vector3.new(0, 0.5, 0), sakuraModel, true)
+	local planterSoil = makePart("PlanterSoil", Vector3.new(4.0, 0.2, 3.6), Color3.fromRGB(45, 34, 27), treeOrigin + Vector3.new(0, 0.7, 0), sakuraModel, true)
+
+	-- 2. Batang & Dahan Bercabang Alami
+	local trunk = makePart("SakuraTrunk", Vector3.new(0.8, 3.2, 0.8), Color3.fromRGB(78, 51, 33), treeOrigin + Vector3.new(0, 2.2, 0), sakuraModel, true)
+	trunk.Shape = Enum.PartType.Cylinder
+	trunk.CFrame = CFrame.new(treeOrigin + Vector3.new(0, 2.2, 0)) * CFrame.Angles(0, 0, math.rad(82))
+	local branch1 = makePart("Branch1", Vector3.new(0.5, 2.2, 0.5), Color3.fromRGB(78, 51, 33), treeOrigin + Vector3.new(1.1, 3.4, 0.6), sakuraModel, true)
+	branch1.CFrame = CFrame.new(treeOrigin + Vector3.new(1.1, 3.4, 0.6)) * CFrame.Angles(math.rad(25), 0, math.rad(45))
+
+	-- 3. Kanopi Bunga Sakura Bertingkat (Pink Cel-Shaded)
+	local crown = makePart("SakuraCrown", Vector3.new(3.8, 2.6, 3.8), Color3.fromRGB(244, 114, 182), treeOrigin + Vector3.new(0.2, 4.4, 0), sakuraModel, true)
+	local highlight = makePart("SakuraHighlight", Vector3.new(2.4, 1.6, 2.4), Color3.fromRGB(251, 207, 232), treeOrigin + Vector3.new(0.4, 5.2, 0.2), sakuraModel, true)
+	local sideCanopy = makePart("SakuraSideTier", Vector3.new(2.8, 2.0, 2.8), Color3.fromRGB(236, 72, 153), treeOrigin + Vector3.new(1.4, 3.8, 0.8), sakuraModel, true)
+	applyComicOutline(sakuraModel)
+
 	-- 2 Sentry Turret di Dinding Luar Markas
 	for sIdx = 1, 2 do
 		local offsetZ = (sIdx == 1) and -12 or 12
